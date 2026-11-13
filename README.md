@@ -18,7 +18,7 @@
 - `@github-логін` — 
 - `@github-логін` — 
 
-## Технології (попередньо)
+## Cтек (попередньо)
 
 Python, FastAPI, React, PostgreSQL, GitHub Actions.
 
