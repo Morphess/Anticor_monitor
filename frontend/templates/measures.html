@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block content %}
+<h1>Заходи програми</h1>
+<form class="filters" method="get">
+  <select name="section"><option value="">Усі розділи</option>
+    {% for s in snap.sections %}<option value="{{ s.code }}" {{ 'selected' if f.section == s.code }}>{{ s.number }}. {{ s.title | truncate(50) }}</option>{% endfor %}</select>
+  {% if user.role != 'VYK' %}
+  <select name="unit"><option value="">Усі підрозділи</option>
+    {% for id, name in snap.units | dictsort %}<option value="{{ id }}" {{ 'selected' if f.unit == id }}>{{ name | truncate(50) }}</option>{% endfor %}</select>
+  {% endif %}
+  <select name="state"><option value="">Будь-який стан для Порталу</option>
+    {% for s in PORTAL_STATES %}<option {{ 'selected' if f.state == s }}>{{ s }}</option>{% endfor %}</select>
+  <select name="review"><option value="">Будь-який етап погодження</option>
+    {% for k, v in REVIEW_LABELS.items() %}<option value="{{ k }}" {{ 'selected' if f.review == k }}>{{ v }}</option>{% endfor %}</select>
+  <select name="flag"><option value="">Сигнали: не важливо</option><option value="any" {{ 'selected' if f.flag == 'any' }}>Є будь-який сигнал</option>
+    {% for r in FLAG_RULES %}<option value="{{ r.code }}" {{ 'selected' if f.flag == r.code }}>{{ r.code }}</option>{% endfor %}</select>
+  <input name="q" value="{{ f.q }}" placeholder="Пошук у змісті або Z-01">
+  <button class="btn btn-small">Показати</button>
+  <a href="/measures" class="small">скинути</a>
+</form>
+<p class="muted small">Знайдено: {{ measures | length }}</p>
+{{ ui.measures_table(measures) }}
+{% endblock %}

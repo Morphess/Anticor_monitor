@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Звіт про виконання програми</h1>
+    <p class="muted">{{ snap.program.organ }} · {{ snap.period | period }} · структура Порталу доброчесності НАЗК</p></div>
+  <div class="actions">
+    <a class="btn" href="/report.csv">CSV для перенесення</a>
+    <a class="btn btn-ghost" href="/report.csv?internal=1">CSV із сигналами</a>
+    <button class="btn btn-ghost" onclick="window.print()">Друк</button>
+  </div>
+</div>
+{% if pending or with_flags %}
+<div class="notices no-print">
+  {% if pending %}<div class="notice notice-warn"><b>Не погоджено координатором: {{ pending | length }} із {{ rows | length }}.</b> До перенесення на Портал варто завершити погодження: <a href="/measures?review=submitted">на погодженні</a>, <a href="/measures?review=draft">не подано</a>.</div>{% endif %}
+  {% if with_flags %}<div class="notice notice-bad"><b>Рядків із сигналами: {{ with_flags }}.</b> <a href="/flags">Перегляньте їх</a> перед перенесенням. Колонка «Сигнали» службова й на Портал не переноситься.</div>{% endif %}
+</div>
+{% endif %}
+<div class="table-wrap"><table class="table">
+  <tr><th>№</th><th>Опис заходу</th><th>Підрозділ</th><th>Запланований строк</th><th>Фактичний строк</th><th>Стан виконання</th><th>Опис результату або причин</th><th>Підтвердні матеріали</th><th class="no-print">Сигнали</th></tr>
+  {% for r in rows %}
+    {% if loop.changed(r.rozdil_portal) %}<tr class="section-row"><td colspan="9">{{ r.rozdil_portal }}</td></tr>{% endif %}
+    <tr><td>{{ r.nomer }}</td><td>{{ r.opys_zakhodu }}</td><td>{{ r.naimenuvannia_pidrozdilu }}</td><td>{{ r.zaplanovanyi_strok }}</td>
+      <td class="nowrap">{{ r.faktychnyi_strok_vykonannia | d }}</td><td>{{ r.stan_vykonannia }}</td><td>{{ r.opys_rezultatu_abo_prychyn }}</td>
+      <td class="small">{{ r.pidtverdni_materialy }}</td>
+      <td class="no-print"><a href="/measures/{{ r.zakhid_id }}">{{ r.sluzhbove_sygnaly_pered_perenesenniam or "—" }}</a></td></tr>
+  {% endfor %}
+</table></div>
+{% endblock %}

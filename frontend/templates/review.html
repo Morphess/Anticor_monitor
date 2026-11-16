@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block content %}
+<div class="page-head"><div><h1>Погодження</h1><p class="muted">{{ snap.period | period }}</p></div>
+  <form method="post" action="/admin/period" class="inline">
+    <input name="period" value="{{ snap.period }}" size="8" title="Звітний період: 2026-H1">
+    <input type="date" name="as_of" value="{{ as_of or '' }}" title="Дата зрізу даних">
+    <button class="btn btn-small btn-ghost">Змінити період</button>
+  </form></div>
+<div class="kpis">
+  <div class="kpi"><span>{{ queue | length }}</span>очікують вашого рішення</div>
+  <div class="kpi"><span>{{ returned | length }}</span>повернуто виконавцям</div>
+  <div class="kpi"><span>{{ not_submitted | length }}</span>ще не подано</div>
+  <a class="kpi kpi-link" href="/flags"><span>{{ flags_total }}</span>сигналів за правилами</a>
+</div>
+{{ ui.reminders(rem) }}
+<h2>Очікують рішення</h2>
+{{ ui.measures_table(queue) }}
+{% if returned %}<h2>Повернуто на доопрацювання</h2>{{ ui.measures_table(returned) }}{% endif %}
+{% if not_submitted %}<h2>Ще не подано</h2>{{ ui.measures_table(not_submitted) }}{% endif %}
+{% endblock %}

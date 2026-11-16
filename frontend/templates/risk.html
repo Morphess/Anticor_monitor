@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block content %}
+<div class="page-head"><div><p class="muted small">{{ r.function }}</p><h1>{{ r.id }}</h1><p>{{ r.name }}</p></div><div>{{ ui.level(r) }}</div></div>
+{% if r.flags %}<ul class="why">{% for code, why in r.flags %}<li class="why-yes"><span class="rule-id">{{ code }}</span> <b>{{ FLAG_BY_CODE[code].title }}</b><br>{{ why }}</li>{% endfor %}</ul>{% endif %}
+<div class="grid-2">
+<div>
+  <div class="card">
+    <h2>Опис</h2>
+    <dl class="dl">
+      <dt>Суть</dt><dd>{{ r.content or "—" }}</dd>
+      <dt>Джерела</dt><dd>{{ r.sources or "—" }}</dd>
+      <dt>Наявні заходи контролю</dt><dd>{{ r.existing_controls or "—" }}</dd>
+      <dt>Власник ризику</dt><dd>{{ r.owner_unit }}</dd>
+      <dt>Оцінка</dt><dd>ймовірність {{ r.probability }} × наслідки {{ r.impact }} = {{ r.score }} — {{ r.level }}</dd>
+    </dl>
+  </div>
+  <h2>Заходи впливу на ризик ({{ measures | length }})</h2>
+  {{ ui.measures_table(measures) }}
+</div>
+<div>
+  <div class="card">
+    <h2>Індикатор стану ризику</h2>
+    <p>{{ r.indicator_name }}, {{ r.indicator_unit }} <span class="muted small">(краще — {{ r.direction }})</span></p>
+    <p>Було <b>{{ r.base | num }}</b> → зараз <b>{{ r.current | num }}</b> → ціль <b>{{ r.target | num }}</b>{% if r.target_date %} до {{ r.target_date | d }}{% endif %}</p>
+    <div class="progress"><div style="width: {{ [[r.progress * 100, 0] | max, 100] | min }}%"></div></div>
+    <p class="muted small">Пройдено {{ (r.progress * 100) | round | int }} % шляху від базового до цільового значення (на кінець звітного періоду).</p>
+    <table class="table"><tr><th>Дата</th><th class="num">Значення</th><th>Джерело</th></tr>
+      {% for x in r.measurements %}<tr><td>{{ x.date | d }}</td><td class="num">{{ x.value | num }}</td><td class="small">{{ x.source }}</td></tr>{% endfor %}</table>
+    {% if user.role == 'KOORD' %}
+    <details><summary>Внести вимірювання</summary>
+      <form method="post" action="/risks/{{ r.id }}/measurement" style="margin-top:10px">
+        <div class="row-2"><label>Дата <input type="date" name="on" required></label>
+          <label>Значення <input name="value" inputmode="decimal" required></label></div>
+        <label>Джерело даних <input name="source"></label>
+        <button class="btn">Додати</button>
+      </form></details>
+    {% endif %}
+  </div>
+</div>
+</div>
+{% endblock %}

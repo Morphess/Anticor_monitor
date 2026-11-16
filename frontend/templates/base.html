@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Моніторинг антикорупційної програми{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+</head>
+<body>
+{% if user %}
+<header class="topbar">
+  <div class="brand">Моніторинг антикорупційної програми
+    <small>{{ current_period | period }}{% if as_of %} · дані станом на {{ as_of | d }}{% endif %}</small></div>
+  <nav>
+    {% if user.role == 'VYK' %}
+      <a href="/my">Мої заходи</a>
+    {% else %}
+      {% if user.role == 'KOORD' %}<a href="/review">Погодження</a>{% endif %}
+      <a href="/panel">Панель</a>
+      <a href="/measures">Заходи</a>
+      <a href="/risks">Ризики</a>
+      <a href="/flags">Сигнали</a>
+      <a href="/report">Звіт</a>
+      <a href="/journal">Журнал</a>
+    {% endif %}
+    <a href="/program">Програма</a>
+    <a href="/rules">Правила</a>
+    {% if user.role == 'ADMIN' %}<a href="/admin">Адміністрування</a>{% endif %}
+  </nav>
+  <div class="who">
+    <span>{{ user.id }} · {{ ROLES[user.role] }}<small>{{ user.unit_name or user.position }}</small></span>
+    <a href="/logout" class="btn btn-ghost">Вийти</a>
+  </div>
+</header>
+{% endif %}
+<main class="container">
+  {% for kind, msg in flashes %}
+    <div class="flash flash-{{ kind }}">{{ msg }}</div>
+  {% endfor %}
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

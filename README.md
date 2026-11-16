@@ -11,7 +11,7 @@
 
 - **Кабінет виконавця.** Виконавець бачить свої заходи та строки, подає результат і додає матеріали, що підтверджують виконання.
 - **Кабінет перевіряльника.** Перевіряльник переглядає подані матеріали, погоджує результат або повертає його на доопрацювання з коментарем.
-!
+
 ## Команда BorderGroup
 
 - `@demid21cher` — 
@@ -21,7 +21,29 @@
 
 ## Cтек (попередньо)
 
-Python, FastAPI, React, PostgreSQL, GitHub Actions.
+Python, FastAPI, Jinja2 (серверні сторінки), PostgreSQL, GitHub Actions.
+
+## Запуск
+
+Потрібні Python 3.12+ і PostgreSQL 16 (або Docker).
+
+```bash
+# варіант 1: усе в Docker
+docker compose up --build            # http://localhost:8000
+
+# варіант 2: локально
+docker compose up -d db              # або власний PostgreSQL
+cp .env.example .env                 # заповнити DATABASE_URL і SECRET_KEY
+pip install -r backend/requirements.txt
+cd backend && uvicorn app.main:app --reload
+```
+
+Під час першого запуску в порожню базу завантажується синтетичний набір організаторів
+(`data/nabir-orhanizatoriv/`). Вхід у демонстраційному режимі — вибір користувача набору (ролі: координатор,
+виконавець, керівник, аналітик, адміністратор). Реальних осіб і документів у системі немає.
+
+Тести: `cd backend && python -m pytest -q` (на SQLite; на PostgreSQL — із змінною `TEST_DATABASE_URL`).
+API для інтеграції: `/docs`.
 
 ## Демонстрація
 
@@ -29,6 +51,7 @@ Python, FastAPI, React, PostgreSQL, GitHub Actions.
 
 ## Документація
 
+- [Бекенд: архітектура, дані, правила](docs/backend.md)
 - [Правила роботи в репозиторії](CONTRIBUTING.md)
 - [Використання ШІ](docs/ai.md)
 - [Ліцензія](LICENSE)

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+{% set p = snap.program %}
+<h1>Паспорт програми</h1>
+<div class="card">
+  <dl class="dl">
+    <dt>Назва</dt><dd>{{ p.name }}</dd>
+    <dt>Орган</dt><dd>{{ p.organ }}</dd>
+    <dt>Період дії</dt><dd>{{ p.period_start | d }} – {{ p.period_end | d }}</dd>
+    <dt>Затверджено</dt><dd>{{ p.approved_by }}</dd>
+    <dt>Погодження НАЗК</dt><dd>{{ p.nazk_status }}</dd>
+    <dt>Уповноважений підрозділ</dt><dd>{{ p.authorized_unit }}</dd>
+    <dt>Інформація з обмеженим доступом</dt><dd>{{ "так" if p.restricted else "ні" }}</dd>
+    {% if p.goals %}<dt>Цілі</dt><dd class="text">{{ p.goals }}</dd>{% endif %}
+    {% if p.note %}<dt>Примітка</dt><dd>{{ p.note }}</dd>{% endif %}
+  </dl>
+</div>
+<div class="card">
+  <h2>Розділи</h2>
+  <table class="table">
+    <tr><th>№</th><th>Розділ</th><th class="num">Заходів</th></tr>
+    {% for s in snap.sections %}
+    <tr><td>{{ s.number }}</td><td>{% if user.role != 'VYK' %}<a href="/measures?section={{ s.code }}">{{ s.title }}</a>{% else %}{{ s.title }}{% endif %}</td><td class="num">{{ counts[s.code] }}</td></tr>
+    {% endfor %}
+  </table>
+  <p class="muted small">Дані — синтетичний набір організаторів хакатону. Реальних осіб, підрозділів і документів у системі немає.</p>
+</div>
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+{% if DEMO_MODE %}
+<div class="card" style="max-width: 900px; margin: 40px auto;">
+  <h1>Моніторинг антикорупційної програми</h1>
+  <p class="muted">Демонстраційний вхід: оберіть користувача синтетичного набору. Імен у наборі немає — лише роль і посада.
+    У робочому режимі (<code>DEMO_MODE=0</code>) вхід — за логіном і паролем.</p>
+  {% for role, group in groups if group %}
+    <h3>{{ ROLES[role] }}</h3>
+    <form method="post" action="/login" class="users-pick">
+      {% for u in group %}
+        <button name="user_id" value="{{ u.id }}"><b>{{ u.id }}</b> · {{ u.position }}<small>{{ u.unit.name if u.unit else "без підрозділу" }}</small></button>
+      {% endfor %}
+    </form>
+  {% endfor %}
+</div>
+{% else %}
+<form method="post" action="/login" class="card login-box">
+  <h1>Вхід</h1>
+  <label>Логін <input name="user_id" autocomplete="username" required autofocus></label>
+  <label>Пароль <input name="password" type="password" autocomplete="current-password" required></label>
+  <button class="btn">Увійти</button>
+</form>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block content %}
+<div class="page-head"><div><h1>Мої заходи</h1>
+  <p class="muted">{{ user.unit_name }} · {{ snap.period | period }}</p></div></div>
+{{ ui.reminders(rem) }}
+{% set todo = measures | selectattr('review_state', 'in', ['draft', 'returned']) | list %}
+{% if todo %}<div class="notice notice-info" style="margin-bottom:16px">Не подано на погодження: {{ todo | length }}.
+  Відкрийте захід, заповніть стан виконання, додайте підтвердні матеріали й натисніть «Подати на погодження».</div>{% endif %}
+{{ ui.measures_table(measures, show_unit=False) }}
+{% endblock %}

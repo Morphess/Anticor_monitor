@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block content %}
+{% set total = snap.measures | length %}
+<div class="page-head">
+  <div><h1>Стан виконання програми</h1>
+    <p class="muted">{{ snap.program.name }} · {{ snap.period | period }}</p></div>
+  <div class="actions"><a class="btn btn-ghost" href="/report">Звіт для Порталу</a></div>
+</div>
+
+<div class="kpis">
+  <a class="kpi kpi-link" href="/measures"><span>{{ total }}</span>заходів у програмі</a>
+  {% for s in PORTAL_STATES %}
+  <a class="kpi kpi-link {% if s == 'Не виконано' and by_state[s] %}kpi-bad{% endif %}" href="/measures?state={{ s | urlencode }}"><span>{{ by_state[s] }}</span>{{ s | lower }}</a>
+  {% endfor %}
+  <a class="kpi kpi-link {% if snap.flags %}kpi-bad{% endif %}" href="/flags"><span>{{ snap.flags | length }}</span>сигналів за правилами</a>
+  {% if user.role == 'KOORD' %}<a class="kpi kpi-link" href="/review"><span>{{ queue }}</span>очікують погодження</a>{% endif %}
+</div>
+
+{{ ui.reminders(rem) }}
+
+<div class="grid-2">
+  <div>
+    <div class="card">
+      <h2>За розділами програми</h2>
+      {{ ui.legend(PORTAL_STATES) }}
+      <table class="table">
+        <tr><th>Розділ</th><th class="num">Заходів</th><th>Стан для Порталу</th></tr>
+        {% for s in sections %}
+        <tr><td><a href="/measures?section={{ s.code }}">{{ s.number }}. {{ s.title }}</a></td><td class="num">{{ s.total }}</td>
+          <td>{{ ui.stack(s.states, s.total, PORTAL_STATES) }}</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+    <div class="card">
+      <h2>За підрозділами</h2>
+      <p class="muted small">Підрозділи наведено в порядку довідника. Це не рейтинг: кількість і складність заходів у підрозділів різна.</p>
+      <table class="table">
+        <tr><th>Підрозділ</th><th class="num">Заходів</th><th>Стан для Порталу</th><th class="num">Сигналів</th></tr>
+        {% for u in units %}
+        <tr><td><a href="/measures?unit={{ u.id }}">{{ u.name }}</a></td><td class="num">{{ u.total }}</td>
+          <td>{{ ui.stack(u.states, u.total, PORTAL_STATES) }}</td>
+          <td class="num">{% if u.flags %}<a href="/measures?unit={{ u.id }}&flag=any">{{ u.flags }}</a>{% else %}0{% endif %}</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+  <div>
+    <div class="card">
+      <h2>Ризики за рівнем</h2>
+      <table class="table">
+        {% for l in LEVELS %}<tr><td><span class="badge lvl-{{ l }}">{{ l }}</span></td><td class="num">{{ levels[l] }}</td></tr>{% endfor %}
+      </table>
+      <p><a href="/risks">Карта ризиків і зміна індикаторів →</a></p>
+    </div>
+    <div class="card">
+      <h2>Сигнали</h2>
+      <p class="muted small">Сигнал — привід перевірити, а не висновок про порушення. Рішення ухвалює людина.</p>
+      <table class="table">
+        {% for f in FLAG_RULES %}{% if flag_counts[f.code] %}
+        <tr><td><a href="/flags?code={{ f.code }}"><span class="rule-id">{{ f.code }}</span></a> {{ f.title }}</td><td class="num">{{ flag_counts[f.code] }}</td></tr>
+        {% endif %}{% endfor %}
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

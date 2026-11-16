@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Сигнали за правилами</h1>
+<p class="muted">Сигнал — привід перевірити, а не висновок про порушення. Кожен сигнал має пояснення: які саме дані до нього привели. <a href="/rules">Усі правила</a></p>
+<div class="filters">
+  <a class="btn btn-small {{ '' if not code else 'btn-ghost' }}" href="/flags">Усі · {{ snap.flags | length }}</a>
+  {% for f in FLAG_RULES %}{% if counts[f.code] %}
+  <a class="btn btn-small {{ '' if code == f.code else 'btn-ghost' }}" href="/flags?code={{ f.code }}" title="{{ f.title }}">{{ f.code }} · {{ counts[f.code] }}</a>
+  {% endif %}{% endfor %}
+</div>
+<div class="table-wrap"><table class="table">
+  <tr><th>Правило</th><th>Об'єкт</th><th>Що сталося</th><th>Пояснення</th><th>Підрозділ</th></tr>
+  {% for f in rows %}
+  <tr><td><span class="rule-id">{{ f.code }}</span></td>
+    <td class="nowrap">{% if f.object == 'zakhid' %}<a href="/measures/{{ f.id }}">{{ f.id }}</a>{% elif f.object == 'ryzyk' %}<a href="/risks/{{ f.id }}">{{ f.id }}</a>{% else %}<a href="/measures?unit={{ f.id }}&flag=RF1">{{ f.id }}</a>{% endif %}</td>
+    <td>{{ f.title }}</td><td>{{ f.explanation }}</td><td>{{ f.unit_name }}</td></tr>
+  {% else %}<tr><td colspan="5" class="muted">Сигналів немає</td></tr>{% endfor %}
+</table></div>
+{% endblock %}

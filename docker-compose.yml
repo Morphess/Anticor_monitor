@@ -1,0 +1,38 @@
+# PostgreSQL і застосунок однією командою:  docker compose up --build   →  http://localhost:8000
+# Лише база (застосунок запускаєте через uvicorn):  docker compose up -d db
+# Пароль бази й ключ сесій беруться з файлу .env (див. .env.example). Зовнішніх сервісів не потрібно —
+# так само система розгортається в закритому контурі.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ac_monitor
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ac_monitor"]
+      interval: 3s
+      retries: 20
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/ac_monitor
+      SECRET_KEY: ${SECRET_KEY:-change-me}
+      UPLOAD_DIR: /srv/uploads
+      DEMO_MODE: ${DEMO_MODE:-1}
+    ports:
+      - "8000:8000"
+    volumes:
+      - uploads:/srv/uploads
+
+volumes:
+  pgdata:
+  uploads:

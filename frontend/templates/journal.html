@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Журнал дій</h1>
+<p class="muted">Записи лише додаються: змінити чи видалити їх через систему не можна.</p>
+<form class="filters" method="get">
+  <select name="obj"><option value="">Усі об'єкти</option>
+    {% for k, v in [("vykonannia", "виконання"), ("pidtverdzhennia", "підтвердні матеріали"), ("zakhid", "заходи"), ("ryzyk", "ризики"), ("korystuvach", "користувачі"), ("nalashtuvannia", "налаштування")] %}
+    <option value="{{ k }}" {{ 'selected' if f.obj == k }}>{{ v }}</option>{% endfor %}</select>
+  <input name="object_id" value="{{ f.object_id }}" placeholder="ID об'єкта: Z-01">
+  <input name="who" value="{{ f.who }}" placeholder="Хто: U-002">
+  <button class="btn btn-small">Показати</button> <a href="/journal" class="small">скинути</a>
+</form>
+<div class="table-wrap"><table class="table">
+  <tr><th>Коли</th><th>Хто</th><th>Дія</th><th>Об'єкт</th><th>Поле</th><th>Було</th><th>Стало</th><th>Звідки</th></tr>
+  {% for j in rows %}
+  <tr><td class="nowrap">{{ j.at | dt }}</td><td title="{{ positions.get(j.user_id, '') }}">{{ j.user_id or "система" }}</td><td>{{ j.action }}</td>
+    <td class="nowrap">{{ j.object_id }}</td><td>{{ j.field }}</td><td class="small">{{ j.old_value | truncate(120) }}</td><td class="small">{{ j.new_value | truncate(160) }}</td>
+    <td class="small muted">{{ j.ip }}{% if j.device %}<br>{{ j.device }}{% endif %}</td></tr>
+  {% else %}<tr><td colspan="8" class="muted">Записів немає</td></tr>{% endfor %}
+</table></div>
+<div class="actions">
+  {% if page > 1 %}<a class="btn btn-ghost btn-small" href="?obj={{ f.obj }}&object_id={{ f.object_id }}&who={{ f.who }}&page={{ page - 1 }}">← новіші</a>{% endif %}
+  {% if more %}<a class="btn btn-ghost btn-small" href="?obj={{ f.obj }}&object_id={{ f.object_id }}&who={{ f.who }}&page={{ page + 1 }}">старіші →</a>{% endif %}
+</div>
+{% endblock %}

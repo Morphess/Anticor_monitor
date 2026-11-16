@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Адміністрування</h1>
+<div class="card"><h2>Звітний період</h2>
+  <form method="post" action="/admin/period" class="inline" style="max-width:560px">
+    <label>Період <input name="period" value="{{ current_period }}"></label>
+    <label>Дата зрізу даних <input type="date" name="as_of" value="{{ as_of or '' }}"></label>
+    <button class="btn">Зберегти</button>
+  </form>
+  <p class="muted small">Період: 2026-H1 — перше півріччя, 2026-H2 — друге. Дата зрізу — «сьогодні» для нагадувань про строки; порожня — поточна дата.</p></div>
+<div class="card"><h2>Користувачі</h2>
+  <p class="muted small">{% if DEMO_MODE %}Увімкнено демонстраційний вхід без пароля (DEMO_MODE=1). {% endif %}У системі немає імен — лише роль, підрозділ і посада.</p>
+  <table class="table"><tr><th>Логін</th><th>Роль</th><th>Підрозділ</th><th>Посада</th><th>Доступ і пароль</th></tr>
+  {% for u in users %}
+  <tr><td>{{ u.id }}</td><td>{{ ROLES.get(u.role, u.role) }}</td><td>{{ units.get(u.unit_id, "—") }}</td><td>{{ u.position }}</td>
+    <td><form method="post" action="/admin/users/{{ u.id }}" class="inline">
+      <select name="active"><option value="1" {{ 'selected' if u.active }}>активний</option><option value="0" {{ 'selected' if not u.active }}>вимкнений</option></select>
+      <input type="password" name="password" placeholder="{{ 'новий пароль' if u.password_hash else 'пароль не задано' }}" autocomplete="new-password">
+      <button class="btn btn-small">Зберегти</button></form></td></tr>
+  {% endfor %}</table></div>
+{% endblock %}

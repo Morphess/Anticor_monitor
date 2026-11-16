@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block content %}
+<div class="page-head">
+  <div><p class="muted small">{{ m.section_title }} · № {{ m.number }}</p>
+    <h1>{{ m.id }}</h1><p>{{ m.content }}</p></div>
+  <div>{{ ui.status(m) }} {{ ui.review(m) }}</div>
+</div>
+
+{% if m.flags %}
+<div class="card">
+  <h2>Сигнали за правилами</h2>
+  <ul class="why">
+    {% for code, why in m.flags %}
+    <li class="why-yes"><span class="rule-id">{{ code }}</span> <b>{{ FLAG_BY_CODE[code].title }}</b><br>{{ why }}
+      <br><span class="muted small">Правило: {{ FLAG_BY_CODE[code].rule }}</span></li>
+    {% endfor %}
+  </ul>
+  <p class="muted small">Сигнал показує, що варто перевірити. Він не є висновком про порушення і не змінює стан заходу.</p>
+</div>
+{% endif %}
+
+<div class="grid-2">
+<div>
+  <div class="card">
+    <h2>Виконання за {{ m.period | period }}</h2>
+    {% if m.review_state == 'returned' and m.review_comment %}
+      <div class="comment"><b>Координатор повернув на доопрацювання:</b> {{ m.review_comment }}</div><br>
+    {% endif %}
+    {% if can_edit %}
+    <form method="post" action="/measures/{{ m.id }}/execution">
+      <div class="row-3">
+        <label>Стан виконання
+          <select name="status">{% for k, v in STATUS_LABELS.items() %}<option value="{{ k }}" {{ 'selected' if m.status == k }}>{{ v }}</option>{% endfor %}</select></label>
+        <label>Фактична дата виконання <input type="date" name="actual_date" value="{{ m.actual_date or '' }}"></label>
+        <label>{{ m.indicator_name or "Показник" }}{% if m.indicator_target is not none %} (ціль: {{ m.indicator_target | num }} {{ m.indicator_unit }}){% endif %}
+          <input name="indicator_fact" inputmode="decimal" value="{{ m.indicator_fact | num }}"></label>
+      </div>
+      <label>Результат виконання або причини невиконання
+        <textarea name="result_text" rows="5" placeholder="Що саме зроблено: цифри, дати, номери документів. Якщо не виконано — чому.">{{ m.result_text }}</textarea></label>
+      <p class="muted small">Опис, що лише повторює зміст заходу без цифр і посилань, система позначить сигналом RF4.</p>
+      <div class="actions">
+        <button class="btn btn-ghost" name="action" value="save">Зберегти чернетку</button>
+        <button class="btn btn-ok" name="action" value="submit">Подати на погодження</button>
+      </div>
+    </form>
+    {% else %}
+    <dl class="dl">
+      <dt>Стан виконання</dt><dd>{{ ui.status(m) }}</dd>
+      <dt>Фактична дата</dt><dd>{{ m.actual_date | d or "—" }}</dd>
+      <dt>{{ m.indicator_name or "Показник" }}</dt><dd>{{ m.indicator_fact | num or "—" }}{% if m.indicator_target is not none %} із {{ m.indicator_target | num }} {{ m.indicator_unit }}{% endif %}</dd>
+      <dt>Результат або причини</dt><dd class="text">{{ m.result_text or "—" }}</dd>
+      <dt>Внесено</dt><dd>{{ m.entered_by or "—" }}{% if m.entered_at %}, {{ m.entered_at | dt }}{% endif %}</dd>
+      <dt>Погодження</dt><dd>{{ ui.review(m) }}{% if m.reviewed_at %} — {{ m.reviewed_by }}, {{ m.reviewed_at | dt }}{% endif %}</dd>
+      <dt>Стан для Порталу</dt><dd><b>{{ m.portal_state }}</b></dd>
+    </dl>
+    {% endif %}
+    {% if can_decide %}
+    <hr>
+    <form method="post" action="/measures/{{ m.id }}/decision">
+      <label>Коментар (обов'язковий, якщо повертаєте) <textarea name="comment" rows="2"></textarea></label>
+      <div class="actions">
+        <button class="btn btn-ok" name="action" value="approve">Погодити</button>
+        <button class="btn btn-warn" name="action" value="return">Повернути на доопрацювання</button>
+      </div>
+    </form>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>Підтвердні матеріали ({{ m.evidence | length }})</h2>
+    {% if m.required_evidence %}<p class="muted small">Очікується: {{ m.required_evidence }}</p>{% endif %}
+    {% if m.evidence %}
+    <table class="table">
+      <tr><th>№</th><th>Матеріал</th><th>Дата документа</th><th>Додано</th></tr>
+      {% for e in m.evidence %}
+      <tr><td class="nowrap">{{ e.id }}</td>
+        <td>{% if e.has_file %}<a href="/evidence/{{ e.id }}/file">{{ e.name }}</a>{% else %}{{ e.name }}{% endif %}
+          <span class="muted small">· {{ e.type }}</span>{% if e.link %}<br><span class="small">{{ e.link }}</span>{% endif %}
+          <div class="hash" title="Контрольна сума SHA-256: підтверджує, що матеріал не змінювали">SHA-256: {{ e.sha256 }}</div></td>
+        <td class="nowrap">{{ e.doc_date | d }}</td><td class="nowrap">{{ e.uploaded_at | dt }}<br><span class="muted small">{{ e.uploaded_by or "" }}</span></td></tr>
+      {% endfor %}
+    </table>
+    {% else %}<p class="muted">Матеріалів немає</p>{% endif %}
+    {% if can_attach %}
+    <details><summary>Додати матеріал</summary>
+      <form method="post" action="/measures/{{ m.id }}/evidence" enctype="multipart/form-data" style="margin-top:10px">
+        <div class="row-3">
+          <label>Тип <select name="type">{% for t in ["наказ", "протокол", "звіт", "акт", "довідка", "лист", "скриншот", "посилання", "інше"] %}<option>{{ t }}</option>{% endfor %}</select></label>
+          <label>Дата документа <input type="date" name="doc_date" required></label>
+          <label>Файл (необов'язково) <input type="file" name="file"></label>
+        </div>
+        <label>Назва <input name="name" required placeholder="Наприклад: Протокол навчання № 3"></label>
+        <label>Посилання (якщо є) <input name="link"></label>
+        <p class="muted small">Не завантажуйте документи з обмеженим доступом і персональні дані. Після додавання матеріал не можна змінити чи видалити.</p>
+        <button class="btn">Додати</button>
+      </form></details>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>Журнал змін</h2>
+    {% if log %}
+    <ol class="history">
+      {% for j in log %}
+      <li><span class="muted">{{ j.at | dt }}</span> <b>{{ j.action }}</b> — {{ j.user_id or "система" }}
+        {% if j.field %}<div class="small">{{ j.field }}: {% if j.old_value %}<s>{{ j.old_value | truncate(200) }}</s> → {% endif %}{{ j.new_value | truncate(300) }}</div>{% endif %}</li>
+      {% endfor %}
+    </ol>
+    {% else %}<p class="muted">Записів немає</p>{% endif %}
+  </div>
+</div>
+
+<div>
+  <div class="card">
+    <h2>За програмою</h2>
+    <dl class="dl" style="grid-template-columns: 1fr">
+      <dt>Відповідальний підрозділ</dt><dd>{{ m.unit_name }}</dd>
+      {% if m.co_unit_names %}<dt>Співвиконавці</dt><dd>{{ m.co_unit_names | join("; ") }}</dd>{% endif %}
+      <dt>Виконавець</dt><dd>{{ m.executor_id or "—" }} · {{ m.executor_position }}</dd>
+      <dt>Строк</dt><dd>{{ m.deadline_text }} <span class="muted small">({{ DEADLINE_TYPES[m.deadline_type] }})</span></dd>
+      <dt>Індикатор виконання</dt><dd>{{ m.indicator_name or "—" }}{% if m.indicator_target is not none %}: {{ m.indicator_target | num }} {{ m.indicator_unit }}{% endif %}</dd>
+      {% if m.resources %}<dt>Ресурси</dt><dd>{{ m.resources }}</dd>{% endif %}
+    </dl>
+  </div>
+  {% if risk %}
+  <div class="card">
+    <h2>Пов'язаний ризик</h2>
+    <p>{% if user.role != 'VYK' %}<a href="/risks/{{ risk.id }}"><b>{{ risk.id }}</b></a>{% else %}<b>{{ risk.id }}</b>{% endif %} {{ risk.name }}</p>
+    <p>{{ ui.level(risk) }}</p>
+    <p class="small">{{ risk.indicator_name }}: було {{ risk.base | num }}, зараз {{ risk.current | num }}, ціль {{ risk.target | num }} {{ risk.indicator_unit }}</p>
+    <div class="progress"><div style="width: {{ [[risk.progress * 100, 0] | max, 100] | min }}%"></div></div>
+    <p class="muted small">Пройдено {{ (risk.progress * 100) | round | int }} % шляху до цільового значення</p>
+  </div>
+  {% endif %}
+  <div class="card">
+    <h2>Перенесення строку</h2>
+    {% if m.postponements %}
+    <ul class="files">{% for c in m.postponements %}<li>{{ c.decision_date | d }}: {{ c.old_date | d }} → <b>{{ c.new_date | d }}</b><br><span class="small">{{ c.reason }}</span></li>{% endfor %}</ul>
+    <p class="muted small">Це внутрішні рішення. У звіті для Порталу залишається строк за програмою.</p>
+    {% else %}<p class="muted">Строк не переносили</p>{% endif %}
+    {% if can_postpone %}
+    <details><summary>Перенести строк</summary>
+      <form method="post" action="/measures/{{ m.id }}/postpone" style="margin-top:10px">
+        <label>Новий строк <input type="date" name="new_date" required></label>
+        <label>Причина <textarea name="reason" rows="2" required></textarea></label>
+        <button class="btn btn-warn">Зберегти рішення</button>
+      </form></details>
+    {% endif %}
+  </div>
+</div>
+</div>
+{% endblock %}

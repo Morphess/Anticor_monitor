@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block content %}
+<h1>Ризики</h1>
+<div class="card">
+  <h2>Карта ризиків</h2>
+  <p class="muted small">Рівень = ймовірність × наслідки (методологія НАЗК): 1–2 низький, 3–4 середній, 6–9 високий, 12–16 критичний.
+    Карта показує ризики, а не підрозділи — це не рейтинг.</p>
+  <div class="table-wrap"><table class="matrix">
+    <tr><th></th>{% for i in range(1, 5) %}<th>наслідки {{ i }}</th>{% endfor %}</tr>
+    {% for p in range(4, 0, -1) %}
+    <tr><th>ймовірність {{ p }}</th>
+      {% for i in range(1, 5) %}
+      <td class="lvl-{{ risk_level(p * i) }}"><span class="score">{{ p * i }}</span>
+        {% for r in cells.get((p, i), []) %}<a href="/risks/{{ r.id }}" title="{{ r.name }}">{{ r.id }}</a>{% endfor %}</td>
+      {% endfor %}</tr>
+    {% endfor %}
+  </table></div>
+</div>
+<div class="table-wrap"><table class="table">
+  <tr><th>Ризик</th><th>Рівень</th><th>Індикатор стану</th><th class="num">Було</th><th class="num">Зараз</th><th class="num">Ціль</th><th>Шлях до цілі</th><th class="num">Заходів</th><th>Сигнали</th></tr>
+  {% for r in snap.risks %}
+  <tr><td><a href="/risks/{{ r.id }}"><b>{{ r.id }}</b></a> {{ r.name }}<br><span class="muted small">{{ r.owner_unit }}</span></td>
+    <td>{{ ui.level(r) }}</td><td>{{ r.indicator_name }}, {{ r.indicator_unit }}</td>
+    <td class="num">{{ r.base | num }}</td><td class="num">{{ r.current | num }}</td><td class="num">{{ r.target | num }}</td>
+    <td><div class="bar"><div style="width: {{ [[r.progress * 100, 0] | max, 100] | min }}%"></div><span>{{ (r.progress * 100) | round | int }} %</span></div></td>
+    <td class="num">{{ r.measures | length }}</td><td>{{ ui.flags(r) }}</td></tr>
+  {% endfor %}
+</table></div>
+{% endblock %}

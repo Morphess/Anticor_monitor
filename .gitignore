@@ -1,0 +1,18 @@
+# секрети й локальні налаштування
+.env
+.env.*
+!.env.example
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+# локальні дані
+uploads/
+*.db
+*.sqlite3
+# редактори й ОС
+.idea/
+.vscode/
+.DS_Store

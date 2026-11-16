@@ -1,0 +1,61 @@
+{% macro status(m) -%}
+  <span class="badge st-{{ m.status }}">{{ STATUS_LABELS[m.status] }}</span>
+{%- endmacro %}
+
+{% macro review(m) -%}
+  <span class="badge st-{{ m.review_state }}">{{ REVIEW_LABELS[m.review_state] }}</span>
+{%- endmacro %}
+
+{% macro flags(m) -%}
+  {% for code, why in m.flags %}<span class="badge flag" title="{{ FLAG_BY_CODE[code].title }}. {{ why }}">{{ code }}</span> {% endfor %}
+{%- endmacro %}
+
+{% macro level(r) -%}
+  <span class="badge lvl-{{ r.level }}" title="ймовірність {{ r.probability }} × наслідки {{ r.impact }} = {{ r.score }}">{{ r.level }} ({{ r.score }})</span>
+{%- endmacro %}
+
+{% macro stack(states, total, order) -%}
+  <div class="stack" title="{% for s in order %}{{ s }}: {{ states[s] }}{% if not loop.last %}; {% endif %}{% endfor %}">
+    {% for s in order %}{% if states[s] %}<i class="seg-{{ loop.index0 }}" style="width: {{ (states[s] / total * 100) | round(1) }}%"></i>{% endif %}{% endfor %}
+  </div>
+{%- endmacro %}
+
+{% macro legend(order) -%}
+  <div class="legend">{% for s in order %}<span><i class="seg-{{ loop.index0 }}"></i>{{ s }}</span>{% endfor %}</div>
+{%- endmacro %}
+
+{% macro reminders(rem) -%}
+  {% if rem.overdue or rem.soon %}
+  <div class="notices">
+    {% if rem.overdue %}
+    <div class="notice notice-bad"><b>Строк минув, захід не виконано: {{ rem.overdue | length }}</b>
+      <ul>{% for m in rem.overdue %}<li><a href="/measures/{{ m.id }}">{{ m.id }}</a> — строк {{ m.internal_deadline | d }} · {{ m.unit_name }}</li>{% endfor %}</ul></div>
+    {% endif %}
+    {% if rem.soon %}
+    <div class="notice notice-warn"><b>Строк настає протягом 30 днів: {{ rem.soon | length }}</b>
+      <ul>{% for m in rem.soon %}<li><a href="/measures/{{ m.id }}">{{ m.id }}</a> — строк {{ m.internal_deadline | d }} · {{ m.unit_name }}</li>{% endfor %}</ul></div>
+    {% endif %}
+  </div>
+  {% endif %}
+{%- endmacro %}
+
+{% macro measures_table(measures, show_unit=True) -%}
+  <div class="table-wrap"><table class="table">
+    <tr><th>Захід</th>{% if show_unit %}<th>Підрозділ</th>{% endif %}<th>Строк за програмою</th><th>Стан виконання</th><th>Погодження</th><th>Для Порталу</th><th>Матеріали</th><th>Сигнали</th></tr>
+    {% for m in measures %}
+      {% if loop.changed(m.section) %}<tr class="section-row"><td colspan="8">{{ m.section_title }}</td></tr>{% endif %}
+      <tr>
+        <td><a href="/measures/{{ m.id }}"><b>{{ m.id }}</b></a> {{ m.content }}</td>
+        {% if show_unit %}<td>{{ m.unit_name }}</td>{% endif %}
+        <td class="nowrap">{{ m.deadline_text }}</td>
+        <td>{{ status(m) }}</td>
+        <td>{{ review(m) }}</td>
+        <td>{{ m.portal_state }}</td>
+        <td class="num">{{ m.evidence | length }}</td>
+        <td>{{ flags(m) }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="8" class="muted">Заходів за цими умовами немає</td></tr>
+    {% endfor %}
+  </table></div>
+{%- endmacro %}
