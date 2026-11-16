@@ -1,5 +1,13 @@
 venv/
-*.md
+.venv/
 __pycache__/
-docs/
-.github/
+*.py[cod]
+
+.env
+.env.*
+!.env.example
+secrets/
+*.secret
+*.secrets
+*.key
+*.pem
