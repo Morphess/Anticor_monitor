@@ -1,7 +1,6 @@
 /* Спільні стилі сторінок виконавця й координатора: мінімалістично, чорно-біле */
 *{box-sizing:border-box}
 body{margin:0;background:#fff;color:#000;font:15px/1.45 "Segoe UI",system-ui,sans-serif}
-.demo-banner{padding:8px 16px;background:#fff2cc;color:#5b4300;text-align:center;font-weight:700;border-bottom:1px solid #d5aa35}
 button,input{font:inherit;color:inherit}
 button:focus-visible,a:focus-visible,input:focus{outline:2px solid #000;outline-offset:2px}
 .sr{position:absolute;left:-9999px}
