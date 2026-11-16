@@ -8,6 +8,9 @@
 !frontend/templates/**
 !frontend/static/
 !frontend/static/**
+!alembic.ini
+!alembic/
+!alembic/**
 
 **/.env
 **/.env.*
