@@ -14,7 +14,7 @@
 !
 ## Команда BorderGroup
 
-- `@github-логін` — 
+- `@demid21cher` — 
 - `@github-логін` — 
 - `@github-логін` — 
 - `@github-логін` — 
