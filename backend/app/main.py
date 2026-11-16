@@ -8,6 +8,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.api.auth import router as auth_router
 from app.core.config import settings
 from app.database.db_connection import engine
 
@@ -22,6 +23,11 @@ STATIC_DIR = FRONTEND_DIR / "static"
 
 
 app = FastAPI()
+
+app.include_router(
+    auth_router,
+    prefix="/api",
+)
 
 app.include_router(
     orders_router,
