@@ -15,7 +15,12 @@ app.mount("/static", StaticFiles(directory=str(ROOT / "frontend" / "static")), n
 
 @app.get("/")
 def home(request: Request):
-    return templates.TemplateResponse(request, "coordinator.html", monitor_service.coordinator_page())
+    return templates.TemplateResponse(request, "login.html", {})
+
+
+@app.get("/login")
+def login(request: Request):
+    return templates.TemplateResponse(request, "login.html", {})
 
 
 @app.get("/coordinator")

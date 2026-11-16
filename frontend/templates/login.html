@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Вхід — Антикорупційна програма</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='css/monitor.css') }}">
+</head>
+<body class="page-login">
+<div class="demo-banner" role="note">ДЕМО-ЗАГЛУШКА · вхід не перевіряється, облікові дані не надсилаються та не зберігаються</div>
+<header class="top"><b>Антикорупційна програма</b><span>Локальний перегляд</span></header>
+<main>
+  <section class="login-card" aria-labelledby="login-title">
+    <p class="eyebrow">ДЕМО-ВХІД</p>
+    <h1 id="login-title">Увійти до системи</h1>
+    <p class="login-hint">Оберіть роль — заглушка відкриє відповідний кабінет.</p>
+    <form id="login-form">
+      <label for="username">Логін</label>
+      <input id="username" name="username" autocomplete="username" placeholder="Введіть логін" required>
+
+      <label for="password">Пароль</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Введіть пароль" required>
+
+      <label for="role">Роль</label>
+      <select id="role" name="role">
+        <option value="coordinator">Координатор</option>
+        <option value="executor">Виконавець</option>
+      </select>
+
+      <button class="login-submit" type="submit">Увійти</button>
+      <p id="login-message" class="login-message" role="status" aria-live="polite"></p>
+    </form>
+  </section>
+</main>
+<script src="{{ url_for('static', path='js/login.js') }}"></script>
+</body>
+</html>
