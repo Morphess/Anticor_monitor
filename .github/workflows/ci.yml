@@ -26,3 +26,46 @@ jobs:
             echo "Remove tracked .env files from the repository."
             exit 1
           fi
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip check
+
+      - name: Run Python tests
+        env:
+          PYTHONPATH: backend
+        run: python -m unittest discover -s tests -v
+
+      - name: Check Alembic migration
+        env:
+          DATABASE_URL: "sqlite+pysqlite:///./ci-auth.sqlite"
+        run: |
+          alembic upgrade head
+          alembic current --check-heads
+          python - <<'PY'
+          import os
+
+          from sqlalchemy import create_engine, inspect
+
+          engine = create_engine(os.environ["DATABASE_URL"])
+          inspector = inspect(engine)
+
+          if not inspector.has_table("auth_users"):
+              raise SystemExit("auth_users table is missing")
+
+          indexes = inspector.get_indexes("auth_users")
+          if not any(
+              index["name"] == "ix_auth_users_login" and index["unique"]
+              for index in indexes
+          ):
+              raise SystemExit("Unique login index is missing")
+
+          engine.dispose()
+          print("Migration OK")
+          PY
