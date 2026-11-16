@@ -27,6 +27,7 @@ Python, FastAPI, React, PostgreSQL, GitHub Actions.
 
 (тут буде посилання на відео)
 
+
 ## Документація
 
 - [Правила роботи в репозиторії](CONTRIBUTING.md)

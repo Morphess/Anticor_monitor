@@ -1,0 +1,25 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Запустити демо-заглушку фронтенду",
+      "type": "process",
+      "command": "C:/Users/Макс/AppData/Local/Microsoft/WindowsApps/python3.13.exe",
+      "args": [
+        "-m",
+        "uvicorn",
+        "app.preview:app",
+        "--reload",
+        "--app-dir",
+        "backend"
+      ],
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    }
+  ]
+}
