@@ -1,6 +1,6 @@
 // Кабінет керівника, вкладка «Рекомендації»: сигнали правил і рішення за ними.
 // Дані — /api/manager/overview; рішення — POST /api/manager/decisions (лише роль KER).
-// Вкладки «Панелі» і «Програми й заходи» малюють analyst.js і coordinator.js.
+// Вкладки «Аналітичні звіти» і «Програми й заходи» малюють reports.js і coordinator.js.
 (function () {
   var DATA = null, view = "pending", openForm = null, busy = false, formError = {};
   var SEVERITY = { high: "Висока увага", medium: "Середня увага" };
@@ -120,6 +120,44 @@
     return f;
   }
 
+  // Деталі перед рішенням: програма, розділ, підрозділи, накази, статус (або всі заходи підрозділу, або картка ризику)
+  var DETAILS_TITLE = { RF6b: "Переглянути заходи підрозділу", RF7d: "Переглянути картку ризику" };
+  function contextBlock(s) {
+    var d = el("details", "small mt-2 context");
+    d.appendChild(el("summary", "fw-semibold", DETAILS_TITLE[s.code] || "Переглянути деталі: розділ, підрозділи, наказ"));
+    var body = el("div", "border rounded p-3 mt-2");
+    var dl = el("dl", "row mb-0");
+    s.context.facts.forEach(function (f) {
+      dl.appendChild(el("dt", "col-sm-4 col-lg-3 fw-normal text-secondary", f[0]));
+      dl.appendChild(el("dd", "col-sm-8 col-lg-9 mb-2", f[1]));
+    });
+    body.appendChild(dl);
+    var t = s.context.table;
+    if (t) {
+      body.appendChild(el("div", "fw-semibold mt-2 mb-1", t.title));
+      var wrap = el("div", "table-responsive");
+      var table = el("table", "table table-sm align-top mb-0 context-table");
+      var hr = el("tr");
+      t.head.forEach(function (h) { hr.appendChild(el("th", "small text-secondary fw-normal", h)); });
+      var thead = el("thead"); thead.appendChild(hr); table.appendChild(thead);
+      var tbody = el("tbody");
+      t.rows.forEach(function (r) {
+        var tr = el("tr");
+        r.cells.forEach(function (c) { tr.appendChild(el("td", "", c)); });
+        var st = el("td", "text-nowrap");
+        st.appendChild(el("span", "st st-" + r.st, STATUS_LABELS[r.st]));
+        tr.appendChild(st);
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      wrap.appendChild(table);
+      body.appendChild(wrap);
+    }
+    d.appendChild(body);
+    return d;
+  }
+  var STATUS_LABELS = { done: "Виконано", review: "На розгляді", rework: "На доопрацюванні", not: "Не виконано" };
+
   function signalCard(s) {
     var outer = el("article", "card mb-3 rec rec-" + s.severity);
     var card = el("div", "card-body");
@@ -141,6 +179,7 @@
     rule.appendChild(el("summary", "fw-semibold", "Яке правило спрацювало"));
     rule.appendChild(el("p", "mt-1 mb-0 text-body-secondary", s.rule));
     card.appendChild(rule);
+    if (s.context) card.appendChild(contextBlock(s));
 
     var rec = el("div", "bg-body-tertiary rounded p-3 mt-3 small");
     rec.appendChild(el("b", "", "Що пропонує система"));
@@ -228,6 +267,7 @@
   Api.get("/api/manager/overview")
     .then(function (data) {
       DATA = data;
+      document.getElementById("unit").textContent = data.unit;
       var p = data.period.split("-H");
       document.getElementById("recs-period").textContent = "Звітний період: " + (p[1] === "1" ? "І" : "ІІ") +
         " півріччя " + p[0] + " р. · дані на " + data.today + ". Спершу — рекомендації з високою увагою.";

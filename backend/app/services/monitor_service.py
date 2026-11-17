@@ -228,7 +228,8 @@ def set_status(db: Session, user: User, measure_id: str, status: str) -> dict:
 
 # ---------- Аналітик ----------
 # Ролі, яким відкрито зведену аналітику (лише перегляд).
-ANALYTICS_ROLES = ("ANAL", "KER", "KOORD", "ADMIN")
+# Керівник прямого доступу не має: він отримує аналітику звітами від аналітика.
+ANALYTICS_ROLES = ("ANAL", "KOORD", "ADMIN")
 SOON_DAYS = 30
 
 

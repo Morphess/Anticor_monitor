@@ -190,9 +190,99 @@ def compute_signals(db: Session, today: date | None = None) -> list[dict]:
             "Доручити власнику ризику підготувати захід для включення до програми.",
             r.owner_department_id, 30, today))
 
+    # Деталі для перегляду перед рішенням: розділ, підрозділи, накази, статуси
+    by_id = {m.id: m for m in measures}
+    risks_by_id = {r.id: r for r in risks}
+    for s in signals:
+        obj = s["key"].split(":", 1)[1]
+        if s["code"] == "RF6b":
+            s["context"] = _department_context(obj, measures, period)
+        elif s["code"] == "RF7d":
+            s["context"] = _risk_context(risks_by_id[obj])
+        else:
+            m = by_id[obj]
+            s["context"] = _measure_context(m, _execution(m, period))
+
     order = {"high": 0, "medium": 1}
     signals.sort(key=lambda s: order[s["severity"]])
     return signals
+
+
+def _measure_context(m: Measure, execution) -> dict:
+    st = _status_key(execution)
+    organs = [m.responsible_department.name] if m.responsible_department else []
+    organs += [c.department.name for c in m.collaborators]
+    target = ""
+    if m.indicator_target is not None:
+        target = f" (ціль {_num(m.indicator_target)}{' ' + m.indicator_unit if m.indicator_unit else ''})"
+    facts = [
+        ["Програма", m.program.title],
+        ["Розділ", f"{m.section.number}. {m.section.title}"],
+        ["Захід", f"{m.section.number}.{m.sequence_number} {m.description}"],
+        ["Строк за програмою", _fmt(m.deadline_on) if m.deadline_on else m.deadline_description],
+        ["Відповідальний підрозділ", m.responsible_department.name if m.responsible_department else "не призначено"],
+        ["Співвиконавці", ", ".join(c.department.name for c in m.collaborators) or "—"],
+        ["Індикатор виконання", m.completion_indicator + target],
+        ["Потрібні підтвердження", m.required_evidence],
+        ["Подано підтверджень", f"наказів: {len(m.orders)}, інших матеріалів: {len(m.evidences)}"],
+        ["Перенесень строку", str(len(m.deadline_changes))],
+    ]
+    if m.risk:
+        facts.append(["Пов'язаний ризик", f"{m.risk.id}: {m.risk.title} (рівень {RISK_LEVELS.get(m.risk.level, m.risk.level)})"])
+    if execution is not None and execution.result_description:
+        facts.append(["Опис результату", execution.result_description])
+    order = m.orders[0] if m.orders else None
+    return {
+        "facts": facts,
+        "table": {
+            "title": "Хто виконує",
+            "head": ["Орган, що опрацював", "Дата", "Номер наказу", "Статус"],
+            "rows": [{
+                "cells": [", ".join(organs) or "Підрозділ не призначено",
+                          _fmt(execution.completed_on) if execution and execution.completed_on else "—",
+                          f"Наказ № {order.number}" if order else "—"],
+                "st": st,
+            }],
+        },
+    }
+
+
+def _department_context(dep_id: str, measures: list[Measure], period: str) -> dict:
+    own = [m for m in measures if m.responsible_department_id == dep_id]
+    statuses = [_status_key(_execution(m, period)) for m in own]
+    return {
+        "facts": [
+            ["Підрозділ", own[0].responsible_department.name],
+            ["Заходів, за які відповідає", str(len(own))],
+            ["З них виконано", str(statuses.count("done"))],
+        ],
+        "table": {
+            "title": "Усі заходи підрозділу",
+            "head": ["№", "Захід", "Програма", "Строк", "Статус"],
+            "rows": [{
+                "cells": [f"{m.section.number}.{m.sequence_number}", m.description, m.program.title,
+                          _fmt(m.deadline_on) if m.deadline_on else m.deadline_description],
+                "st": st,
+            } for m, st in zip(own, statuses)],
+        },
+    }
+
+
+def _risk_context(r: Risk) -> dict:
+    return {
+        "facts": [
+            ["Процес", r.process_name],
+            ["Ризик", f"{r.id}: {r.title}"],
+            ["Зміст", r.description],
+            ["Джерела", r.risk_sources],
+            ["Існуючі заходи контролю", r.existing_controls],
+            ["Рівень", f"{RISK_LEVELS.get(r.level, r.level)} (ймовірність {r.probability_score} × наслідки {r.impact_score} = {r.score})"],
+            ["Власник ризику", r.owner_department.name if r.owner_department else "не призначено"],
+            ["Індикатор", f"{r.indicator_name}: базове {_num(r.indicator_baseline_value)}, "
+                          f"ціль {_num(r.indicator_target_value)} {r.indicator_unit} до {_fmt(r.target_date)}"],
+        ],
+        "table": None,
+    }
 
 
 def _decision_dict(d: ManagementDecision) -> dict:

@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="{{ url_for('static', path='css/monitor.css') }}">
 </head>
 <body class="{% block body_class %}{% endblock %}">
-<nav class="navbar navbar-dark bg-dark">
+<nav class="navbar navbar-dark bg-dark d-print-none">
   <div class="container-xl">
     <span class="navbar-brand fs-6 fw-semibold">Антикорупційна програма</span>
     {% if role_name is defined %}

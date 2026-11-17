@@ -1,13 +1,12 @@
 {% extends "_base.html" %}
 {% set role_name = "Керівник" %}
-{% set unit_hint = "Ви бачите панелі виконання програми й ухвалюєте рішення за рекомендаціями системи." %}
+{% set unit_hint = "Ви ухвалюєте рішення за рекомендаціями системи й отримуєте аналітичні звіти від аналітика." %}
 {% set in_tabs = true %}
-{% set analytics_hidden = true %}
 {% block title %}Рекомендації й рішення — керівник{% endblock %}
 {% block content %}
-<ul class="nav nav-underline mb-4" role="tablist" aria-label="Розділи кабінету">
+<ul class="nav nav-underline mb-4 d-print-none" role="tablist" aria-label="Розділи кабінету">
   <li class="nav-item" role="presentation"><button class="nav-link active" type="button" role="tab" id="t-recs" aria-controls="tab-recs" aria-selected="true">Рекомендації <span class="badge rounded-pill text-bg-danger ms-1" id="recs-count" hidden></span></button></li>
-  <li class="nav-item" role="presentation"><button class="nav-link" type="button" role="tab" id="t-analytics" aria-controls="tab-analytics" aria-selected="false" tabindex="-1">Панелі</button></li>
+  <li class="nav-item" role="presentation"><button class="nav-link" type="button" role="tab" id="t-reports" aria-controls="tab-reports" aria-selected="false" tabindex="-1">Аналітичні звіти <span class="badge rounded-pill text-bg-danger ms-1" id="reports-count" hidden></span></button></li>
   <li class="nav-item" role="presentation"><button class="nav-link" type="button" role="tab" id="t-programs" aria-controls="tab-programs" aria-selected="false" tabindex="-1">Програми й заходи</button></li>
 </ul>
 
@@ -18,6 +17,7 @@
     <ul class="mt-2 mb-0 ps-3">
       <li>Система щодня перевіряє дані програми за <b>явними правилами</b>: прострочені строки, виконання без підтвердження, ризики без заходів тощо.</li>
       <li>Коли правило спрацьовує, з'являється <b>рекомендація</b>. У ній видно, що сталося, на підставі яких даних і що система пропонує зробити.</li>
+      <li>Перед рішенням відкрийте <b>«Переглянути деталі»</b>: там програма, розділ, підрозділи-виконавці, наказ і статус заходу.</li>
       <li>Рекомендація — привід перевірити, а не висновок про порушення. Рішення ухвалюєте ви:
         <ul class="mb-0">
           <li><b>Доручити</b> — призначити відповідальний підрозділ і строк. Пропоновані значення вже заповнено, їх можна змінити.</li>
@@ -38,12 +38,13 @@
   <div id="recs" aria-live="polite"></div>
 </section>
 
-{% include "_analytics.html" %}
+{% include "_reports.html" %}
 {% include "_programs.html" %}
-<div class="chart-tip" id="tip" role="tooltip" hidden></div>
 {% endblock %}
 {% block scripts %}
+<script src="{{ url_for('static', path='js/tabs.js') }}"></script>
+<script src="{{ url_for('static', path='js/charts.js') }}"></script>
 <script src="{{ url_for('static', path='js/coordinator.js') }}"></script>
-<script src="{{ url_for('static', path='js/analyst.js') }}"></script>
 <script src="{{ url_for('static', path='js/manager.js') }}"></script>
+<script src="{{ url_for('static', path='js/reports.js') }}"></script>
 {% endblock %}

@@ -122,9 +122,14 @@ class ManagerCabinetTests(unittest.TestCase):
             res = self.client.get(path)
             self.assertEqual(res.status_code, 200, path)
             self.assertIn(script, res.text)
-            self.assertIn('id="tab-analytics"', res.text)
+            self.assertIn("reports.js", res.text)
+            self.assertIn('id="tab-reports"', res.text)
             self.assertIn('id="tab-programs"', res.text)
-        self.assertEqual(self.client.get("/static/js/manager.js").status_code, 200)
+        # Панелей аналітики в керівника немає
+        self.assertNotIn('id="tab-analytics"', self.client.get("/manager").text)
+        self.assertIn('id="tab-analytics"', self.client.get("/analyst").text)
+        for js in ("manager", "reports", "charts", "tabs"):
+            self.assertEqual(self.client.get(f"/static/js/{js}.js").status_code, 200, js)
 
     def test_signals_follow_rules(self):
         with self.Session() as db:
@@ -144,6 +149,70 @@ class ManagerCabinetTests(unittest.TestCase):
         severities = [s["severity"] for s in signals]
         self.assertEqual(severities, sorted(severities, key=lambda v: v != "high"))
 
+    def test_signal_context(self):
+        with self.Session() as db:
+            by_key = {s["key"]: s for s in compute_signals(db)}
+        facts = dict(by_key["RF1:Z-01"]["context"]["facts"])
+        self.assertEqual(facts["Розділ"], "1. Розділ один")
+        self.assertEqual(facts["Програма"], "Тестова програма")
+        row = by_key["RF1:Z-01"]["context"]["table"]["rows"][0]
+        self.assertEqual((row["cells"][0], row["st"]), ("Відділ кадрів", "not"))
+        self.assertEqual(len(by_key["RF6b:P01"]["context"]["table"]["rows"]), 2)
+        self.assertIn("Існуючі заходи контролю", dict(by_key["RF7d:KR02"]["context"]["facts"]))
+
+    def test_analytics_requests_and_reports(self):
+        ker, anal = self.auth("ker"), self.auth("anal")
+        future = (date.today() + timedelta(days=7)).isoformat()
+        post = lambda url, body, h: self.client.post("/api/analytics" + url, json=body, headers=h)
+
+        # Запит керівника
+        self.assertEqual(post("/requests", {"topic": " ", "due_on": future}, ker).status_code, 400)
+        self.assertEqual(post("/requests", {"topic": "Т", "due_on": "2020-01-01"}, ker).status_code, 400)
+        self.assertEqual(post("/requests", {"topic": "Т", "due_on": future}, anal).status_code, 403)
+        res = post("/requests", {"topic": "Чому відстає Відділ кадрів", "question": "Причини прострочень",
+                                 "program_id": "AKP-TEST", "due_on": future}, ker)
+        self.assertEqual(res.status_code, 200, res.text)
+        rid = res.json()["id"]
+
+        # Аналітик бачить запит і бере в роботу
+        inbox = self.client.get("/api/analytics/inbox", headers=anal).json()
+        self.assertEqual([(r["id"], r["status"]) for r in inbox["requests"]], [(rid, "new")])
+        self.assertTrue(inbox["can_report"])
+        self.assertEqual(post(f"/requests/{rid}/take", None, ker).status_code, 403)
+        self.assertEqual(post(f"/requests/{rid}/take", None, anal).json()["status"], "in_progress")
+        self.assertEqual(post(f"/requests/{rid}/take", None, anal).status_code, 409)
+
+        # Звіт
+        report = {"request_id": rid, "program_id": "AKP-TEST", "title": "Відставання Відділу кадрів",
+                  "findings": "", "proposals": "Провести нараду"}
+        self.assertEqual(post("/reports", report, anal).status_code, 400)
+        self.assertEqual(post("/reports", dict(report, findings="x"), ker).status_code, 403)
+        res = post("/reports", dict(report, findings="Два заходи прострочено"), anal)
+        self.assertEqual(res.status_code, 200, res.text)
+        rep = res.json()
+        snap = rep["snapshot"]
+        self.assertEqual((snap["counts"]["total"], snap["counts"]["overdue"], snap["scope"]), (4, 2, "Тестова програма"))
+        self.assertEqual({d["name"] for d in snap["departments"]}, {"Відділ кадрів", "Відділ закупівель"})
+        self.assertEqual(post("/reports", dict(report, findings="ще"), anal).status_code, 409)
+
+        # Керівник отримує звіт як новий; після відкриття — прочитаний
+        inbox = self.client.get("/api/analytics/inbox", headers=ker).json()
+        self.assertEqual(inbox["requests"][0]["status"], "answered")
+        self.assertEqual(inbox["requests"][0]["report_id"], rep["id"])
+        self.assertTrue(inbox["reports"][0]["unread"])
+        full = self.client.get(f"/api/analytics/reports/{rep['id']}", headers=ker).json()
+        self.assertEqual(full["findings"], "Два заходи прострочено")
+        self.assertEqual(full["request_question"], "Причини прострочень")
+        self.assertFalse(self.client.get("/api/analytics/inbox", headers=ker).json()["reports"][0]["unread"])
+
+        # Звіт з власної ініціативи й заборони
+        res = post("/reports", {"title": "Огляд", "findings": "Загальний стан"}, anal)
+        self.assertEqual(res.status_code, 200, res.text)
+        self.assertEqual(res.json()["snapshot"]["scope"], "Усі програми")
+        for login in ("vyk", "admin"):
+            self.assertEqual(self.client.get("/api/analytics/inbox", headers=self.auth(login)).status_code, 403)
+        self.assertEqual(self.client.get("/api/analytics/reports/999", headers=ker).status_code, 404)
+
     def test_access(self):
         self.assertEqual(self.client.get("/api/manager/overview").status_code, 401)
         for login in ("vyk", "anal"):
@@ -151,7 +220,8 @@ class ManagerCabinetTests(unittest.TestCase):
         self.assertTrue(self.overview("ker")["can_decide"])
         self.assertFalse(self.overview("admin")["can_decide"])
         ker = self.auth("ker")
-        self.assertEqual(self.client.get("/api/analyst/overview", headers=ker).status_code, 200)
+        # Аналітику керівник отримує звітами від аналітика, а не напряму
+        self.assertEqual(self.client.get("/api/analyst/overview", headers=ker).status_code, 403)
         self.assertFalse(self.client.get("/api/coordinator/programs", headers=ker).json()["can_edit"])
         body = {"signal_key": "RF1:Z-01", "decision": "dismiss", "comment": "Причина"}
         for login in ("admin", "anal", "vyk"):

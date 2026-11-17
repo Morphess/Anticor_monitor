@@ -15,6 +15,7 @@ from .deadline_change import DeadlineChange
 from .action_log import ActionLog
 from .report import Report
 from .management_decision import ManagementDecision
+from .analytics_report import AnalyticsReport, AnalyticsRequest
 
 __all__ = [
     "Department",
@@ -33,4 +34,6 @@ __all__ = [
     "ActionLog",
     "Report",
     "ManagementDecision",
+    "AnalyticsRequest",
+    "AnalyticsReport",
 ]

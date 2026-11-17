@@ -1,18 +1,22 @@
 {% extends "_base.html" %}
 {% set role_name = "Аналітик" %}
-{% set unit_hint = "Режим перегляду: ви бачите всі дані, але змінювати їх не можна." %}
+{% set unit_hint = "Ви бачите всі дані без права змін і готуєте аналітичні звіти для керівника." %}
 {% set in_tabs = true %}
 {% block title %}Аналітика програм — аналітик{% endblock %}
 {% block content %}
-<ul class="nav nav-underline mb-4" role="tablist" aria-label="Розділи кабінету">
+<ul class="nav nav-underline mb-4 d-print-none" role="tablist" aria-label="Розділи кабінету">
   <li class="nav-item" role="presentation"><button class="nav-link active" type="button" role="tab" id="t-analytics" aria-controls="tab-analytics" aria-selected="true">Аналітика</button></li>
+  <li class="nav-item" role="presentation"><button class="nav-link" type="button" role="tab" id="t-reports" aria-controls="tab-reports" aria-selected="false" tabindex="-1">Запити й звіти <span class="badge rounded-pill text-bg-danger ms-1" id="reports-count" hidden></span></button></li>
   <li class="nav-item" role="presentation"><button class="nav-link" type="button" role="tab" id="t-programs" aria-controls="tab-programs" aria-selected="false" tabindex="-1">Програми й заходи</button></li>
 </ul>
 {% include "_analytics.html" %}
+{% include "_reports.html" %}
 {% include "_programs.html" %}
-<div class="chart-tip" id="tip" role="tooltip" hidden></div>
 {% endblock %}
 {% block scripts %}
+<script src="{{ url_for('static', path='js/tabs.js') }}"></script>
+<script src="{{ url_for('static', path='js/charts.js') }}"></script>
 <script src="{{ url_for('static', path='js/coordinator.js') }}"></script>
 <script src="{{ url_for('static', path='js/analyst.js') }}"></script>
+<script src="{{ url_for('static', path='js/reports.js') }}"></script>
 {% endblock %}

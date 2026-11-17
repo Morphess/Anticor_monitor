@@ -62,6 +62,15 @@ summary { cursor: pointer; }
 .bar-val b { font-size: 1rem; }
 .chart-tip { position: fixed; z-index: 1080; pointer-events: none; background: #000; color: #fff; font-size: .8125rem; padding: .375rem .625rem; border-radius: .375rem; max-width: 20rem; }
 
+/* ---------- Тексти звітів і запитів: зберігаємо абзаци ---------- */
+.text-prewrap { white-space: pre-wrap; overflow-wrap: anywhere; }
+.requests-table { min-width: 680px; }
+.context-table { min-width: 560px; }
+@media print {
+  .chart-panel, .card { break-inside: avoid; }
+  details.as-table, .chart-panel details { display: none; }
+}
+
 /* ---------- Рекомендації керівника: смуга ліворуч за рівнем уваги ---------- */
 .rec { border-left-width: 6px; }
 .rec-high { border-left-color: var(--st-not); }
