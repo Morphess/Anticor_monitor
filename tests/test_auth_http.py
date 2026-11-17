@@ -7,8 +7,12 @@ import jwt
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://unused:unused@127.0.0.1/unused")
-os.environ.setdefault("JWT_SECRET_KEY", "synthetic-test-key-for-hs256-at-least-32-bytes")
+os.environ.setdefault(
+    "DATABASE_URL", "postgresql+psycopg://unused:unused@127.0.0.1/unused"
+)
+os.environ.setdefault(
+    "JWT_SECRET_KEY", "synthetic-test-key-for-hs256-at-least-32-bytes"
+)
 
 from app.api.auth import router as auth_router
 from app.core.config import settings
@@ -25,7 +29,7 @@ class AuthHttpTests(unittest.TestCase):
         )
 
     def setUp(self):
-        self.db = Mock()
+        self.db = Mock(info={})
         app = FastAPI()
         app.include_router(auth_router, prefix="/api")
         app.dependency_overrides[get_db] = lambda: self.db

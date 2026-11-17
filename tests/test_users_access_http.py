@@ -37,9 +37,10 @@ NEW_USER = {
     "role_id": "VYKON",
 }
 
+
 class UsersAccessHttpTests(unittest.TestCase):
     def setUp(self):
-        self.db = Mock()
+        self.db = Mock(info={})
         app = FastAPI()
         app.include_router(users_router, prefix="/api")
         app.dependency_overrides[get_db] = lambda: self.db
@@ -57,17 +58,13 @@ class UsersAccessHttpTests(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
 
     def test_member_cannot_list_users(self):
-        response = self.client.get(
-            "/api/users/", headers=self.headers_for("VYKON")
-        )
+        response = self.client.get("/api/users/", headers=self.headers_for("VYKON"))
 
         self.assertEqual(response.status_code, 403)
 
     def test_admin_can_list_users(self):
         with patch.object(UserService, "list_users", return_value=[]):
-            response = self.client.get(
-                "/api/users/", headers=self.headers_for("ADMIN")
-            )
+            response = self.client.get("/api/users/", headers=self.headers_for("ADMIN"))
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), [])

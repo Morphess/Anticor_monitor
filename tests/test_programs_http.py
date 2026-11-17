@@ -35,7 +35,7 @@ PROGRAM = {
 
 class ProgramsHttpTests(unittest.TestCase):
     def setUp(self):
-        self.db = Mock()
+        self.db = Mock(info={})
         app = FastAPI()
         app.include_router(programs_router, prefix="/api")
         app.dependency_overrides[get_db] = lambda: self.db
@@ -68,6 +68,7 @@ class ProgramsHttpTests(unittest.TestCase):
         response = self.client.post("/api/programs", json=invalid)
 
         self.assertEqual(response.status_code, 422)
+
     def test_update_returns_200(self):
         updated = {**PROGRAM, "title": "Оновлена тестова програма"}
         with patch.object(ProgramService, "update", return_value=updated):
