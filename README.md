@@ -2,10 +2,10 @@
 
 Команда **BorderGroup** · [Завдання 2: цифрова система моніторингу виконання антикорупційної програми](https://hack.bitec.com.ua/zavdannia-2/)
 Cклад команди:
-`@demid21cher - капітан`;
-`@Morphess`;
-`@kaschenko179`;
-`@bzena434-collab`.
+- `@demid21cher - капітан`;
+- `@Morphess`;
+- `@kaschenko179`;
+- `@bzena434-collab`.
 
 ## Проблема і користувачі
 
