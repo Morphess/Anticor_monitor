@@ -1,44 +1,65 @@
+import os
 import unittest
+from types import SimpleNamespace
+from unittest.mock import Mock
 
-from pwdlib import PasswordHash
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
+import jwt
+from fastapi import HTTPException
 
-from app.database.base import Base
-from app.models.auth_user import AuthUser
-from app.repositories.auth import SqlAlchemyAuthRepository
-from app.services.auth_service import authenticate_user
+os.environ.setdefault("APP_NAME", "BorderGroup test")
+os.environ.setdefault("DEBUG", "false")
+os.environ.setdefault("SQL_ECHO", "false")
+os.environ.setdefault(
+    "DATABASE_URL", "postgresql+psycopg://unused:unused@127.0.0.1/unused"
+)
+os.environ.setdefault(
+    "JWT_SECRET_KEY", "synthetic-test-key-for-hs256-at-least-32-bytes"
+)
+
+from app.api.auth import login
+from app.core.config import settings
+from app.core.security import hash_password
 
 
 class AuthFlowTests(unittest.TestCase):
-    def test_credentials_against_database(self) -> None:
-        engine = create_engine("sqlite+pysqlite:///:memory:")
-        Base.metadata.create_all(engine)
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.user = SimpleNamespace(
+            id=7,
+            password_hash=hash_password("demo-password"),
+        )
 
-        try:
-            with Session(engine) as db:
-                db.add(
-                    AuthUser(
-                        login="demo-user",
-                        password_hash=PasswordHash.recommended().hash("demo-password"),
-                    )
-                )
-                db.commit()
+    def test_valid_password_returns_token(self) -> None:
+        db = Mock()
+        db.scalar.return_value = self.user
 
-                repository = SqlAlchemyAuthRepository(db)
+        result = login(
+            SimpleNamespace(username="demo-user", password="demo-password"),
+            db,
+        )
 
-                self.assertTrue(
-                    authenticate_user("demo-user", "demo-password", repository)
-                )
-                self.assertFalse(
-                    authenticate_user("demo-user", "wrong", repository)
-                )
-                self.assertFalse(
-                    authenticate_user("unknown", "demo-password", repository)
-                )
-        finally:
-            engine.dispose()
+        self.assertEqual(result["token_type"], "bearer")
+        claims = jwt.decode(
+            result["access_token"],
+            settings.JWT_SECRET_KEY,
+            algorithms=["HS256"],
+        )
+        self.assertEqual(claims["sub"], "7")
 
+    def test_wrong_password_returns_401(self) -> None:
+        db = Mock()
+        db.scalar.return_value = self.user
 
-if __name__ == "__main__":
-    unittest.main()
+        with self.assertRaises(HTTPException) as error:
+            login(SimpleNamespace(username="demo-user", password="wrong"), db)
+
+        self.assertEqual(error.exception.status_code, 401)
+
+    def test_unknown_user_returns_401(self) -> None:
+        db = Mock()
+        db.scalar.return_value = None
+
+        with self.assertRaises(HTTPException) as error:
+            login(SimpleNamespace(username="unknown", password="anything"), db)
+
+        self.assertEqual(error.exception.status_code, 401)

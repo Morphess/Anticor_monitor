@@ -32,3 +32,8 @@ tzdata==2026.6
 uvicorn==0.54.0
 watchfiles==1.3.0
 websockets==17.4
+<<<<<<< HEAD
+=======
+pwdlib[argon2]==0.4.2
+PyJWT==2.15.1
+>>>>>>> a07296f49e27eed1c4ad7a0bc762d24105a5cecd
