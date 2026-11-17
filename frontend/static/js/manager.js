@@ -129,9 +129,10 @@
     top.appendChild(el("span", "small text-secondary", "Правило " + s.code));
     card.appendChild(top);
     card.appendChild(el("h3", "h5 mt-2 mb-1", s.title));
-    card.appendChild(el("p", "fw-medium mb-2", s.object));
+    card.appendChild(el("p", "fw-medium mb-0", s.object));
+    if (s.program) card.appendChild(el("p", "small text-secondary mb-0", "Програма: " + s.program));
 
-    var why = el("div", "small");
+    var why = el("div", "small mt-2");
     why.appendChild(el("b", "", "Чому з'явилась рекомендація"));
     why.appendChild(factList(s.why));
     card.appendChild(why);

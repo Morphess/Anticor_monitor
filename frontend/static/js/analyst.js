@@ -143,13 +143,19 @@
     if (!rows.length) { box.appendChild(el("p", "text-success fw-semibold mb-0", "Усе гаразд: прострочених заходів і близьких строків немає.")); return; }
     var wrap = el("div", "table-responsive");
     var t = el("table", "table table-sm table-hover align-top mb-0 attention-table");
+    // Номери заходів повторюються в різних програмах: коли вибрано «Усі програми», показуємо й програму
+    var allPrograms = !document.getElementById("program").value && DATA.programs.length > 1;
+    var names = {};
+    DATA.programs.forEach(function (p) { names[p.id] = p.name; });
     var head = el("tr");
-    ["№", "Захід", "Підрозділ", "Строк", "Статус", "Стан строку"].forEach(function (h) { head.appendChild(el("th", "small text-secondary fw-normal", h)); });
+    ["№", "Захід"].concat(allPrograms ? ["Програма"] : [], ["Підрозділ", "Строк", "Статус", "Стан строку"])
+      .forEach(function (h) { head.appendChild(el("th", "small text-secondary fw-normal", h)); });
     t.appendChild(head);
     rows.forEach(function (m) {
       var tr = el("tr");
       tr.appendChild(el("td", "text-secondary", m.n));
       tr.appendChild(el("td", "", m.t));
+      if (allPrograms) tr.appendChild(el("td", "small text-secondary", names[m.program_id]));
       tr.appendChild(el("td", "", m.department));
       tr.appendChild(el("td", "text-nowrap", m.deadline));
       var st = el("td"); st.appendChild(el("span", "st st-" + m.st, DATA.statuses[m.st])); tr.appendChild(st);

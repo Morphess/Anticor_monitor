@@ -135,6 +135,8 @@ class ManagerCabinetTests(unittest.TestCase):
         ]))
         by_key = {s["key"]: s for s in signals}
         self.assertEqual(by_key["RF1:Z-01"]["suggested_department_id"], "P01")
+        self.assertEqual(by_key["RF1:Z-01"]["program"], "Тестова програма")
+        self.assertIsNone(by_key["RF7d:KR02"]["program"])
         self.assertEqual(by_key["RF3:Z-03"]["suggested_department_id"], "P02")  # власник ризику
         self.assertTrue(any("4%" in fact for fact in by_key["RF3:Z-03"]["why"]))
         self.assertTrue(all(s["rule"] and s["why"] and s["recommendation"] for s in signals))
@@ -171,6 +173,7 @@ class ManagerCabinetTests(unittest.TestCase):
                    comment="Доповісти на нараді")
         self.assertEqual(res.status_code, 200, res.text)
         self.assertEqual((res.json()["decision"], res.json()["department"]), ("assign", "Відділ кадрів"))
+        self.assertIn("Тестова програма", res.json()["object"])
         self.assertEqual(post(signal_key="RF1:Z-01", decision="dismiss", comment="ще раз").status_code, 409)
 
         res = post(signal_key="RF7d:KR02", decision="dismiss", comment="Захід готується окремим наказом")

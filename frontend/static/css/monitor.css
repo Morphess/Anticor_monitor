@@ -41,7 +41,7 @@ summary { cursor: pointer; }
 /* ---------- Таблиці ---------- */
 .executor-table { min-width: 1100px; }
 .units-table { min-width: 520px; }
-.attention-table { min-width: 640px; }
+.attention-table { min-width: 760px; }
 .font-monospace-num { font-variant-numeric: tabular-nums; }
 
 /* ---------- Графіки: складена смуга ---------- */

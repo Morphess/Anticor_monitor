@@ -60,14 +60,16 @@ def _measure_label(m: Measure) -> str:
 
 
 def _signal(code, obj_key, severity, title, object_label, why, recommendation, department_id, due_days, today,
-            program_id=None):
+            program=None):
     return {
         "key": f"{code}:{obj_key}",
         "code": code,
         "severity": severity,
         "title": title,
         "object": object_label,
-        "program_id": program_id,
+        # Номери заходів повторюються в різних програмах, тож програму показуємо явно
+        "program_id": program.id if program else None,
+        "program": program.title if program else None,
         "why": why,
         "rule": RULES[code],
         "recommendation": recommendation,
@@ -117,7 +119,7 @@ def compute_signals(db: Session, today: date | None = None) -> list[dict]:
                 [f"Строк: {_fmt(m.deadline_on)} — минуло {_days(late)}", status_fact,
                  f"Відповідальний підрозділ: {dep_name}"],
                 f"Доручити підрозділу «{dep_name}» завершити захід і подати підтвердження.",
-                dep_id, 14, today, m.program_id))
+                dep_id, 14, today, m.program))
             if dep_id:
                 overdue_by_dep.setdefault(dep_id, []).append(m)
 
@@ -127,7 +129,7 @@ def compute_signals(db: Session, today: date | None = None) -> list[dict]:
                 "RF2", m.id, "medium", "Виконання не підтверджено документами", label,
                 [status_fact, "Підтвердних матеріалів: 0"],
                 f"Доручити підрозділу «{dep_name}» додати підтвердні матеріали: наказ, протокол або акт.",
-                dep_id, 7, today, m.program_id))
+                dep_id, 7, today, m.program))
 
         # RF3 — формальне закриття
         if m.risk and st == "done":
@@ -142,7 +144,7 @@ def compute_signals(db: Session, today: date | None = None) -> list[dict]:
                      f"ціль {_num(r.indicator_target_value)} {r.indicator_unit}",
                      f"Останнє вимірювання {_fmt(measured)}: {_num(value)} — пройдено {max(share, 0) * 100:.0f}% шляху"],
                     "Доручити власнику ризику з'ясувати, чому захід не вплинув на ризик, і запропонувати додатковий захід.",
-                    r.owner_department_id or dep_id, 30, today, m.program_id))
+                    r.owner_department_id or dep_id, 30, today, m.program))
 
         # RF5 — показник нижче цілі
         if (st in ("done", "review") and execution is not None and m.indicator_target is not None
@@ -153,7 +155,7 @@ def compute_signals(db: Session, today: date | None = None) -> list[dict]:
                 [f"Ціль: {_num(m.indicator_target)}{unit}", f"Факт: {_num(execution.indicator_actual)}{unit}",
                  status_fact],
                 f"Доручити підрозділу «{dep_name}» пояснити відставання й подати план досягнення цілі.",
-                dep_id, 14, today, m.program_id))
+                dep_id, 14, today, m.program))
 
         # RF6a — повторні перенесення строку
         if len(m.deadline_changes) >= 2:
@@ -163,7 +165,7 @@ def compute_signals(db: Session, today: date | None = None) -> list[dict]:
                 [f"Перенесень: {len(moves)}"] + [
                     f"{_fmt(c.previous_deadline)} → {_fmt(c.new_deadline)}: {c.reason}" for c in moves],
                 f"Доручити підрозділу «{dep_name}» пояснити причини перенесень; розглянути зміну відповідального.",
-                dep_id, 14, today, m.program_id))
+                dep_id, 14, today, m.program))
 
     # RF6b — підрозділ із кількома простроченими заходами
     for dep_id, items in overdue_by_dep.items():
@@ -260,7 +262,7 @@ def decide(db: Session, user: User, signal_key: str, decision: str, department_i
 
     record = ManagementDecision(
         signal_key=signal_key, period=period, rule_code=signal["code"], signal_title=signal["title"],
-        object_label=signal["object"], decision=decision, responsible_department_id=department_id,
+        object_label=signal["object"] + (f" — {signal['program']}" if signal["program"] else ""), decision=decision, responsible_department_id=department_id,
         due_on=due_on, comment=comment, decided_by_user_id=user.id, decided_at=datetime.now(),
     )
     db.add(record)
