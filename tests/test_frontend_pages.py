@@ -44,7 +44,7 @@ class MonitorPagesTests(unittest.TestCase):
         Session = sessionmaker(bind=self.engine, expire_on_commit=False)
 
         with Session() as db:
-            for code in ("ADMIN", "KOORD", "VYK"):
+            for code in ("ADMIN", "KOORD", "VYK", "ANAL"):
                 db.add(Role(id=code, name=code))
             db.add(Section(id="R1", number=1, title="Розділ один"))
             db.add(Department(id="P01", name="Відділ кадрів", department_type="апарат"))
@@ -55,6 +55,7 @@ class MonitorPagesTests(unittest.TestCase):
             ))
             db.flush()
             db.add(User(login="admin", password_hash=hash_password(PASSWORD), role_id="ADMIN"))
+            db.add(User(login="anal", password_hash=hash_password(PASSWORD), role_id="ANAL"))
             db.add(User(login="vyk", password_hash=hash_password(PASSWORD), role_id="VYK",
                         program_id="AKP-TEST", department_id="P01"))
             db.flush()
@@ -160,6 +161,47 @@ class MonitorPagesTests(unittest.TestCase):
         self.assertIn("new.user", logins)
         res =self.client.post("/api/auth/token", data={"username": "new.user", "password": "long-password-123"})
         self.assertEqual(res.status_code, 200)
+
+    def test_analyst_page_and_overview(self):
+        self.assertIn("analyst.js", self.client.get("/analyst").text)
+        self.assertEqual(self.client.get("/static/js/analyst.js").status_code, 200)
+        self.assertEqual(self.client.get("/api/analyst/overview").status_code, 401)
+        self.assertEqual(self.client.get("/api/analyst/overview", headers=self.auth("vyk")).status_code, 403)
+
+        res = self.client.get("/api/analyst/overview", headers=self.auth("anal"))
+        self.assertEqual(res.status_code, 200, res.text)
+        data = res.json()
+        self.assertEqual([p["id"] for p in data["programs"]], ["AKP-TEST"])
+        rows = {m["id"]: m for m in data["measures"]}
+        self.assertEqual(set(rows), {"Z-01", "Z-02"})
+        self.assertEqual(rows["Z-01"]["department"], "Відділ кадрів")
+        self.assertEqual(rows["Z-02"]["department"], "Підрозділ не призначено")
+        self.assertEqual(rows["Z-01"]["st"], "not")
+        self.assertFalse(rows["Z-01"]["overdue"])
+
+    def test_analyst_overdue_and_due_soon(self):
+        from app.services.monitor_service import analytics_page
+
+        db = next(app.dependency_overrides[get_db]())
+        db.get(Measure, "Z-01").deadline_type = "date"
+        db.get(Measure, "Z-01").deadline_on = date(2026, 3, 1)
+        db.get(Measure, "Z-02").deadline_type = "date"
+        db.get(Measure, "Z-02").deadline_on = date(2026, 3, 20)
+        db.commit()
+        user = db.query(User).filter_by(login="anal").one()
+        rows = {m["id"]: m for m in analytics_page(db, user, today=date(2026, 3, 10))["measures"]}
+        self.assertTrue(rows["Z-01"]["overdue"])
+        self.assertFalse(rows["Z-01"]["due_soon"])
+        self.assertEqual(rows["Z-02"]["days_left"], 10)
+        self.assertTrue(rows["Z-02"]["due_soon"])
+
+    def test_analyst_is_read_only(self):
+        anal = self.auth("anal")
+        res = self.client.post("/api/coordinator/status", json={"measure_id": "Z-01", "status": "done"}, headers=anal)
+        self.assertEqual(res.status_code, 403)
+        data = self.client.get("/api/coordinator/programs", headers=anal).json()
+        self.assertFalse(data["can_edit"])
+        self.assertEqual(self.coordinator_item(anal, "Z-01")["units"][0]["st"], "not")
 
     def test_unknown_status_rejected(self):
         res = self.client.post("/api/coordinator/status", json={"measure_id": "Z-01", "status": "bad"},

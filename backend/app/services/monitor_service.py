@@ -224,3 +224,46 @@ def set_status(db: Session, user: User, measure_id: str, status: str) -> dict:
         execution.completed_on = date.today()
     db.commit()
     return {"status": status, "label": STATUSES[status]}
+
+
+# ---------- Аналітик ----------
+# Ролі, яким відкрито зведену аналітику (лише перегляд).
+ANALYTICS_ROLES = ("ANAL", "KER", "KOORD", "ADMIN")
+SOON_DAYS = 30
+
+
+def analytics_page(db: Session, user: User, today: date | None = None) -> dict:
+    """Плоский список заходів зі статусами: зведення й графіки рахує сторінка."""
+    today = today or date.today()
+    period = current_period(today)
+    programs = db.scalars(select(Program).order_by(Program.start_date.desc())).all()
+    measures = db.scalars(_measure_query().order_by(Measure.section_id, Measure.sequence_number)).all()
+
+    rows = []
+    for m in measures:
+        st = _status_key(_execution(m, period))
+        days_left = (m.deadline_on - today).days if m.deadline_on else None
+        rows.append({
+            "id": m.id,
+            "n": f"{m.section.number}.{m.sequence_number}",
+            "t": m.description,
+            "program_id": m.program_id,
+            "section": f"{m.section.number}. {m.section.title}",
+            "department": m.responsible_department.name if m.responsible_department else "Підрозділ не призначено",
+            "st": st,
+            "deadline": _fmt(m.deadline_on) if m.deadline_on else m.deadline_description,
+            "overdue": st != "done" and days_left is not None and days_left < 0,
+            "due_soon": st != "done" and days_left is not None and 0 <= days_left <= SOON_DAYS,
+            "days_left": days_left,
+        })
+    unit = _department_name(db, user.department_id) or user.position or user.login
+    return {
+        "unit": unit,
+        "period": period,
+        "today": _fmt(today),
+        "soon_days": SOON_DAYS,
+        "statuses": STATUSES,
+        "programs": [{"id": p.id, "name": p.title, "start": _fmt(p.start_date), "end": _fmt(p.end_date)}
+                     for p in programs],
+        "measures": rows,
+    }

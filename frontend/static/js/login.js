@@ -22,7 +22,7 @@ document.getElementById("login-form").addEventListener("submit", async function 
     var next = new URLSearchParams(location.search).get("next") || "";
     if (/^\/(?!\/)/.test(next) && next !== "/login") { location.href = next; return; }
     var me = await Api.get("/api/auth/me");
-    location.href = { VYK: "/executor", ADMIN: "/admin" }[me.role_id] || "/coordinator";
+    location.href = { VYK: "/executor", ADMIN: "/admin", ANAL: "/analyst" }[me.role_id] || "/coordinator";
   } catch (ex) {
     err.textContent = ex.message === "Failed to fetch" ? "Немає зв'язку з сервером" : ex.message;
   } finally {

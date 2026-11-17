@@ -1,5 +1,6 @@
 // Сторінка координатора: список програм, пошук, розділи, підпункти, органи і зміна статусу.
 // Дані — з /api/coordinator/programs; змінювати статус можуть ADMIN і KOORD.
+// Також підключається на сторінці аналітика: там can_edit=false, тож усе лише для перегляду.
 var PROGRAMS = [], LABEL = {}, CAN_EDIT = false;
 var ORDER = ["done", "review", "rework", "not"];
 var openProgram = null, openItem = null, choosing = null, lastError = null;
@@ -163,7 +164,8 @@ Api.get("/api/coordinator/programs")
     CAN_EDIT = data.can_edit;
     openProgram = PROGRAMS.length ? PROGRAMS[0].id : null;
     document.getElementById("unit").textContent = data.unit;
-    document.getElementById("create").hidden = !CAN_EDIT;
+    var create = document.getElementById("create");
+    if (create) create.hidden = !CAN_EDIT;
     render();
   })
   .catch(function (ex) { document.getElementById("page-error").textContent = ex.message; });

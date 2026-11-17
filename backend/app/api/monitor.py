@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_current_user, require_admin
+from app.core.dependencies import get_current_user, require_admin, require_roles
 from app.database.db_connection import get_db
 from app.models.department import Department
 from app.models.user import User
@@ -55,3 +55,9 @@ def change_status(data: StatusChange, db: Session = Depends(get_db), user: User 
         return monitor_service.set_status(db, user, data.measure_id, data.status)
     except monitor_service.MonitorError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
+@router.get("/analyst/overview", dependencies=[Depends(require_roles(*monitor_service.ANALYTICS_ROLES))])
+def analyst_overview(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Зведення для аналітика: заходи всіх програм зі статусами й строками. Лише читання."""
+    return monitor_service.analytics_page(db, user)
