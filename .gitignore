@@ -9,4 +9,5 @@ docs/
 .mypy_cache/
 .rope/
 .env/
+.env.example/
 

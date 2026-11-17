@@ -1,9 +1,11 @@
 from pathlib import Path
 from contextlib import asynccontextmanager
+import logging
 
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -16,6 +18,14 @@ from app.api.users import router as users_router
 from app.api.programs import router as programs_router
 from app.api.sections import router as sections_router
 from app.api.measures import router as measures_router
+from app.api.risks import router as risks_router
+from app.api.execution import router as execution_router
+from app.api.evidences import router as evidences_router
+from app.api.deadline_changes import router as deadline_changes_router
+from app.api.reports import router as reports_router
+
+# Налаштування логування
+logger = logging.getLogger(__name__)
 
 
 # Коренева папка проєкту
@@ -30,18 +40,36 @@ STATIC_DIR = FRONTEND_DIR / "static"
 # Життєвий цикл застосунку
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-
-    print("Anticor Monitor запускається...")
+    logger.info("Anticor Monitor запускається...")
 
     try:
-        yield  # FastAPI працює тут
+        yield
     finally:
         engine.dispose()
-        print("Anticor Monitor завершив роботу.")
+        logger.info("Anticor Monitor завершив роботу.")
 
 
 # Створення FastAPI
-app = FastAPI(title="Anticor Monitor", lifespan=lifespan)
+app = FastAPI(
+    title="Anticor Monitor API",
+    description="API системи моніторингу корупційних ризиків",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+
+# Налаштування CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://127.0.0.1:8000",
+        "http://localhost:8000",
+        "https://ubuntu.ermine-great.ts.net",
+    ],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # Підключення API
@@ -50,30 +78,61 @@ app.include_router(users_router, prefix="/api")
 app.include_router(programs_router, prefix="/api")
 app.include_router(sections_router, prefix="/api")
 app.include_router(measures_router, prefix="/api")
+app.include_router(risks_router, prefix="/api")
+app.include_router(execution_router, prefix="/api")
+app.include_router(evidences_router, prefix="/api")
+app.include_router(deadline_changes_router, prefix="/api")
+app.include_router(reports_router, prefix="/api")
 
 
 # HTML-шаблони
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
+
 # Статичні файли
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+app.mount(
+    "/static",
+    StaticFiles(directory=str(STATIC_DIR)),
+    name="static",
+)
 
 
 # Головна сторінка
-@app.get("/")
+@app.get("/", tags=["System"])
 def read_root():
-    return {"app": "Anticor Monitor", "status": "running"}
+    return {
+        "app": "Anticor Monitor",
+        "status": "running",
+    }
+
+
+# Перевірка роботи FastAPI
+@app.get("/health", tags=["System"])
+def health_check():
+    return {
+        "status": "ok",
+        "message": "FastAPI працює",
+    }
 
 
 # Перевірка PostgreSQL
-@app.get("/db")
-def database_health_check(db: Session = Depends(get_db)):
+@app.get("/db", tags=["System"])
+def database_health_check(
+    db: Session = Depends(get_db),
+):
     try:
-        result = db.execute(text("SELECT 1")).scalar()
+        result = db.execute(text("SELECT 1")).scalar_one()
 
-        return {"status": "connected", "database": "PostgreSQL", "result": result}
+        return {
+            "status": "connected",
+            "database": "PostgreSQL",
+            "result": result,
+        }
 
     except SQLAlchemyError as error:
+        logger.exception("Помилка підключення до PostgreSQL")
+
         raise HTTPException(
-            status_code=503, detail="Не вдалося підключитися до PostgreSQL"
+            status_code=503,
+            detail="Не вдалося підключитися до PostgreSQL",
         ) from error
