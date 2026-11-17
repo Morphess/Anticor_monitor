@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Аналітика — аналітик{% endblock %}
+{% block role_name %}Аналітик{% endblock %}
+{% block content %}
+<section class="unit">
+  <div>
+    <p class="label">Аналітика виконання</p>
+    <h1 id="program-title">—</h1>
+  </div>
+  <label class="field">Звітний період <select id="period"></select></label>
+</section>
+<div class="cards" id="cards"></div>
+<h2>За підрозділами</h2>
+<div class="table-wrap">
+  <table class="grid">
+    <thead><tr><th>Підрозділ</th><th>Заходів</th><th>Виконано</th><th>На розгляді</th><th>На доопрацюванні</th><th>Не виконано</th><th style="width:22%">Прогрес</th></tr></thead>
+    <tbody id="by-dept"></tbody>
+  </table>
+</div>
+<h2>За розділами</h2>
+<div class="table-wrap">
+  <table class="grid">
+    <thead><tr><th>Розділ</th><th>Виконано</th><th style="width:40%">Прогрес</th></tr></thead>
+    <tbody id="by-section"></tbody>
+  </table>
+</div>
+<div class="toolbar" style="margin-top:20px">
+  <button class="btn" type="button" id="export-csv">Завантажити CSV</button>
+</div>
+<h2>Запити та звіти</h2>
+<p class="stub">Тимчасово недоступно: формування офіційних звітів з'явиться разом з API звітів (<code>/api/reports</code> поки лише зберігає метадані).</p>
+{% endblock %}
+{% block scripts %}<script src="/static/js/summary.js"></script><script src="/static/js/analyst.js"></script>{% endblock %}

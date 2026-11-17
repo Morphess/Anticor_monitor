@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Адміністрування{% endblock %}
+{% block role_name %}Адміністратор{% endblock %}
+{% block content %}
+<section class="unit">
+  <div>
+    <p class="label">Адміністрування</p>
+    <h1>Користувачі та журнал дій</h1>
+  </div>
+</section>
+<div class="tabs" role="tablist">
+  <button type="button" role="tab" aria-selected="true" data-tab="users">Користувачі</button>
+  <button type="button" role="tab" aria-selected="false" data-tab="programs">Програми</button>
+  <button type="button" role="tab" aria-selected="false" data-tab="log">Журнал дій</button>
+</div>
+
+<section data-panel="users">
+  <form id="user-form" class="card" style="margin-bottom:20px">
+    <h2 style="margin-top:0">Новий користувач</h2>
+    <div class="form-grid">
+      <label class="field">Логін<input name="login" required minlength="3" pattern="[A-Za-z0-9_.\-]+"></label>
+      <label class="field">Пароль (від 12 символів)<input name="password" type="password" required minlength="12" autocomplete="new-password"></label>
+      <label class="field">Роль
+        <select name="role_id">
+          <option value="VYK">Виконавець</option><option value="KOORD">Координатор програми</option>
+          <option value="KER">Керівник</option><option value="ANAL">Аналітик</option><option value="ADMIN">Адміністратор</option>
+        </select>
+      </label>
+      <label class="field">Програма<select name="program_id"><option value="">—</option></select></label>
+      <label class="field">Підрозділ<select name="department_id"><option value="">—</option></select></label>
+      <label class="field">Посада<input name="position"></label>
+    </div>
+    <div id="user-msg" class="msg"></div>
+    <button class="btn btn-dark" type="submit">Створити користувача</button>
+  </form>
+  <div class="table-wrap">
+    <table class="grid">
+      <thead><tr><th>ID</th><th>Логін</th><th>Роль</th><th>Підрозділ</th><th>Посада</th><th>Програма</th></tr></thead>
+      <tbody id="users"></tbody>
+    </table>
+  </div>
+</section>
+
+<section data-panel="programs" class="hidden">
+  <div class="table-wrap">
+    <table class="grid">
+      <thead><tr><th>Код</th><th>Назва</th><th>Початок</th><th>Завершення</th><th>Стан</th></tr></thead>
+      <tbody id="programs"></tbody>
+    </table>
+  </div>
+</section>
+
+<section data-panel="log" class="hidden">
+  <div class="table-wrap">
+    <table class="grid">
+      <thead><tr><th>Час</th><th>Користувач</th><th>Дія</th><th>Об'єкт</th><th>Поле</th><th>Було</th><th>Стало</th></tr></thead>
+      <tbody id="log"></tbody>
+    </table>
+  </div>
+  <div class="toolbar" style="margin-top:12px"><button class="btn" type="button" id="log-more">Показати ще</button></div>
+</section>
+{% endblock %}
+{% block scripts %}<script src="/static/js/admin.js"></script>{% endblock %}
