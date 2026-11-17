@@ -1,7 +1,7 @@
 """add analyst role
 
 Revision ID: a7c3e1f0b2d4
-Revises: 2dcc7d9ed549
+Revises: 7ab871650abc
 Create Date: 2026-11-17
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 
 revision: str = "a7c3e1f0b2d4"
-down_revision: Union[str, Sequence[str], None] = "2dcc7d9ed549"
+down_revision: Union[str, Sequence[str], None] = "7ab871650abc"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
