@@ -73,15 +73,18 @@ jobs:
           engine = create_engine(os.environ["DATABASE_URL"])
           inspector = inspect(engine)
 
-          if not inspector.has_table("auth_users"):
-              raise SystemExit("auth_users table is missing")
+          if inspector.has_table("auth_users"):
+              raise SystemExit("Obsolete auth_users table still exists")
 
-          indexes = inspector.get_indexes("auth_users")
+          if not inspector.has_table("users"):
+              raise SystemExit("users table is missing")
+
+          indexes = inspector.get_indexes("users")
           if not any(
-              index["name"] == "ix_auth_users_login" and index["unique"]
+              index["name"] == "ix_users_login" and index["unique"]
               for index in indexes
           ):
-              raise SystemExit("Unique login index is missing")
+              raise SystemExit("Unique users login index is missing")
 
           engine.dispose()
           print("Migration OK")
