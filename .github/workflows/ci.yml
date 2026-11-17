@@ -2,9 +2,9 @@ name: CI
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, demid]
   push:
-    branches: [main]
+    branches: [main, demid]
 
 permissions:
   contents: read
@@ -12,6 +12,20 @@ permissions:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.12-bookworm
+        env:
+          POSTGRES_DB: bordergroup_ci
+          POSTGRES_USER: ci_user
+          POSTGRES_PASSWORD: ci_test_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci_user -d bordergroup_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v6
         with:
@@ -44,10 +58,13 @@ jobs:
 
       - name: Check Alembic migration
         env:
-          DATABASE_URL: "sqlite+pysqlite:///./ci-auth.sqlite"
+          DATABASE_URL: "postgresql+psycopg://ci_user:ci_test_only@127.0.0.1:5432/bordergroup_ci"
+          PYTHONPATH: backend
         run: |
+          alembic upgrade 842c9b19e77c
           alembic upgrade head
           alembic current --check-heads
+          alembic check
           python - <<'PY'
           import os
 
@@ -56,15 +73,18 @@ jobs:
           engine = create_engine(os.environ["DATABASE_URL"])
           inspector = inspect(engine)
 
-          if not inspector.has_table("auth_users"):
-              raise SystemExit("auth_users table is missing")
+          if inspector.has_table("auth_users"):
+              raise SystemExit("Obsolete auth_users table still exists")
 
-          indexes = inspector.get_indexes("auth_users")
+          if not inspector.has_table("users"):
+              raise SystemExit("users table is missing")
+
+          indexes = inspector.get_indexes("users")
           if not any(
-              index["name"] == "ix_auth_users_login" and index["unique"]
+              index["name"] == "ix_users_login" and index["unique"]
               for index in indexes
           ):
-              raise SystemExit("Unique login index is missing")
+              raise SystemExit("Unique users login index is missing")
 
           engine.dispose()
           print("Migration OK")
