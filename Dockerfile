@@ -2,6 +2,8 @@ FROM python:3.13-slim-bookworm
 
 WORKDIR /app
 COPY requirements.txt ./
+COPY alembic.ini ./alembic.ini
+COPY alembic/ ./alembic/
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/app/ ./backend/app/

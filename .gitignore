@@ -1,13 +1,12 @@
 venv/
 .venv/
 __pycache__/
-*.py[cod]
+docs/
+.github/
+.idea/
+.vscode/
+.pytest_cache/
+.mypy_cache/
+.rope/
+.env/
 
-.env
-.env.*
-!.env.example
-secrets/
-*.secret
-*.secrets
-*.key
-*.pem

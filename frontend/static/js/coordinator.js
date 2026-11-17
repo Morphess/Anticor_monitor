@@ -1,8 +1,8 @@
 // Сторінка координатора: список програм, пошук, розділи, підпункти, органи і зміна статусу.
-var PROGRAMS = JSON.parse(document.getElementById("programs-data").textContent);
-var LABEL = JSON.parse(document.getElementById("statuses-data").textContent);
+// Дані — з /api/coordinator/programs; змінювати статус можуть ADMIN і KOORD.
+var PROGRAMS = [], LABEL = {}, CAN_EDIT = false;
 var ORDER = ["done", "review", "rework", "not"];
-var openProgram = PROGRAMS.length ? PROGRAMS[0].id : null, openItem = null, choosing = null, lastError = null;
+var openProgram = null, openItem = null, choosing = null, lastError = null;
 
 function el(tag, cls, text) {
   var e = document.createElement(tag);
@@ -36,21 +36,15 @@ function itemStatus(i) {
 }
 
 function changeStatus(program, item, index, status) {
-  item.units[index].st = status;
-  try { localStorage.setItem("monitor-preview-programs", JSON.stringify(PROGRAMS)); } catch (_) {}
-  lastError = null;
-  choosing = null;
-  render();
+  Api.post("/api/coordinator/status", { measure_id: item.measure_id, status: status })
+    .then(function (res) { item.units[index].st = res.status; lastError = null; choosing = null; render(); })
+    .catch(function () { lastError = item.n + "/" + index; render(); });
 }
-
-try {
-  var savedPrograms = JSON.parse(localStorage.getItem("monitor-preview-programs") || "null");
-  if (Array.isArray(savedPrograms)) PROGRAMS = savedPrograms;
-} catch (_) {}
 
 function statusNode(program, item, u, index) {
   var key = item.n + "/" + index;
   var wrap = el("div");
+  if (!CAN_EDIT) { wrap.appendChild(el("span", "st st-" + u.st, LABEL[u.st])); return wrap; }
   var b = el("button", "status-btn s-" + u.st);
   b.type = "button";
   b.setAttribute("aria-expanded", choosing === key);
@@ -126,7 +120,7 @@ function render() {
     wrap.appendChild(btn);
 
     var det = el("div", "detail");
-    if (!p.sections.length) det.appendChild(el("p", "muted", "Програму завершено. Розділи архівної програми в демо не завантажено."));
+    if (!p.sections.length) det.appendChild(el("p", "muted", "У програмі ще немає заходів."));
     p.sections.forEach(function (s) {
       var sec = el("div", "sec");
       var sc = sectionCount(s);
@@ -161,4 +155,15 @@ function render() {
 }
 
 document.getElementById("q").addEventListener("input", render);
-render();
+
+Api.get("/api/coordinator/programs")
+  .then(function (data) {
+    PROGRAMS = data.programs;
+    LABEL = data.statuses;
+    CAN_EDIT = data.can_edit;
+    openProgram = PROGRAMS.length ? PROGRAMS[0].id : null;
+    document.getElementById("unit").textContent = data.unit;
+    document.getElementById("create").hidden = !CAN_EDIT;
+    render();
+  })
+  .catch(function (ex) { document.getElementById("page-error").textContent = ex.message; });

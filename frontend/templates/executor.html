@@ -7,11 +7,11 @@
   <link rel="stylesheet" href="{{ url_for('static', path='css/monitor.css') }}">
 </head>
 <body class="page-executor">
-<header class="top"><b>Антикорупційна програма</b><div><span>Виконавець · демо</span><a href="/coordinator">Кабінет координатора</a><a href="/login">Вийти</a></div></header>
+<header class="top"><b>Антикорупційна програма</b><div><span>Виконавець</span><a href="/login" data-logout>Вийти</a></div></header>
 <main>
   <section class="unit">
-    <div><p>Назва підрозділу</p><h1>{{ unit }}</h1></div>
-    <p class="hint">Демо без бекенду: введіть будь-який номер наказу й натисніть Enter. Зміни збережуться лише в цьому браузері.</p>
+    <div><p>Назва підрозділу</p><h1 id="unit">Завантаження…</h1></div>
+    <p class="hint">Введіть номер наказу й натисніть Enter — система перевірить його в базі, статус оновиться сам</p>
   </section>
 
   <div class="table-box">
@@ -28,28 +28,14 @@
           <th>Примітка</th>
         </tr>
       </thead>
-      <tbody>
-      {% for r in rows %}
-        <tr>
-          <td class="name">{{ r.order_title }}</td>
-          <td>{{ r.organ }}</td>
-          <td class="nowrap">{{ r.start }}</td>
-          <td class="nowrap">{{ r.end }}</td>
-          <td>
-            <label class="sr" for="order-{{ r.id }}">Номер наказу для заходу {{ r.id }}</label>
-            <input id="order-{{ r.id }}" class="order-input{% if r.entered %} is-ok{% endif %}" data-measure="{{ r.id }}"
-                   value="{{ r.entered }}" placeholder="№ і Enter" autocomplete="off" aria-describedby="msg-{{ r.id }}">
-            <div id="msg-{{ r.id }}" class="order-msg{% if r.entered %} ok{% endif %}" role="status">{% if r.entered %}Успіх{% endif %}</div>
-          </td>
-          <td><span id="status-{{ r.id }}" class="st {{ 'st-done' if r.status == 'виконано' else ('st-not' if r.status == 'строк минув' else 'st-review') }}">{{ r.status }}</span></td>
-          <td><div class="goal">{{ r.goal }}</div><div class="muted">{{ r.indicator }}</div></td>
-          <td>{{ r.note }}</td>
-        </tr>
-      {% endfor %}
+      <tbody id="rows">
+        <tr><td colspan="8" class="muted">Завантаження…</td></tr>
       </tbody>
     </table>
   </div>
+  <p class="error-line" id="page-error" role="alert"></p>
 </main>
+<script src="{{ url_for('static', path='js/api.js') }}"></script>
 <script src="{{ url_for('static', path='js/executor.js') }}"></script>
 </body>
 </html>
