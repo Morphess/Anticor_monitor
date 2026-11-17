@@ -10,9 +10,6 @@ class Settings(BaseSettings):
     DEBUG: bool
 
     DATABASE_URL: str
-    POSTGRES_PASSWORD: str
-    POSTGRES_USER: str
-    POSTGRES_DB: str
 
     SQL_ECHO: bool
     JWT_SECRET_KEY: str
