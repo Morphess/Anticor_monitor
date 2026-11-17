@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Вхід — антикорупційна програма</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='css/monitor.css') }}">
+</head>
+<body class="page-login">
+<header class="top"><b>Антикорупційна програма</b></header>
+<main>
+  <form class="login" id="login-form" novalidate>
+    <h1>Вхід</h1>
+    <label for="login">Логін</label>
+    <input id="login" name="username" autocomplete="username" required>
+    <label for="password">Пароль</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <p class="error-line" id="login-error" role="alert"></p>
+    <button class="create" type="submit">Увійти</button>
+  </form>
+</main>
+<script src="{{ url_for('static', path='js/api.js') }}"></script>
+<script src="{{ url_for('static', path='js/login.js') }}"></script>
+</body>
+</html>

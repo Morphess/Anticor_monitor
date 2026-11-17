@@ -16,6 +16,8 @@ from app.api.users import router as users_router
 from app.api.programs import router as programs_router
 from app.api.sections import router as sections_router
 from app.api.measures import router as measures_router
+from app.api.monitor import router as monitor_router
+from app.web.pages import router as pages_router
 
 
 # Коренева папка проєкту
@@ -50,6 +52,10 @@ app.include_router(users_router, prefix="/api")
 app.include_router(programs_router, prefix="/api")
 app.include_router(sections_router, prefix="/api")
 app.include_router(measures_router, prefix="/api")
+app.include_router(monitor_router, prefix="/api")
+
+# HTML-сторінки фронтенду
+app.include_router(pages_router)
 
 
 # HTML-шаблони
