@@ -1,29 +1,27 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database.db_connection import get_db
-from app.repositories.auth import SqlAlchemyAuthRepository
-from app.schemas.auth import LoginRequest, LoginResponse
-from app.services.auth_service import authenticate_user
+from app.models.user import User
+from app.core.security import (
+    verify_password,
+    create_access_token,
+)
+
+router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
-router = APIRouter(prefix="/auth", tags=["API Auth"])
+# Вхід користувача
+@router.post("/token")
+def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    # Шукаємо користувача за логіном
+    user = db.scalar(select(User).where(User.login == form.username))
 
+    # Перевіряємо користувача і пароль
+    if not user or not verify_password(form.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Невірний логін або пароль")
 
-@router.post("/login", response_model=LoginResponse)
-def login(request: LoginRequest, db: Session = Depends(get_db)) -> LoginResponse:
-    repository = SqlAlchemyAuthRepository(db)
-
-    authenticated = authenticate_user(
-        request.login,
-        request.password.get_secret_value(),
-        repository,
-    )
-
-    if not authenticated:
-        raise HTTPException(
-            status_code=401,
-            detail="Невірний логін або пароль",
-        )
-
-    return LoginResponse(authenticated=True)
+    # Повертаємо JWT-токен
+    return {"access_token": create_access_token(user.id), "token_type": "bearer"}
