@@ -1,17 +1,29 @@
-{# Спільний фрагмент: програми й заходи лише для перегляду. Логіка — coordinator.js (can_edit=false) #}
-  <!-- ---------- Програми (як у координатора, лише перегляд) ---------- -->
-  <section id="tab-programs" role="tabpanel" aria-labelledby="t-programs" hidden>
-    <p class="muted intro">Натисніть на програму, щоб побачити її розділи, а потім на захід, щоб побачити, хто його виконує, номер наказу та статус.</p>
-    <div class="bar">
-      <label class="search">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
-        <span class="sr">Пошук програми</span>
-        <input id="q" placeholder="Пошук програми за назвою або роком" autocomplete="off">
-      </label>
+{# Спільний фрагмент: програми з розділами й заходами. Логіка — coordinator.js.
+   У координатора — окрема сторінка (in_tabs не задано), в аналітика й керівника — вкладка лише для перегляду. #}
+<section id="tab-programs"{% if in_tabs %} role="tabpanel" aria-labelledby="t-programs" hidden{% endif %}>
+  {% if in_tabs %}
+  <p class="small text-secondary">Натисніть на програму, щоб побачити її розділи, а потім на захід, щоб побачити, хто його виконує, номер наказу та статус.</p>
+  {% endif %}
+  <div class="d-flex flex-wrap gap-2 mb-3">
+    {% if show_create %}<button class="btn btn-dark" type="button" id="create" hidden>Створити програму</button>{% endif %}
+    <div class="input-group flex-grow-1 search-group">
+      <span class="input-group-text bg-body" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+      </span>
+      <label class="visually-hidden" for="q">Пошук програми</label>
+      <input class="form-control" type="search" id="q" placeholder="Пошук програми за назвою або роком" autocomplete="off">
     </div>
-    <div class="list">
-      <div class="row head"><span>Назва програми</span><span class="d">Дата початку</span><span class="d">Дата кінця</span><span class="r">Скільки виконано</span></div>
-      <div id="programs"></div>
-      <p class="empty" id="empty" hidden></p>
+  </div>
+  <div class="card overflow-hidden">
+    <div class="card-header bg-dark text-white small fw-semibold d-none d-md-block">
+      <div class="row g-2">
+        <div class="col-md-6">Назва програми</div>
+        <div class="col-md-2">Дата початку</div>
+        <div class="col-md-2">Дата кінця</div>
+        <div class="col-md-2 text-end">Скільки виконано</div>
+      </div>
     </div>
-  </section>
+    <div class="list-group list-group-flush" id="programs"></div>
+    <p class="card-body text-secondary mb-0" id="empty" hidden></p>
+  </div>
+</section>

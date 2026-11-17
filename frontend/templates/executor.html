@@ -1,41 +1,26 @@
-<!doctype html>
-<html lang="uk">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Заходи підрозділу — виконавець</title>
-  <link rel="stylesheet" href="{{ url_for('static', path='css/monitor.css') }}">
-</head>
-<body class="page-executor">
-<header class="top"><b>Антикорупційна програма</b><div><span>Виконавець</span><a href="/login" data-logout>Вийти</a></div></header>
-<main>
-  <section class="unit">
-    <div><p>Назва підрозділу</p><h1 id="unit">Завантаження…</h1></div>
-    <p class="hint">Введіть номер наказу й натисніть Enter — система перевірить його в базі, статус оновиться сам</p>
-  </section>
-
-  <div class="table-box">
-    <table class="tbl">
-      <thead>
-        <tr>
-          <th style="width:19%">Назва наказу</th>
-          <th style="width:11%">Орган, що видав</th>
-          <th style="width:8%">Поч. дата</th>
-          <th style="width:8%">Кін. дата</th>
-          <th style="width:14%">№ наказу</th>
-          <th style="width:10%">Статус</th>
-          <th style="width:16%">Ціль</th>
-          <th>Примітка</th>
-        </tr>
-      </thead>
-      <tbody id="rows">
-        <tr><td colspan="8" class="muted">Завантаження…</td></tr>
-      </tbody>
-    </table>
-  </div>
-  <p class="error-line" id="page-error" role="alert"></p>
-</main>
-<script src="{{ url_for('static', path='js/api.js') }}"></script>
-<script src="{{ url_for('static', path='js/executor.js') }}"></script>
-</body>
-</html>
+{% extends "_base.html" %}
+{% set role_name = "Виконавець" %}
+{% set unit_hint = "Введіть номер наказу й натисніть Enter — система перевірить його в базі, статус оновиться сам" %}
+{% block title %}Заходи підрозділу — виконавець{% endblock %}
+{% block content %}
+<div class="table-responsive border rounded">
+  <table class="table table-hover align-top mb-0 executor-table">
+    <thead class="table-dark">
+      <tr>
+        <th style="width:19%">Назва наказу</th>
+        <th style="width:11%">Орган, що видав</th>
+        <th style="width:8%">Поч. дата</th>
+        <th style="width:8%">Кін. дата</th>
+        <th style="width:14%">№ наказу</th>
+        <th style="width:10%">Статус</th>
+        <th style="width:16%">Ціль</th>
+        <th>Примітка</th>
+      </tr>
+    </thead>
+    <tbody id="rows">
+      <tr><td colspan="8" class="text-secondary">Завантаження…</td></tr>
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', path='js/executor.js') }}"></script>{% endblock %}

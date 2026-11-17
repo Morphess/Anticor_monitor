@@ -4,6 +4,13 @@
 (function () {
   var DATA = null, view = "pending", openForm = null, busy = false, formError = {};
   var SEVERITY = { high: "Висока увага", medium: "Середня увага" };
+  var BADGE = {
+    high: "bg-danger-subtle text-danger-emphasis border-danger-subtle",
+    medium: "bg-warning-subtle text-warning-emphasis border-warning-subtle",
+    assign: "bg-success-subtle text-success-emphasis border-success-subtle",
+    dismiss: "bg-secondary-subtle text-secondary-emphasis border-secondary-subtle"
+  };
+  function badge(kind, text) { return el("span", "badge border text-uppercase fw-semibold " + BADGE[kind], text); }
 
   function el(tag, cls, text) {
     var e = document.createElement(tag);
@@ -17,56 +24,68 @@
   }
 
   function factList(items) {
-    var ul = el("ul", "facts");
+    var ul = el("ul", "small mb-0 mt-1 ps-3");
     items.forEach(function (t) { ul.appendChild(el("li", "", t)); });
     return ul;
   }
 
   // Форма рішення під карткою: «Доручити» (підрозділ + строк + коментар) або «Відхилити» (причина)
   function decisionForm(s, kind) {
-    var f = el("form", "decide-form");
+    var f = el("form", "mt-2");
     f.noValidate = true;
-    var fields = el("div", "fields");
+    var fields = el("div", "row g-3");
     var dep, due;
     if (kind === "assign") {
-      var l1 = el("label", "", "Відповідальний підрозділ");
-      dep = el("select");
+      var c1 = el("div", "col-md-6");
+      var l1 = el("label", "form-label fw-semibold", "Відповідальний підрозділ");
+      l1.htmlFor = "dep-" + s.key;
+      dep = el("select", "form-select");
+      dep.id = l1.htmlFor;
       dep.required = true;
       var empty = el("option", "", "— оберіть підрозділ —"); empty.value = ""; dep.appendChild(empty);
       DATA.departments.forEach(function (d) {
         var o = el("option", "", d.name); o.value = d.id; dep.appendChild(o);
       });
       dep.value = s.suggested_department_id || "";
-      l1.appendChild(dep);
-      fields.appendChild(l1);
-      var l2 = el("label", "", "Строк виконання");
-      due = el("input");
+      c1.appendChild(l1);
+      c1.appendChild(dep);
+      fields.appendChild(c1);
+      var c2 = el("div", "col-md-6");
+      var l2 = el("label", "form-label fw-semibold", "Строк виконання");
+      l2.htmlFor = "due-" + s.key;
+      due = el("input", "form-control");
+      due.id = l2.htmlFor;
       due.type = "date";
       due.required = true;
       due.value = s.suggested_due;
       due.min = new Date().toISOString().slice(0, 10);
-      l2.appendChild(due);
-      fields.appendChild(l2);
+      c2.appendChild(l2);
+      c2.appendChild(due);
+      fields.appendChild(c2);
     }
-    var l3 = el("label", "wide", kind === "assign" ? "Коментар до доручення " : "Причина відхилення ");
-    l3.appendChild(el("span", "muted", kind === "assign" ? "(необов'язково)" : "(обов'язково)"));
-    var comment = el("textarea");
+    var c3 = el("div", "col-12");
+    var l3 = el("label", "form-label fw-semibold", kind === "assign" ? "Коментар до доручення " : "Причина відхилення ");
+    l3.htmlFor = "comment-" + s.key;
+    l3.appendChild(el("span", "fw-normal text-secondary", kind === "assign" ? "(необов'язково)" : "(обов'язково)"));
+    var comment = el("textarea", "form-control");
+    comment.id = l3.htmlFor;
     comment.rows = 2;
     comment.maxLength = 2000;
     comment.placeholder = kind === "assign" ? "Наприклад: доповісти на нараді" : "Наприклад: строк перенесено рішенням від…";
-    l3.appendChild(comment);
-    fields.appendChild(l3);
+    c3.appendChild(l3);
+    c3.appendChild(comment);
+    fields.appendChild(c3);
     f.appendChild(fields);
 
-    var err = el("p", "error-line", formError[s.key] || "");
+    var err = el("div", "text-danger small mt-2", formError[s.key] || "");
     err.setAttribute("role", "alert");
     f.appendChild(err);
 
-    var actions = el("div", "form-actions");
-    var cancel = el("button", "btn-plain", "Скасувати");
+    var actions = el("div", "d-flex justify-content-end gap-2 mt-3");
+    var cancel = el("button", "btn btn-outline-dark", "Скасувати");
     cancel.type = "button";
     cancel.onclick = function () { openForm = null; delete formError[s.key]; render(); };
-    var ok = el("button", "create", kind === "assign" ? "Доручити" : "Відхилити рекомендацію");
+    var ok = el("button", "btn btn-dark", kind === "assign" ? "Доручити" : "Відхилити рекомендацію");
     ok.type = "submit";
     ok.disabled = busy;
     actions.appendChild(cancel);
@@ -102,67 +121,70 @@
   }
 
   function signalCard(s) {
-    var card = el("article", "rec rec-" + s.severity);
-    var top = el("div", "rec-top");
-    top.appendChild(el("span", "sev sev-" + s.severity, SEVERITY[s.severity]));
-    top.appendChild(el("span", "muted", "Правило " + s.code));
+    var outer = el("article", "card mb-3 rec rec-" + s.severity);
+    var card = el("div", "card-body");
+    outer.appendChild(card);
+    var top = el("div", "d-flex flex-wrap justify-content-between align-items-center gap-2");
+    top.appendChild(badge(s.severity, SEVERITY[s.severity]));
+    top.appendChild(el("span", "small text-secondary", "Правило " + s.code));
     card.appendChild(top);
-    card.appendChild(el("h3", "", s.title));
-    card.appendChild(el("p", "rec-obj", s.object));
+    card.appendChild(el("h3", "h5 mt-2 mb-1", s.title));
+    card.appendChild(el("p", "fw-medium mb-2", s.object));
 
-    var why = el("div", "rec-block");
+    var why = el("div", "small");
     why.appendChild(el("b", "", "Чому з'явилась рекомендація"));
     why.appendChild(factList(s.why));
     card.appendChild(why);
 
-    var rule = el("details", "rec-rule");
-    rule.appendChild(el("summary", "", "Яке правило спрацювало"));
-    rule.appendChild(el("p", "", s.rule));
+    var rule = el("details", "small mt-2");
+    rule.appendChild(el("summary", "fw-semibold", "Яке правило спрацювало"));
+    rule.appendChild(el("p", "mt-1 mb-0 text-body-secondary", s.rule));
     card.appendChild(rule);
 
-    var rec = el("div", "rec-block rec-advice");
+    var rec = el("div", "bg-body-tertiary rounded p-3 mt-3 small");
     rec.appendChild(el("b", "", "Що пропонує система"));
-    rec.appendChild(el("p", "", s.recommendation));
+    rec.appendChild(el("p", "mt-1 mb-0", s.recommendation));
     if (s.suggested_department_id) {
-      rec.appendChild(el("p", "muted", "Пропонований виконавець: " + depName(s.suggested_department_id) +
+      rec.appendChild(el("p", "text-secondary mt-1 mb-0", "Пропонований виконавець: " + depName(s.suggested_department_id) +
         " · строк до " + s.suggested_due.split("-").reverse().join(".")));
     }
     card.appendChild(rec);
 
-    if (!DATA.can_decide) return card;
+    if (!DATA.can_decide) return outer;
     var form = openForm && openForm.key === s.key ? openForm.kind : null;
     if (form) {
-      card.appendChild(el("h4", "", form === "assign" ? "Доручення" : "Відхилення рекомендації"));
+      card.appendChild(el("h4", "h6 mt-4 mb-1", form === "assign" ? "Доручення" : "Відхилення рекомендації"));
       card.appendChild(decisionForm(s, form));
     } else {
-      var actions = el("div", "rec-actions");
-      var a = el("button", "create", "Доручити");
+      var actions = el("div", "d-flex flex-wrap gap-2 mt-3");
+      var a = el("button", "btn btn-dark", "Доручити");
       a.type = "button";
       a.onclick = function () { openForm = { key: s.key, kind: "assign" }; render(); };
-      var d = el("button", "btn-plain", "Відхилити");
+      var d = el("button", "btn btn-outline-dark", "Відхилити");
       d.type = "button";
       d.onclick = function () { openForm = { key: s.key, kind: "dismiss" }; render(); };
       actions.appendChild(a);
       actions.appendChild(d);
       card.appendChild(actions);
     }
-    return card;
+    return outer;
   }
 
   function decisionCard(d) {
-    var card = el("article", "rec rec-decided");
-    var top = el("div", "rec-top");
-    top.appendChild(el("span", "sev " + (d.decision === "assign" ? "sev-assign" : "sev-dismiss"),
-      d.decision === "assign" ? "Доручено" : "Відхилено"));
-    top.appendChild(el("span", "muted", d.at + " · " + d.by));
+    var outer = el("article", "card mb-3 rec rec-decided");
+    var card = el("div", "card-body");
+    outer.appendChild(card);
+    var top = el("div", "d-flex flex-wrap justify-content-between align-items-center gap-2");
+    top.appendChild(badge(d.decision, d.decision === "assign" ? "Доручено" : "Відхилено"));
+    top.appendChild(el("span", "small text-secondary", d.at + " · " + d.by));
     card.appendChild(top);
-    card.appendChild(el("h3", "", d.title));
-    card.appendChild(el("p", "rec-obj", d.object));
+    card.appendChild(el("h3", "h5 mt-2 mb-1", d.title));
+    card.appendChild(el("p", "fw-medium mb-2", d.object));
     var facts = [];
     if (d.decision === "assign") facts.push("Відповідальний: " + d.department, "Строк: до " + d.due);
     if (d.comment) facts.push((d.decision === "assign" ? "Коментар: " : "Причина: ") + d.comment);
     card.appendChild(factList(facts));
-    return card;
+    return outer;
   }
 
   var flash = "";
@@ -172,20 +194,23 @@
     var badge = document.getElementById("recs-count");
     badge.textContent = DATA.signals.length;
     badge.hidden = !DATA.signals.length;
-    document.getElementById("show-pending").setAttribute("aria-pressed", view === "pending");
-    document.getElementById("show-done").setAttribute("aria-pressed", view === "done");
+    [["show-pending", "pending"], ["show-done", "done"]].forEach(function (b) {
+      var btn = document.getElementById(b[0]);
+      btn.setAttribute("aria-pressed", view === b[1]);
+      btn.classList.toggle("active", view === b[1]);
+    });
 
     var box = document.getElementById("recs");
     box.textContent = "";
-    if (flash) { box.appendChild(el("p", "flash ok", "✓ " + flash)); flash = ""; }
+    if (flash) { box.appendChild(el("div", "alert alert-success py-2", "✓ " + flash)); flash = ""; }
     if (!DATA.can_decide && view === "pending" && DATA.signals.length) {
-      box.appendChild(el("p", "view-only", "Ви переглядаєте рекомендації. Ухвалювати рішення може лише керівник."));
+      box.appendChild(el("div", "alert alert-light border py-2", "Ви переглядаєте рекомендації. Ухвалювати рішення може лише керівник."));
     }
     if (view === "pending") {
-      if (!DATA.signals.length) box.appendChild(el("p", "ok empty-note", "Нових рекомендацій немає: усі сигнали опрацьовано."));
+      if (!DATA.signals.length) box.appendChild(el("p", "text-success fw-semibold", "Нових рекомендацій немає: усі сигнали опрацьовано."));
       DATA.signals.forEach(function (s) { box.appendChild(signalCard(s)); });
     } else {
-      if (!DATA.decisions.length) box.appendChild(el("p", "muted empty-note", "У цьому звітному періоді рішень ще не ухвалено."));
+      if (!DATA.decisions.length) box.appendChild(el("p", "text-secondary fw-semibold", "У цьому звітному періоді рішень ще не ухвалено."));
       DATA.decisions.forEach(function (d) { box.appendChild(decisionCard(d)); });
     }
   }

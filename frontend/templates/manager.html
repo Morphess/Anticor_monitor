@@ -1,60 +1,49 @@
-<!doctype html>
-<html lang="uk">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Рекомендації й рішення — керівник</title>
-  <link rel="stylesheet" href="{{ url_for('static', path='css/monitor.css') }}">
-</head>
-<body class="page-coordinator page-analyst page-manager">
-<header class="top"><b>Антикорупційна програма</b><div><span>Керівник</span><a href="/login" data-logout>Вийти</a></div></header>
-<main>
-  <section class="unit">
-    <div><p>Назва підрозділу</p><h1 id="unit">Завантаження…</h1></div>
-    <p class="hint">Ви бачите панелі виконання програми й ухвалюєте рішення за рекомендаціями системи.</p>
-  </section>
-
-  <div class="tabs" role="tablist" aria-label="Розділи кабінету">
-    <button type="button" role="tab" id="t-recs" aria-controls="tab-recs" aria-selected="true">Рекомендації <span class="badge" id="recs-count" hidden></span></button>
-    <button type="button" role="tab" id="t-analytics" aria-controls="tab-analytics" aria-selected="false" tabindex="-1">Панелі</button>
-    <button type="button" role="tab" id="t-programs" aria-controls="tab-programs" aria-selected="false" tabindex="-1">Програми й заходи</button>
-  </div>
-
-  <!-- ---------- Рекомендації ---------- -->
-  <section id="tab-recs" role="tabpanel" aria-labelledby="t-recs">
-    <details class="guide" id="recs-guide">
-      <summary>Як працювати з рекомендаціями</summary>
-      <ul>
-        <li>Система щодня перевіряє дані програми за <b>явними правилами</b>: прострочені строки, виконання без підтвердження, ризики без заходів тощо.</li>
-        <li>Коли правило спрацьовує, з'являється <b>рекомендація</b>. У ній видно, що сталося, на підставі яких даних і що система пропонує зробити.</li>
-        <li>Рекомендація — привід перевірити, а не висновок про порушення. Рішення ухвалюєте ви:
-          <ul>
-            <li><b>Доручити</b> — призначити відповідальний підрозділ і строк. Пропоновані значення вже заповнено, їх можна змінити.</li>
-            <li><b>Відхилити</b> — якщо дія не потрібна. Причину треба вказати: вона зберігається в журналі.</li>
-          </ul>
-        </li>
-        <li>Ухвалені рішення переходять у розділ «Ухвалені рішення» й записуються в журнал дій.</li>
-      </ul>
-    </details>
-
-    <div class="seg-switch" role="group" aria-label="Які рекомендації показати">
-      <button type="button" id="show-pending" aria-pressed="true">Потребують рішення <b id="n-pending">0</b></button>
-      <button type="button" id="show-done" aria-pressed="false">Ухвалені рішення <b id="n-done">0</b></button>
-    </div>
-    <p class="muted" id="recs-period"></p>
-    <div id="recs" aria-live="polite"></div>
-  </section>
-
+{% extends "_base.html" %}
+{% set role_name = "Керівник" %}
+{% set unit_hint = "Ви бачите панелі виконання програми й ухвалюєте рішення за рекомендаціями системи." %}
+{% set in_tabs = true %}
 {% set analytics_hidden = true %}
+{% block title %}Рекомендації й рішення — керівник{% endblock %}
+{% block content %}
+<ul class="nav nav-underline mb-4" role="tablist" aria-label="Розділи кабінету">
+  <li class="nav-item" role="presentation"><button class="nav-link active" type="button" role="tab" id="t-recs" aria-controls="tab-recs" aria-selected="true">Рекомендації <span class="badge rounded-pill text-bg-danger ms-1" id="recs-count" hidden></span></button></li>
+  <li class="nav-item" role="presentation"><button class="nav-link" type="button" role="tab" id="t-analytics" aria-controls="tab-analytics" aria-selected="false" tabindex="-1">Панелі</button></li>
+  <li class="nav-item" role="presentation"><button class="nav-link" type="button" role="tab" id="t-programs" aria-controls="tab-programs" aria-selected="false" tabindex="-1">Програми й заходи</button></li>
+</ul>
+
+<!-- ---------- Рекомендації ---------- -->
+<section id="tab-recs" role="tabpanel" aria-labelledby="t-recs">
+  <details class="card card-body mb-3 small guide" id="recs-guide">
+    <summary class="fw-semibold">Як працювати з рекомендаціями</summary>
+    <ul class="mt-2 mb-0 ps-3">
+      <li>Система щодня перевіряє дані програми за <b>явними правилами</b>: прострочені строки, виконання без підтвердження, ризики без заходів тощо.</li>
+      <li>Коли правило спрацьовує, з'являється <b>рекомендація</b>. У ній видно, що сталося, на підставі яких даних і що система пропонує зробити.</li>
+      <li>Рекомендація — привід перевірити, а не висновок про порушення. Рішення ухвалюєте ви:
+        <ul class="mb-0">
+          <li><b>Доручити</b> — призначити відповідальний підрозділ і строк. Пропоновані значення вже заповнено, їх можна змінити.</li>
+          <li><b>Відхилити</b> — якщо дія не потрібна. Причину треба вказати: вона зберігається в журналі.</li>
+        </ul>
+      </li>
+      <li>Ухвалені рішення переходять у розділ «Ухвалені рішення» й записуються в журнал дій.</li>
+    </ul>
+  </details>
+
+  <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
+    <div class="btn-group" role="group" aria-label="Які рекомендації показати">
+      <button type="button" class="btn btn-outline-dark active" id="show-pending" aria-pressed="true">Потребують рішення <span class="badge text-bg-light border ms-1" id="n-pending">0</span></button>
+      <button type="button" class="btn btn-outline-dark" id="show-done" aria-pressed="false">Ухвалені рішення <span class="badge text-bg-light border ms-1" id="n-done">0</span></button>
+    </div>
+    <p class="small text-secondary mb-0" id="recs-period"></p>
+  </div>
+  <div id="recs" aria-live="polite"></div>
+</section>
+
 {% include "_analytics.html" %}
 {% include "_programs.html" %}
-
-  <p class="error-line" id="page-error" role="alert"></p>
-  <div class="tip" id="tip" role="tooltip" hidden></div>
-</main>
-<script src="{{ url_for('static', path='js/api.js') }}"></script>
+<div class="chart-tip" id="tip" role="tooltip" hidden></div>
+{% endblock %}
+{% block scripts %}
 <script src="{{ url_for('static', path='js/coordinator.js') }}"></script>
 <script src="{{ url_for('static', path='js/analyst.js') }}"></script>
 <script src="{{ url_for('static', path='js/manager.js') }}"></script>
-</body>
-</html>
+{% endblock %}

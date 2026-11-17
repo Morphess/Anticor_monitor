@@ -29,11 +29,11 @@ function render() {
     });
   });
   shown.forEach(function (u) {
-    var row = el("div", "row users-row prog");
-    row.appendChild(el("span", "name", u.login));
-    row.appendChild(el("span", "", depName(u.department_id)));
-    row.appendChild(el("span", "", u.position || "—"));
-    row.appendChild(el("span", "", ROLES[u.role_id] || u.role_id));
+    var row = el("tr");
+    row.appendChild(el("td", "fw-semibold", u.login));
+    row.appendChild(el("td", "", depName(u.department_id)));
+    row.appendChild(el("td", "d-none d-md-table-cell", u.position || "—"));
+    row.appendChild(el("td", "", ROLES[u.role_id] || u.role_id));
     box.appendChild(row);
   });
   var empty = document.getElementById("empty");

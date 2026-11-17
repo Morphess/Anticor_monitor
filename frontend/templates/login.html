@@ -1,25 +1,22 @@
-<!doctype html>
-<html lang="uk">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Вхід — антикорупційна програма</title>
-  <link rel="stylesheet" href="{{ url_for('static', path='css/monitor.css') }}">
-</head>
-<body class="page-login">
-<header class="top"><b>Антикорупційна програма</b></header>
-<main>
-  <form class="login" id="login-form" novalidate>
-    <h1>Вхід</h1>
-    <label for="login">Логін</label>
-    <input id="login" name="username" autocomplete="username" required>
-    <label for="password">Пароль</label>
-    <input id="password" name="password" type="password" autocomplete="current-password" required>
-    <p class="error-line" id="login-error" role="alert"></p>
-    <button class="create" type="submit">Увійти</button>
-  </form>
-</main>
-<script src="{{ url_for('static', path='js/api.js') }}"></script>
-<script src="{{ url_for('static', path='js/login.js') }}"></script>
-</body>
-</html>
+{% extends "_base.html" %}
+{% block title %}Вхід — антикорупційна програма{% endblock %}
+{% block content %}
+<div class="row justify-content-center pt-md-5">
+  <div class="col-sm-9 col-md-6 col-lg-4">
+    <form class="card card-body p-4" id="login-form" novalidate>
+      <h1 class="h4 mb-4">Вхід</h1>
+      <div class="mb-3">
+        <label class="form-label" for="login">Логін</label>
+        <input class="form-control" id="login" name="username" autocomplete="username" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="password">Пароль</label>
+        <input class="form-control" id="password" name="password" type="password" autocomplete="current-password" required>
+      </div>
+      <div class="text-danger small mb-3" id="login-error" role="alert"></div>
+      <button class="btn btn-dark w-100" type="submit">Увійти</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', path='js/login.js') }}"></script>{% endblock %}

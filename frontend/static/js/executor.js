@@ -8,21 +8,21 @@ function el(tag, cls, text) {
 
 function rowNode(r) {
   var tr = el("tr");
-  tr.appendChild(el("td", "name", r.order_title));
+  tr.appendChild(el("td", "fw-medium", r.order_title));
   tr.appendChild(el("td", "", r.organ));
-  tr.appendChild(el("td", "nowrap", r.start));
-  tr.appendChild(el("td", "nowrap", r.end));
+  tr.appendChild(el("td", "text-nowrap", r.start));
+  tr.appendChild(el("td", "text-nowrap", r.end));
 
   var td = el("td");
-  var label = el("label", "sr", "Номер наказу для заходу " + r.id);
+  var label = el("label", "visually-hidden", "Номер наказу для заходу " + r.id);
   label.htmlFor = "order-" + r.id;
-  var input = el("input", "order-input" + (r.entered ? " is-ok" : ""));
+  var input = el("input", "form-control form-control-sm" + (r.entered ? " is-valid" : ""));
   input.id = "order-" + r.id;
   input.value = r.entered;
   input.placeholder = "№ і Enter";
   input.autocomplete = "off";
   input.setAttribute("aria-describedby", "msg-" + r.id);
-  var msg = el("div", "order-msg" + (r.entered ? " ok" : ""), r.entered ? "Успіх" : "");
+  var msg = el("div", "small fw-semibold mt-1" + (r.entered ? " text-success" : ""), r.entered ? "Успіх" : "");
   msg.id = "msg-" + r.id;
   msg.setAttribute("role", "status");
   td.appendChild(label);
@@ -36,20 +36,20 @@ function rowNode(r) {
   tr.appendChild(stTd);
 
   var goal = el("td");
-  goal.appendChild(el("div", "goal", r.goal));
-  goal.appendChild(el("div", "muted", r.indicator));
+  goal.appendChild(el("div", "fw-medium", r.goal));
+  goal.appendChild(el("div", "small text-secondary mt-1", r.indicator));
   tr.appendChild(goal);
   tr.appendChild(el("td", "", r.note));
 
   function show(ok, text) {
-    input.classList.toggle("is-ok", ok);
-    input.classList.toggle("is-err", !ok);
-    msg.className = "order-msg " + (ok ? "ok" : "err");
+    input.classList.toggle("is-valid", ok);
+    input.classList.toggle("is-invalid", !ok);
+    msg.className = "small fw-semibold mt-1 " + (ok ? "text-success" : "text-danger");
     msg.textContent = text;
   }
 
   input.addEventListener("input", function () {
-    input.classList.remove("is-ok", "is-err");
+    input.classList.remove("is-valid", "is-invalid");
     msg.textContent = "";
   });
 
@@ -75,7 +75,7 @@ Api.get("/api/executor/rows")
     var body = document.getElementById("rows");
     body.textContent = "";
     if (!data.rows.length) {
-      var tr = el("tr"), td = el("td", "muted", "Вашому підрозділу ще не призначено заходів.");
+      var tr = el("tr"), td = el("td", "text-secondary", "Вашому підрозділу ще не призначено заходів.");
       td.colSpan = 8;
       tr.appendChild(td);
       body.appendChild(tr);

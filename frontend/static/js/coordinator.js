@@ -32,7 +32,7 @@ function itemStatus(i) {
   var anyReview = i.units.some(function (u) { return u.st === "review"; });
   var cls = c.done === c.total ? "done" : (anyReview ? "review" : "not");
   var span = el("span", "st st-" + cls, "Виконано");
-  span.appendChild(el("span", "cnt", c.done + "/" + c.total));
+  span.appendChild(el("span", "fw-bold ms-1", c.done + "/" + c.total));
   return span;
 }
 
@@ -46,43 +46,46 @@ function statusNode(program, item, u, index) {
   var key = item.n + "/" + index;
   var wrap = el("div");
   if (!CAN_EDIT) { wrap.appendChild(el("span", "st st-" + u.st, LABEL[u.st])); return wrap; }
-  var b = el("button", "status-btn s-" + u.st);
+  var b = el("button", "btn btn-sm d-inline-flex align-items-center gap-2 " + (u.st === "review" ? "btn-dark" : "btn-outline-secondary text-body"));
   b.type = "button";
   b.setAttribute("aria-expanded", choosing === key);
   b.setAttribute("aria-label", "Статус: " + LABEL[u.st] + ". Змінити");
   b.appendChild(el("span", "st st-" + u.st, LABEL[u.st]));
-  b.appendChild(el("span", "caret", "▾"));
+  b.appendChild(el("span", "small", "▾"));
   b.onclick = function () { choosing = choosing === key ? null : key; render(); };
   wrap.appendChild(b);
   if (choosing === key) {
-    var ch = el("div", "choices");
+    var ch = el("div", "d-flex flex-wrap gap-2 mt-2");
     ORDER.forEach(function (st) {
       if (st === u.st) return;
-      var o = el("button", "opt", st === "rework" ? "На доопрацювання" : LABEL[st]);
+      var o = el("button", "btn btn-sm btn-outline-dark", st === "rework" ? "На доопрацювання" : LABEL[st]);
       o.type = "button";
       o.onclick = function () { changeStatus(program, item, index, st); };
       ch.appendChild(o);
     });
     wrap.appendChild(ch);
   }
-  if (lastError === key) wrap.appendChild(el("div", "error-line", "Не вдалося змінити статус. Спробуйте ще раз."));
+  if (lastError === key) wrap.appendChild(el("div", "text-danger small mt-1", "Не вдалося змінити статус. Спробуйте ще раз."));
   return wrap;
 }
 
 function unitsTable(program, item) {
-  var card = el("div", "card");
-  var table = el("table");
-  var head = el("tr");
-  ["Орган, що опрацював", "Дата", "Номер наказу", "Статус"].forEach(function (t) { head.appendChild(el("th", "", t)); });
-  table.appendChild(head);
+  var card = el("div", "card mb-3 ms-md-5");
+  var box = el("div", "table-responsive");
+  var table = el("table", "table table-sm align-top mb-0 units-table");
+  var thead = el("thead"), head = el("tr");
+  ["Орган, що опрацював", "Дата", "Номер наказу", "Статус"].forEach(function (t) { head.appendChild(el("th", "small text-secondary fw-normal", t)); });
+  thead.appendChild(head);
+  table.appendChild(thead);
+  var body = el("tbody");
   item.units.forEach(function (u, k) {
     var tr = el("tr");
     tr.appendChild(el("td", "", u.organ));
     var hasDoc = u.st !== "not" && u.order;
-    tr.appendChild(el("td", "", hasDoc ? u.date : "—"));
+    tr.appendChild(el("td", "text-nowrap", hasDoc ? u.date : "—"));
     var td = el("td");
     if (hasDoc) {
-      var a = el("a", "", "Наказ № " + u.order);
+      var a = el("a", "fw-semibold text-nowrap link-dark", "Наказ № " + u.order);
       a.href = u.link;
       if (/^https?:/.test(u.link)) { a.target = "_blank"; a.rel = "noopener"; }
       td.appendChild(a);
@@ -91,9 +94,11 @@ function unitsTable(program, item) {
     var st = el("td");
     st.appendChild(statusNode(program, item, u, k));
     tr.appendChild(st);
-    table.appendChild(tr);
+    body.appendChild(tr);
   });
-  card.appendChild(table);
+  table.appendChild(body);
+  box.appendChild(table);
+  card.appendChild(box);
   return card;
 }
 
@@ -106,43 +111,53 @@ function render() {
   });
   shown.forEach(function (p) {
     var open = openProgram === p.id, c = programCount(p);
-    var wrap = el("div", "prog" + (open ? " open" : ""));
-    var btn = el("button", "row");
+    var wrap = el("div", "list-group-item p-0");
+    var btn = el("button", "btn w-100 text-start rounded-0 px-3 py-3 row-btn" + (open ? " bg-body-tertiary" : ""));
     btn.type = "button";
     btn.setAttribute("aria-expanded", open);
-    var name = el("span", "name");
-    name.appendChild(el("span", "arrow", open ? "▼" : "▶"));
+    var row = el("div", "row g-2 align-items-center");
+    var name = el("div", "col-12 col-md-6 d-flex gap-2 align-items-baseline fw-semibold");
+    name.appendChild(el("span", "small text-secondary fw-normal", open ? "▼" : "▶"));
     name.appendChild(el("span", "", p.name));
-    btn.appendChild(name);
-    btn.appendChild(el("span", "d", p.start));
-    btn.appendChild(el("span", "d", p.end));
-    btn.appendChild(el("span", "r big", c.done + "/" + c.total));
+    row.appendChild(name);
+    row.appendChild(el("div", "col-md-2 d-none d-md-block", p.start));
+    row.appendChild(el("div", "col-md-2 d-none d-md-block", p.end));
+    var cnt = el("div", "col-12 col-md-2 text-md-end fs-5 fw-bold");
+    cnt.appendChild(el("span", "small fw-normal text-secondary d-md-none me-2", "Виконано"));
+    cnt.appendChild(document.createTextNode(c.done + "/" + c.total));
+    row.appendChild(cnt);
+    btn.appendChild(row);
     btn.onclick = function () { openProgram = open ? null : p.id; render(); };
     wrap.appendChild(btn);
 
-    var det = el("div", "detail");
-    if (!p.sections.length) det.appendChild(el("p", "muted", "У програмі ще немає заходів."));
+    var det = el("div", "bg-body-tertiary border-top px-3 px-md-4 pb-3");
+    det.hidden = !open;
+    if (!p.sections.length) det.appendChild(el("p", "text-secondary small pt-3 mb-0", "У програмі ще немає заходів."));
     p.sections.forEach(function (s) {
-      var sec = el("div", "sec");
+      var sec = el("div", "pt-3");
       var sc = sectionCount(s);
-      var h = el("div", "sec-h");
-      h.appendChild(el("b", "", s.n + ". " + s.title));
-      h.appendChild(el("span", "muted", "кінцевий термін " + s.deadline));
-      h.appendChild(el("span", "r big", sc.done + "/" + sc.total));
+      var h = el("div", "d-flex flex-wrap align-items-baseline gap-3 border-bottom border-dark pb-2");
+      h.appendChild(el("b", "me-auto", s.n + ". " + s.title));
+      h.appendChild(el("span", "small text-secondary", "кінцевий термін " + s.deadline));
+      h.appendChild(el("span", "fs-5 fw-bold", sc.done + "/" + sc.total));
       sec.appendChild(h);
       s.items.forEach(function (i) {
         var isOpen = openItem === i.n;
-        var row = el("div", "item" + (isOpen ? " open" : ""));
-        var ib = el("button");
+        var row = el("div", "border-bottom");
+        var ib = el("button", "btn w-100 text-start rounded-0 px-0 py-2 small row-btn" + (isOpen ? " fw-semibold" : ""));
         ib.type = "button";
         ib.setAttribute("aria-expanded", isOpen);
-        ib.appendChild(el("span", "muted", i.n));
-        ib.appendChild(el("span", "", i.t));
-        ib.appendChild(el("span", "muted", i.d));
-        ib.appendChild(itemStatus(i));
+        var r = el("div", "row g-2 align-items-baseline");
+        r.appendChild(el("div", "col-auto text-secondary d-none d-md-block item-n", i.n));
+        r.appendChild(el("div", "col", i.t));
+        r.appendChild(el("div", "col-md-2 text-secondary d-none d-md-block", i.d));
+        var stc = el("div", "col-auto");
+        stc.appendChild(itemStatus(i));
+        r.appendChild(stc);
+        ib.appendChild(r);
         ib.onclick = function () { openItem = isOpen ? null : i.n; choosing = null; render(); };
         row.appendChild(ib);
-        row.appendChild(unitsTable(p, i));
+        if (isOpen) row.appendChild(unitsTable(p, i));
         sec.appendChild(row);
       });
       det.appendChild(sec);

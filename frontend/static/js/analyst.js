@@ -63,26 +63,26 @@
   }
 
   function legend() {
-    var box = el("div", "legend");
+    var box = el("div", "d-flex flex-wrap gap-2 column-gap-4 mt-3 small");
     ORDER.forEach(function (st) { box.appendChild(el("span", "st st-" + st, DATA.statuses[st])); });
     return box;
   }
 
   // Ті самі числа таблицею — для тих, кому так зручніше, і для читачів екрана
   function numbersTable(groups, firstCol) {
-    var d = el("details", "as-table");
-    d.appendChild(el("summary", "", "Показати таблицею"));
-    var box = el("div", "table-scroll");
-    var t = el("table");
+    var d = el("details", "mt-3 small");
+    d.appendChild(el("summary", "fw-semibold py-1", "Показати таблицею"));
+    var box = el("div", "table-responsive mt-2");
+    var t = el("table", "table table-sm mb-0");
     var head = el("tr");
     [firstCol].concat(ORDER.map(function (st) { return DATA.statuses[st]; }), ["Строк минув", "Усього", "Виконано, %"])
-      .forEach(function (h) { head.appendChild(el("th", "", h)); });
+      .forEach(function (h, i) { head.appendChild(el("th", "small text-secondary fw-normal" + (i ? " text-end" : ""), h)); });
     t.appendChild(head);
     groups.forEach(function (g) {
       var tr = el("tr");
       tr.appendChild(el("td", "", g.name));
-      ORDER.concat(["overdue", "total"]).forEach(function (k) { tr.appendChild(el("td", "num", String(g.c[k]))); });
-      tr.appendChild(el("td", "num", pct(g.c.done, g.c.total) + "%"));
+      ORDER.concat(["overdue", "total"]).forEach(function (k) { tr.appendChild(el("td", "text-end font-monospace-num", String(g.c[k]))); });
+      tr.appendChild(el("td", "text-end font-monospace-num", pct(g.c.done, g.c.total) + "%"));
       t.appendChild(tr);
     });
     box.appendChild(t);
@@ -91,14 +91,14 @@
   }
 
   function barRows(groups) {
-    var box = el("div", "bars");
+    var box = el("div", "d-grid gap-3");
     groups.forEach(function (g) {
       var row = el("div", "bar-row");
       row.appendChild(el("span", "bar-name", g.name));
       row.appendChild(stackBar(g.c, g.name));
       var v = el("span", "bar-val");
       v.appendChild(el("b", "", pct(g.c.done, g.c.total) + "%"));
-      v.appendChild(el("span", "muted", g.c.done + " з " + g.c.total));
+      v.appendChild(el("span", "small text-secondary", g.c.done + " з " + g.c.total));
       row.appendChild(v);
       box.appendChild(row);
     });
@@ -118,12 +118,16 @@
     var box = document.getElementById("kpis");
     box.textContent = "";
     items.forEach(function (k) {
-      var tile = el("div", "kpi" + (k[3] === "alert" && k[1] ? " kpi-alert" : ""));
-      var label = el("span", "kpi-label" + (k[3] && k[3] !== "alert" ? " st " + k[3] : ""), k[0]);
-      tile.appendChild(label);
-      tile.appendChild(el("b", "kpi-val", String(k[1])));
-      tile.appendChild(el("span", "muted", k[2]));
-      box.appendChild(tile);
+      var alert = k[3] === "alert" && k[1];
+      var col = el("div", "col");
+      var card = el("div", "card h-100" + (alert ? " border-danger border-2" : ""));
+      var body = el("div", "card-body p-3");
+      body.appendChild(el("div", "small fw-semibold" + (k[3] && k[3] !== "alert" ? " st " + k[3] : ""), k[0]));
+      body.appendChild(el("div", "fs-2 fw-bold lh-sm" + (alert ? " text-danger" : ""), String(k[1])));
+      body.appendChild(el("div", "small text-secondary lh-sm", k[2]));
+      card.appendChild(body);
+      col.appendChild(card);
+      box.appendChild(col);
     });
   }
 
@@ -136,21 +140,21 @@
       " днів. Найтерміновіші — вгорі.";
     var box = document.getElementById("attention");
     box.textContent = "";
-    if (!rows.length) { box.appendChild(el("p", "ok", "Усе гаразд: прострочених заходів і близьких строків немає.")); return; }
-    var wrap = el("div", "table-scroll");
-    var t = el("table", "att");
+    if (!rows.length) { box.appendChild(el("p", "text-success fw-semibold mb-0", "Усе гаразд: прострочених заходів і близьких строків немає.")); return; }
+    var wrap = el("div", "table-responsive");
+    var t = el("table", "table table-sm table-hover align-top mb-0 attention-table");
     var head = el("tr");
-    ["№", "Захід", "Підрозділ", "Строк", "Статус", "Стан строку"].forEach(function (h) { head.appendChild(el("th", "", h)); });
+    ["№", "Захід", "Підрозділ", "Строк", "Статус", "Стан строку"].forEach(function (h) { head.appendChild(el("th", "small text-secondary fw-normal", h)); });
     t.appendChild(head);
     rows.forEach(function (m) {
       var tr = el("tr");
-      tr.appendChild(el("td", "muted", m.n));
+      tr.appendChild(el("td", "text-secondary", m.n));
       tr.appendChild(el("td", "", m.t));
       tr.appendChild(el("td", "", m.department));
-      tr.appendChild(el("td", "nowrap", m.deadline));
+      tr.appendChild(el("td", "text-nowrap", m.deadline));
       var st = el("td"); st.appendChild(el("span", "st st-" + m.st, DATA.statuses[m.st])); tr.appendChild(st);
       var d = -m.days_left;
-      tr.appendChild(el("td", m.overdue ? "err nowrap" : "nowrap",
+      tr.appendChild(el("td", m.overdue ? "text-danger fw-semibold text-nowrap" : "text-nowrap",
         m.overdue ? "⚠ прострочено на " + d + " дн." : (m.days_left === 0 ? "строк сьогодні" : "залишилось " + m.days_left + " дн.")));
       t.appendChild(tr);
     });
@@ -167,10 +171,10 @@
     var total = document.getElementById("chart-total");
     total.textContent = "";
     if (!c.total) {
-      total.appendChild(el("p", "muted", "У цій програмі ще немає заходів."));
+      total.appendChild(el("p", "text-secondary mb-0", "У цій програмі ще немає заходів."));
     } else {
-      var big = el("p", "lead");
-      big.appendChild(el("b", "", pct(c.done, c.total) + "%"));
+      var big = el("p", "mb-2");
+      big.appendChild(el("b", "fs-2 me-1", pct(c.done, c.total) + "%"));
       big.appendChild(document.createTextNode(" заходів виконано — " + c.done + " з " + c.total));
       total.appendChild(big);
       total.appendChild(stackBar(c, "Усі заходи"));
@@ -183,7 +187,7 @@
      }), "Підрозділ"]].forEach(function (cfg) {
       var box = document.getElementById(cfg[0]);
       box.textContent = "";
-      if (!cfg[1].length) { box.appendChild(el("p", "muted", "Немає даних.")); return; }
+      if (!cfg[1].length) { box.appendChild(el("p", "text-secondary mb-0", "Немає даних.")); return; }
       box.appendChild(barRows(cfg[1]));
       box.appendChild(legend());
       box.appendChild(numbersTable(cfg[1], cfg[2]));
@@ -191,14 +195,15 @@
     attention(list);
   }
 
-  // ---------- Вкладки (будь-які кнопки role=tab у .tabs; панель — за aria-controls) ----------
-  var tabs = Array.prototype.slice.call(document.querySelectorAll(".tabs [role=tab]"));
+  // ---------- Вкладки (кнопки role=tab у role=tablist; панель — за aria-controls) ----------
+  var tabs = Array.prototype.slice.call(document.querySelectorAll("[role=tablist] [role=tab]"));
   var TAB_KEY = "tab:" + location.pathname;
   function selectTab(id) {
     if (!document.getElementById(id)) return;
     tabs.forEach(function (b) {
       var on = b.id === id;
       b.setAttribute("aria-selected", on);
+      b.classList.toggle("active", on);
       b.tabIndex = on ? 0 : -1;
       document.getElementById(b.getAttribute("aria-controls")).hidden = !on;
     });

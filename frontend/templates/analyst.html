@@ -1,32 +1,18 @@
-<!doctype html>
-<html lang="uk">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Аналітика програм — аналітик</title>
-  <link rel="stylesheet" href="{{ url_for('static', path='css/monitor.css') }}">
-</head>
-<body class="page-coordinator page-analyst">
-<header class="top"><b>Антикорупційна програма</b><div><span>Аналітик</span><a href="/login" data-logout>Вийти</a></div></header>
-<main>
-  <section class="unit">
-    <div><p>Назва підрозділу</p><h1 id="unit">Завантаження…</h1></div>
-    <p class="hint view-only">Режим перегляду: ви бачите всі дані, але змінювати їх не можна.</p>
-  </section>
-
-  <div class="tabs" role="tablist" aria-label="Розділи кабінету">
-    <button type="button" role="tab" id="t-analytics" aria-controls="tab-analytics" aria-selected="true">Аналітика</button>
-    <button type="button" role="tab" id="t-programs" aria-controls="tab-programs" aria-selected="false" tabindex="-1">Програми й заходи</button>
-  </div>
-
+{% extends "_base.html" %}
+{% set role_name = "Аналітик" %}
+{% set unit_hint = "Режим перегляду: ви бачите всі дані, але змінювати їх не можна." %}
+{% set in_tabs = true %}
+{% block title %}Аналітика програм — аналітик{% endblock %}
+{% block content %}
+<ul class="nav nav-underline mb-4" role="tablist" aria-label="Розділи кабінету">
+  <li class="nav-item" role="presentation"><button class="nav-link active" type="button" role="tab" id="t-analytics" aria-controls="tab-analytics" aria-selected="true">Аналітика</button></li>
+  <li class="nav-item" role="presentation"><button class="nav-link" type="button" role="tab" id="t-programs" aria-controls="tab-programs" aria-selected="false" tabindex="-1">Програми й заходи</button></li>
+</ul>
 {% include "_analytics.html" %}
 {% include "_programs.html" %}
-
-  <p class="error-line" id="page-error" role="alert"></p>
-  <div class="tip" id="tip" role="tooltip" hidden></div>
-</main>
-<script src="{{ url_for('static', path='js/api.js') }}"></script>
+<div class="chart-tip" id="tip" role="tooltip" hidden></div>
+{% endblock %}
+{% block scripts %}
 <script src="{{ url_for('static', path='js/coordinator.js') }}"></script>
 <script src="{{ url_for('static', path='js/analyst.js') }}"></script>
-</body>
-</html>
+{% endblock %}

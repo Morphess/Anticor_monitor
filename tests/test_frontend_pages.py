@@ -95,7 +95,7 @@ class MonitorPagesTests(unittest.TestCase):
             res = self.client.get(path)
             self.assertEqual(res.status_code, 200, path)
             self.assertIn("api.js", res.text)
-        for path in ("/static/css/monitor.css", "/static/js/api.js",
+        for path in ("/static/css/monitor.css", "/static/vendor/bootstrap/bootstrap.min.css", "/static/js/api.js",
                      "/static/js/executor.js", "/static/js/coordinator.js", "/static/js/login.js"):
             self.assertEqual(self.client.get(path).status_code, 200, path)
 
