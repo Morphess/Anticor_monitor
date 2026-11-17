@@ -4,7 +4,9 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import create_engine, pool
 
-from app.models.auth_user import AuthUser
+from app.database.base import Base
+import app.models  # Реєструє моделі нової схеми.
+from app.models.auth_user import AuthUser  # Зберігає модель наявної таблиці.
 
 
 config = context.config
@@ -12,7 +14,7 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-target_metadata = AuthUser.metadata
+target_metadata = Base.metadata
 
 
 def database_url() -> str:

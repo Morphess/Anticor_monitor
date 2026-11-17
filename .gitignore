@@ -1,8 +1,6 @@
 venv/
 .venv/
 __pycache__/
-docs/
-.github/
 .idea/
 .vscode/
 .pytest_cache/
@@ -10,3 +8,7 @@ docs/
 .rope/
 .env/
 
+
+.env
+.env.*
+!.env.example
