@@ -13,7 +13,10 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str
 
     model_config = SettingsConfigDict(
-        env_file=BASE_DIR / ".env", env_file_encoding="utf-8"
+        env_file=BASE_DIR / ".env",
+        env_file_encoding="utf-8",
+        # У .env є й змінні лише для docker compose (POSTGRES_*), застосунку вони не потрібні
+        extra="ignore",
     )
 
 
