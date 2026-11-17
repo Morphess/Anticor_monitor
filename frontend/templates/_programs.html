@@ -1,0 +1,17 @@
+{# Спільний фрагмент: програми й заходи лише для перегляду. Логіка — coordinator.js (can_edit=false) #}
+  <!-- ---------- Програми (як у координатора, лише перегляд) ---------- -->
+  <section id="tab-programs" role="tabpanel" aria-labelledby="t-programs" hidden>
+    <p class="muted intro">Натисніть на програму, щоб побачити її розділи, а потім на захід, щоб побачити, хто його виконує, номер наказу та статус.</p>
+    <div class="bar">
+      <label class="search">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+        <span class="sr">Пошук програми</span>
+        <input id="q" placeholder="Пошук програми за назвою або роком" autocomplete="off">
+      </label>
+    </div>
+    <div class="list">
+      <div class="row head"><span>Назва програми</span><span class="d">Дата початку</span><span class="d">Дата кінця</span><span class="r">Скільки виконано</span></div>
+      <div id="programs"></div>
+      <p class="empty" id="empty" hidden></p>
+    </div>
+  </section>

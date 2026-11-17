@@ -34,3 +34,8 @@ def coordinator_page(request: Request):
 @router.get("/analyst")
 def analyst_page(request: Request):
     return templates.TemplateResponse(request, "analyst.html")
+
+
+@router.get("/manager")
+def manager_page(request: Request):
+    return templates.TemplateResponse(request, "manager.html")

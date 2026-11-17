@@ -14,6 +14,7 @@ from .evidence import Evidence
 from .deadline_change import DeadlineChange
 from .action_log import ActionLog
 from .report import Report
+from .management_decision import ManagementDecision
 
 __all__ = [
     "Department",
@@ -31,4 +32,5 @@ __all__ = [
     "DeadlineChange",
     "ActionLog",
     "Report",
+    "ManagementDecision",
 ]

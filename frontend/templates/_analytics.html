@@ -1,0 +1,53 @@
+{# Спільний фрагмент: вкладка «Аналітика»/«Панелі» (кабінети аналітика й керівника). Логіка — analyst.js #}
+  <!-- ---------- Аналітика ---------- -->
+  <section id="tab-analytics" role="tabpanel" aria-labelledby="t-analytics"{% if analytics_hidden %} hidden{% endif %}>
+    <div class="bar filters">
+      <label class="field">Програма
+        <select id="program"><option value="">Усі програми</option></select>
+      </label>
+      <p class="muted" id="period"></p>
+    </div>
+
+    <details class="guide" id="guide">
+      <summary>Як читати цю сторінку</summary>
+      <ul>
+        <li><b>Захід</b> — окремий пункт програми, який має виконати підрозділ.</li>
+        <li>Кожен захід має один зі статусів за поточний звітний період (півріччя):
+          <ul class="legend-list">
+            <li><span class="st st-done">Виконано</span> — підрозділ подав наказ, координатор погодив.</li>
+            <li><span class="st st-review">На розгляді</span> — наказ подано, координатор ще перевіряє.</li>
+            <li><span class="st st-rework">На доопрацюванні</span> — координатор повернув захід на виправлення.</li>
+            <li><span class="st st-not">Не виконано</span> — підтвердження ще не подано.</li>
+          </ul>
+        </li>
+        <li><b>Строк минув</b> — дата виконання вже настала, а захід не погоджено.</li>
+        <li>Наведіть курсор на кольорову смугу, щоб побачити точні числа. Кнопка «Показати таблицею» під графіком відкриває ті самі дані у вигляді таблиці.</li>
+      </ul>
+    </details>
+
+    <div class="kpis" id="kpis"></div>
+
+    <section class="panel">
+      <h2>Загальний стан виконання</h2>
+      <p class="muted">Уся смуга — це всі заходи вибраної програми. Що більша зелена частина, то більше заходів виконано.</p>
+      <div id="chart-total"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Виконання за розділами програми</h2>
+      <p class="muted">Кожен рядок — розділ програми. Праворуч — скільки заходів розділу вже виконано.</p>
+      <div id="chart-sections"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Виконання за підрозділами</h2>
+      <p class="muted">Кожен рядок — відповідальний підрозділ. Угорі ті, що відстають найбільше: на них варто звернути увагу першими.</p>
+      <div id="chart-departments"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Потребують уваги</h2>
+      <p class="muted" id="attention-hint"></p>
+      <div id="attention"></div>
+    </section>
+  </section>

@@ -191,28 +191,30 @@
     attention(list);
   }
 
-  // ---------- Вкладки ----------
-  var tabs = [["t-analytics", "tab-analytics"], ["t-programs", "tab-programs"]];
+  // ---------- Вкладки (будь-які кнопки role=tab у .tabs; панель — за aria-controls) ----------
+  var tabs = Array.prototype.slice.call(document.querySelectorAll(".tabs [role=tab]"));
+  var TAB_KEY = "tab:" + location.pathname;
   function selectTab(id) {
-    tabs.forEach(function (t) {
-      var on = t[0] === id, b = document.getElementById(t[0]);
+    if (!document.getElementById(id)) return;
+    tabs.forEach(function (b) {
+      var on = b.id === id;
       b.setAttribute("aria-selected", on);
       b.tabIndex = on ? 0 : -1;
-      document.getElementById(t[1]).hidden = !on;
+      document.getElementById(b.getAttribute("aria-controls")).hidden = !on;
     });
-    try { sessionStorage.setItem("analyst_tab", id); } catch (e) { /* без сховища */ }
+    try { sessionStorage.setItem(TAB_KEY, id); } catch (e) { /* без сховища */ }
   }
-  tabs.forEach(function (t, i) {
-    var b = document.getElementById(t[0]);
-    b.addEventListener("click", function () { selectTab(t[0]); });
+  tabs.forEach(function (b, i) {
+    b.addEventListener("click", function () { selectTab(b.id); });
     b.addEventListener("keydown", function (e) {
       if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
-      var next = tabs[(i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length][0];
-      selectTab(next);
-      document.getElementById(next).focus();
+      var next = tabs[(i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
+      selectTab(next.id);
+      next.focus();
     });
   });
-  try { var saved = sessionStorage.getItem("analyst_tab"); if (saved) selectTab(saved); } catch (e) { /* без сховища */ }
+  try { var saved = sessionStorage.getItem(TAB_KEY); if (saved) selectTab(saved); } catch (e) { /* без сховища */ }
+  window.selectTab = selectTab;
 
   // Підказку «Як читати» відкриваємо при першому візиті
   var guide = document.getElementById("guide");
