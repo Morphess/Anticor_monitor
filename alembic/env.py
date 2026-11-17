@@ -6,8 +6,6 @@ from sqlalchemy import create_engine, pool
 
 from app.database.base import Base
 import app.models  # Реєструє моделі нової схеми.
-from app.models.auth_user import AuthUser  # Зберігає модель наявної таблиці.
-
 
 config = context.config
 
