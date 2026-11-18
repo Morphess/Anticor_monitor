@@ -2,7 +2,6 @@
 // перенесення строків, сигнали Risk Flags і зміна статусу виконання.
 (function () {
   "use strict";
-  if (!Api.requireLogin()) return;
   const el = Api.el;
   const root = document.getElementById("programs");
   const flagsNote = document.getElementById("flags-note");
@@ -21,6 +20,8 @@
   const open = new Set(); // розгорнуті вузли: p:ID, s:ID:R, m:ID
 
   async function init() {
+
+    if (!await Api.requireRole("KOORD")) return;
     try {
       const [progList, measures, secs, orders, evid, changes] = await Promise.all([
         Api.get("/api/programs"), Api.measures(), Api.sections(),

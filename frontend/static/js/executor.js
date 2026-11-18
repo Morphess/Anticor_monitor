@@ -2,7 +2,6 @@
 // за реєстром /api/orders, після успіху звіт іде координатору через /api/executions.
 (function () {
   "use strict";
-  if (!Api.requireLogin()) return;
   const el = Api.el;
   const deptSel = document.getElementById("dept");
   const periodSel = document.getElementById("period");
@@ -18,6 +17,7 @@
   let byAssignment = false;
 
   async function init() {
+    if (!await Api.requireRole("VYK")) return;
     try {
       const [progList, ms, orders, evid] = await Promise.all([
         Api.get("/api/programs"), Api.measures(), Api.optional(Api.orders()), Api.optional(Api.evidences()),

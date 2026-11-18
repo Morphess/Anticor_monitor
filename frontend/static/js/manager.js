@@ -24,5 +24,5 @@
         el("td", {}, [el("span", { class: "flags" }, (d.flagsByMeasure[m.id] || []).map(Api.flagBadge))]),
       ]));
     });
-  });
+  }, "KER");
 })();

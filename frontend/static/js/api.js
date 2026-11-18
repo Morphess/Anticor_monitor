@@ -171,6 +171,35 @@
     return select.value;
   };
 
+  Api.requireRole = async function (expectedRole) {
+    if (!Api.requireLogin()) return false;
+
+    try {
+      const me = await Api.get("/api/auth/me", { noRedirect: true });
+      const role = me && me.role_id;
+      const cabinet = Api.ROLES[role];
+
+      if (!cabinet) {
+        Api.logout(false);
+        return false;
+      }
+
+      Api.setRole(role);
+      if (role !== expectedRole) {
+        location.replace(cabinet.home);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      if (err.status === 401) {
+        Api.logout(true);
+      } else {
+        Api.showError(err);
+      }
+      return false;
+    }
+  };
+
   // ---------- Статуси ----------
   // Чотири статуси координатора + службові стани з поля status.
   Api.STATUS = {

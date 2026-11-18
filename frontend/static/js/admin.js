@@ -1,7 +1,6 @@
 // Кабінет адміністратора: користувачі (/api/users), програми, журнал дій (/api/action-logs).
 (function () {
   "use strict";
-  if (!Api.requireLogin()) return;
   const el = Api.el;
   let programs = [];
   let logSkip = 0;
@@ -146,6 +145,8 @@
   });
 
   (async function () {
+    if (!await Api.requireRole("ADMIN")) return;
+
     fillDepartments();
     try {
       await Promise.all([loadUsers(), loadPrograms()]);
