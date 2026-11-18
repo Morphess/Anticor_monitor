@@ -18,6 +18,7 @@ from app.core.audit import enable_audit
 from app.api.auth import router as auth_router
 from app.api.users import router as users_router
 from app.api.programs import router as programs_router
+from app.api.departments import router as departments_router
 from app.api.sections import router as sections_router
 from app.api.measures import router as measures_router
 from app.api.risks import router as risks_router
@@ -94,6 +95,7 @@ app.include_router(reports_router, prefix="/api")
 app.include_router(action_logs_router, prefix="/api")
 app.include_router(orders_router, prefix="/api")
 app.include_router(risk_flags_router, prefix="/api")
+app.include_router(departments_router, prefix="/api")
 
 # Сторінки кабінетів (HTML)
 app.include_router(pages_router)
