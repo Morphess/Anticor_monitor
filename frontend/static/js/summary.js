@@ -5,8 +5,8 @@
 
   window.Summary = {
     // Завантажує дані й викликає onData({programs, measures, executions, sections, period}).
-    start: async function (onData) {
-      if (!Api.requireLogin()) return;
+    start: async function (onData, expectedRole) {
+      if (!await Api.requireRole(expectedRole)) return;
       const periodSel = document.getElementById("period");
       try {
         const [programs, measures, sections] = await Promise.all([

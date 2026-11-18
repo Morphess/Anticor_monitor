@@ -30,7 +30,7 @@
         el("td", {}, [Summary.bar(c.done, c.total)]),
       ]));
     });
-  });
+  }, "ANAL");
 
   // Вивантаження таблиці заходів у CSV (формується в браузері, без сервера).
   document.getElementById("export-csv").addEventListener("click", function () {
