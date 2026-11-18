@@ -3,18 +3,16 @@
 (function () {
   "use strict";
   const el = Api.el;
-  const deptSel = document.getElementById("dept");
   const periodSel = document.getElementById("period");
   const tbody = document.getElementById("rows");
   const unitName = document.getElementById("unit-name");
 
-  let measures = [];       // заходи, які бачить цей виконавець
+  let measures = [];       // лише заходи, закріплені за цим користувачем
   let programs = {};
   let executions = {};     // measure_id -> звіт за обраний період
   let ordersByMeasure = {};
   let ordersOk = true;
   let evidenceCount = {};
-  let byAssignment = false;
 
   async function init() {
     if (!await Api.requireRole("VYK")) return;
@@ -27,29 +25,16 @@
       ordersByMeasure = Api.groupBy(orders.data, "measure_id");
       evid.data.forEach(function (e) { evidenceCount[e.measure_id] = (evidenceCount[e.measure_id] || 0) + 1; });
 
+      // Виконавець бачить тільки свої заходи (assigned_user_id), чужі не показуються.
       const me = Api.userId();
-      const mine = ms.filter(function (m) { return me !== null && m.assigned_user_id === me; });
-      byAssignment = mine.length > 0;
-      measures = (byAssignment ? mine : ms).sort(Api.byMeasureOrder);
+      measures = ms.filter(function (m) { return me !== null && m.assigned_user_id === me; }).sort(Api.byMeasureOrder);
       Api.fillPeriods(periodSel, progList);
-      if (!byAssignment) setupDepartmentStub();
       periodSel.addEventListener("change", load);
       await load();
     } catch (err) {
       Api.showError(err);
       tbody.innerHTML = "";
     }
-  }
-
-  // ЗАГЛУШКА: заходів за користувачем немає — даємо обрати підрозділ вручну.
-  function setupDepartmentStub() {
-    document.getElementById("dept-field").classList.remove("hidden");
-    document.getElementById("dept-stub").classList.remove("hidden");
-    const ids = Array.from(new Set(measures.map(function (m) { return m.responsible_department_id || ""; }))).sort();
-    ids.forEach(function (id) { deptSel.appendChild(el("option", { value: id, text: Api.deptName(id) })); });
-    const saved = Api.pref("dept");
-    if (saved !== null && ids.indexOf(saved) !== -1) deptSel.value = saved;
-    deptSel.addEventListener("change", function () { Api.pref("dept", deptSel.value); render(); });
   }
 
   async function load() {
@@ -65,14 +50,9 @@
     }
   }
 
-  function visible() {
-    if (byAssignment) return measures;
-    return measures.filter(function (m) { return (m.responsible_department_id || "") === deptSel.value; });
-  }
-
   // Назва підрозділу: найчастіший відповідальний серед заходів користувача.
   function unitTitle(list) {
-    if (!byAssignment) return Api.deptName(deptSel.value);
+    if (!list.length) return "Заходів немає";
     const count = {};
     list.forEach(function (m) { const k = m.responsible_department_id || ""; count[k] = (count[k] || 0) + 1; });
     const top = Object.keys(count).sort(function (a, b) { return count[b] - count[a]; })[0];
@@ -85,8 +65,17 @@
     return m.deadline_description || "—";
   }
 
+  // Нагадування про строк: прострочено або менше 30 днів (для непогоджених).
+  function deadlineChip(m, ex) {
+    if (!m.deadline_on || (ex && ex.approved_by_coordinator)) return null;
+    const d = Math.round((new Date(m.deadline_on + "T00:00:00") - new Date(Api.today() + "T00:00:00")) / 86400000);
+    if (d < 0) return el("span", { class: "chip late", text: "прострочено " + -d + " дн." });
+    if (d <= 30) return el("span", { class: "chip soon", text: "ще " + d + " дн." });
+    return null;
+  }
+
   function render() {
-    const list = visible();
+    const list = measures;
     unitName.textContent = unitTitle(list);
     tbody.innerHTML = "";
     if (!list.length) {
@@ -145,7 +134,7 @@
       nameCell,
       organCell(m),
       el("td", { class: "nowrap", text: prog ? Api.fmtDate(prog.start_date) : "—" }),
-      el("td", { class: "nowrap", text: endDate(m) }),
+      el("td", { class: "nowrap" }, [el("div", { text: endDate(m) }), deadlineChip(m, ex)]),
       el("td", {}, [input, msg]),
       statusCell,
       el("td", {}, [

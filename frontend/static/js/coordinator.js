@@ -17,6 +17,7 @@
   let evidenceByMeasure = {};
   let changesByMeasure = {};
   let flagsByMeasure = {};
+  let riskById = {};
   const open = new Set(); // розгорнуті вузли: p:ID, s:ID:R, m:ID
 
   async function init() {
@@ -54,18 +55,29 @@
       list.forEach(function (x) { executions[x.measure_id] = x; });
       flagsByMeasure = Api.groupBy(flags.data.filter(function (f) { return f.object_type === "zakhid"; }), "object_id");
       renderFlagsNote(flags);
+      assess();
       render();
     } catch (err) {
       Api.showError(err);
     }
   }
 
+  // Оцінка ризику та завдання координатора (лише рекомендації з роллю KOORD).
+  function assess() {
+    const all = [];
+    Object.keys(measuresByProg).forEach(function (k) { all.push.apply(all, measuresByProg[k]); });
+    const res = Insights.assess({
+      measures: all, executions: executions, period: periodSel.value, role: "KOORD",
+      evidenceByMeasure: evidenceByMeasure, changesByMeasure: changesByMeasure, flagsByMeasure: flagsByMeasure,
+    });
+    riskById = {};
+    res.items.forEach(function (it) { riskById[it.m.id] = it; });
+    Insights.renderRecs(document.getElementById("recs"), res.recs, 5);
+  }
+
   function renderFlagsNote(flags) {
     flagsNote.innerHTML = "";
-    if (!flags.ok) {
-      flagsNote.appendChild(el("p", { class: "stub", text: "Сигнали Risk Flags поки бачить лише адміністратор: сервер не відкриває /api/risk-flags для координатора." }));
-      return;
-    }
+    if (!flags.ok) return; // ролі без доступу до сигналів блок не показується
     const n = flags.data.length;
     flagsNote.appendChild(el("p", { class: "small", style: "margin:0 0 14px" }, [
       el("strong", { text: "Сигналів за період: " + n + ". " }),
@@ -160,6 +172,7 @@
         el("span", { class: "num", text: Api.measureNo(m) }),
         el("span", { text: m.description }),
         el("span", { class: "flags" }, flags.map(Api.flagBadge)),
+        riskById[m.id] ? Insights.riskChip(riskById[m.id]) : el("span"),
         Api.statusBadge(Api.statusOf(executions[m.id])),
       ]),
     ]);
@@ -308,6 +321,7 @@
         ex = await Api.patch(Api.executionUrl(m.id, period) + "/approval", { approved_by_coordinator: approve });
       }
       executions[m.id] = ex;
+      assess();
       render();
     } catch (err) {
       select.disabled = false;

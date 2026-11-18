@@ -414,9 +414,23 @@
     box.classList.remove("hidden");
   };
 
+  // ---------- Тема ----------
+  // Без вибору користувача діє системна тема; вибір зберігається в localStorage.
+  Api.theme = function () {
+    const set = document.documentElement.getAttribute("data-theme");
+    if (set === "light" || set === "dark") return set;
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  };
+  Api.setTheme = function (theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    setItem("anticor_theme", theme);
+  };
+
   document.addEventListener("click", function (e) {
     const t = e.target.closest("[data-logout]");
-    if (t) { e.preventDefault(); Api.logout(false); }
+    if (t) { e.preventDefault(); Api.logout(false); return; }
+    const th = e.target.closest("[data-theme-toggle]");
+    if (th) { e.preventDefault(); Api.setTheme(Api.theme() === "dark" ? "light" : "dark"); }
   });
   document.addEventListener("DOMContentLoaded", function () {
     const r = document.querySelector("[data-role-name]");

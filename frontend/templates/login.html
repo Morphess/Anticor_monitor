@@ -1,7 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Вхід — моніторинг антикорупційної програми{% endblock %}
 {% block header %}
-<header class="topbar"><span class="brand">Антикорупційна програма</span></header>
+<header class="topbar">
+  <span class="brand"><span class="brand-mark" aria-hidden="true">А</span>Антикорупційна програма</span>
+  <div class="who">{{ theme_toggle() }}</div>
+</header>
 {% endblock %}
 {% block content %}
 <form class="login" id="login-form" novalidate>

@@ -4,20 +4,16 @@
 {% block content %}
 <section class="unit">
   <div>
-    <p class="label">Назва підрозділу</p>
+    <p class="label">Мої заходи</p>
     <h1 id="unit-name">—</h1>
   </div>
   <p class="hint">Введіть номер наказу й натисніть Enter — система перевірить його, статус оновиться сам.</p>
 </section>
 <div class="toolbar">
-  <label class="field hidden" id="dept-field">Підрозділ
-    <select id="dept"></select>
-  </label>
   <label class="field">Звітний період
     <select id="period"></select>
   </label>
 </div>
-<p class="stub hidden" id="dept-stub">За вашим обліковим записом не закріплено жодного заходу, тому підрозділ обирається вручну. Накази чужих заходів сервер не показує.</p>
 <div class="table-wrap">
   <table class="grid executor-table">
     <thead>

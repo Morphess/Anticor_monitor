@@ -4,7 +4,7 @@
 {% block content %}
 <section class="unit">
   <div>
-    <p class="label">Назва підрозділу</p>
+    <p class="label">Координатор програми</p>
     <h1 id="unit-name">—</h1>
   </div>
   <button class="btn btn-dark" type="button" id="create-program">Створити програму</button>
@@ -17,6 +17,9 @@
     <select id="period"></select>
   </label>
 </div>
+<div class="section-head" style="margin-top:8px"><h2>Мої завдання на період</h2><span class="muted small">Сформовано автоматично за станом виконання</span></div>
+<div id="recs"><p class="muted">Завантаження…</p></div>
+<div class="section-head"><h2>Програми</h2><span class="muted small">Число біля заходу — ризик невиконання, 0–100</span></div>
 <div id="flags-note"></div>
 <div id="programs"><p class="muted">Завантаження…</p></div>
 
@@ -43,4 +46,4 @@
   </form>
 </dialog>
 {% endblock %}
-{% block scripts %}<script src="/static/js/coordinator.js"></script>{% endblock %}
+{% block scripts %}<script src="/static/js/insights.js"></script><script src="/static/js/coordinator.js"></script>{% endblock %}

@@ -4,22 +4,29 @@
 {% block content %}
 <section class="unit">
   <div>
-    <p class="label">Стан виконання</p>
+    <p class="label">Інформаційна панель керівника</p>
     <h1 id="program-title">—</h1>
   </div>
   <label class="field">Звітний період <select id="period"></select></label>
 </section>
+
 <div class="cards" id="cards"></div>
-<h2>Потребують уваги</h2>
-<p class="muted small">Строк минув і виконання не погоджено, або система виявила сигнали Risk Flags.</p>
+<div id="stack"></div>
+
+<div class="section-head"><h2>Прогноз</h2><span class="muted small">Оцінка на основі статусів, строків, підтверджень і перенесень</span></div>
+<div class="forecast" id="forecast"></div>
+
+<div class="section-head"><h2>Рекомендовані доручення</h2><span class="muted small">Сформовано автоматично; рішення ухвалює керівник</span></div>
+<div id="recs"><p class="muted">Завантаження…</p></div>
+
+<div class="section-head"><h2>Потребують уваги</h2><span class="muted small">Відсортовано за ризиком невиконання, 0–100</span></div>
 <div class="table-wrap">
   <table class="grid">
-    <thead><tr><th>№</th><th>Захід</th><th>Підрозділ</th><th>Строк</th><th>Статус</th><th>Сигнали</th></tr></thead>
+    <thead><tr><th>№</th><th>Захід</th><th>Підрозділ</th><th>Строк</th><th>Статус</th><th>Ризик</th><th>Причини</th></tr></thead>
     <tbody id="attention"></tbody>
   </table>
 </div>
-<h2>Сигнали Risk Flags</h2>
-<div id="flags-summary"></div>
+
 <h2>За розділами</h2>
 <div class="table-wrap">
   <table class="grid">
@@ -27,7 +34,10 @@
     <tbody id="by-section"></tbody>
   </table>
 </div>
-<h2>Рішення керівника</h2>
-<p class="stub">Тимчасово недоступно: на сервері поки немає API для доручень і рішень керівника.</p>
+
+<div id="flags-block" class="hidden">
+  <h2>Сигнали Risk Flags</h2>
+  <div id="flags-summary"></div>
+</div>
 {% endblock %}
-{% block scripts %}<script src="/static/js/summary.js"></script><script src="/static/js/manager.js"></script>{% endblock %}
+{% block scripts %}<script src="/static/js/insights.js"></script><script src="/static/js/summary.js"></script><script src="/static/js/manager.js"></script>{% endblock %}
