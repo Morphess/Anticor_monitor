@@ -3,7 +3,6 @@
   "use strict";
   const el = Api.el;
   let departments = [];
-  let programs = [];
   let users = [];
   let editingUserId = null;
   let editingDepartmentId = null;
@@ -56,27 +55,6 @@
   async function loadUsers() {
     users = await Api.getAll("/api/users/", 100, "skip");
     renderUsers();
-  }
-
-  async function loadPrograms() {
-    programs = await Api.getAll("/api/programs", 100, "skip");
-    ["#user-form", "#user-edit-form"].forEach(function (formSelector) {
-      const select = document.querySelector(formSelector + " [name=program_id]");
-      select.replaceChildren(el("option", { value: "", text: "— Не призначено —" }));
-      programs.forEach(function (program) {
-        select.appendChild(el("option", {
-          value: program.id,
-          text: program.id + " — " + program.title,
-        }));
-      });
-      updateProgramRequirement(document.querySelector(formSelector));
-    });
-  }
-
-  function updateProgramRequirement(form) {
-    const required = form.elements.role_id.value !== "ADMIN";
-    form.elements.program_id.required = required;
-    form.querySelector("[data-program-required-hint]").classList.toggle("hidden", !required);
   }
 
   async function loadDepartments() {
@@ -138,8 +116,6 @@
     editingUserId = user.id;
     editForm.elements.login.value = user.login;
     editRole.value = user.role_id;
-    updateProgramRequirement(editForm);
-    editForm.elements.program_id.value = user.program_id || "";
     editForm.elements.department_id.value = user.department_id || "";
     editForm.elements.position.value = user.position || "";
     editForm.elements.password.value = "";
@@ -158,9 +134,6 @@
   }
 
   document.getElementById("user-search").addEventListener("input", renderUsers);
-  editRole.addEventListener("change", function () {
-    updateProgramRequirement(editForm);
-  });
   document.getElementById("department-search").addEventListener("input", renderDepartments);
   document.getElementById("user-edit-cancel").addEventListener("click", function () {
     editDialog.close();
@@ -177,7 +150,6 @@
     const data = {
       login: editForm.elements.login.value.trim(),
       role_id: editRole.value,
-      program_id: editForm.elements.program_id.value || null,
       department_id: editForm.elements.department_id.value || null,
       position: editForm.elements.position.value.trim() || null,
     };
@@ -255,16 +227,13 @@
 
   const userForm = document.getElementById("user-form");
   const userMsg = document.getElementById("user-msg");
-  userForm.elements.role_id.addEventListener("change", function () {
-    updateProgramRequirement(userForm);
-  });
   userForm.addEventListener("submit", async function (event) {
     event.preventDefault();
     userMsg.textContent = "";
     if (!userForm.reportValidity()) return;
 
     const data = Object.fromEntries(new FormData(userForm).entries());
-    ["program_id", "department_id", "position"].forEach(function (key) {
+    ["department_id", "position"].forEach(function (key) {
       if (!data[key]) data[key] = null;
     });
     try {
@@ -306,7 +275,7 @@
   (async function () {
     if (!await Api.requireRole("ADMIN")) return;
     try {
-      await Promise.all([loadPrograms(), loadDepartments()]);
+      await loadDepartments();
       await loadUsers();
     } catch (error) {
       Api.showError(error.status === 403 ? new Error("Розділ доступний лише адміністратору.") : error);

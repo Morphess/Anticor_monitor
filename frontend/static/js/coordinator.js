@@ -16,6 +16,7 @@
   let ordersByMeasure = {};
   let changesByMeasure = {};
   let flagsByMeasure = {};
+  let programUsers = [];
   // Регіональний / обласний координатор: програм не створює й не редагує, лише призначає виконавців.
   // ЗАГЛУШКА: бекенд не розрізняє рівні координаторів — визначаємо за підрозділом користувача.
   let regional = false;
@@ -37,6 +38,7 @@
         Api.optional(Api.orders()), Api.optional(Api.deadlineChanges()),
       ]);
       programs = progList;
+      await loadProgramAssignmentPanel();
       sections = secs;
       ordersByMeasure = Api.groupBy(orders.data, "measure_id");
       changesByMeasure = Api.groupBy(changes.data, "measure_id");
@@ -55,6 +57,73 @@
       root.innerHTML = "";
     }
   }
+
+  async function loadProgramAssignmentPanel() {
+    const panel = document.getElementById("user-program-panel");
+    const programSelect = document.getElementById("program-user-program");
+    const availablePrograms = await Api.get("/api/coordinator/users/programs");
+    panel.hidden = false;
+    programSelect.replaceChildren();
+    availablePrograms.forEach(function (program) {
+      programSelect.appendChild(el("option", { value: program.id, text: program.id + " — " + program.title }));
+    });
+    if (!availablePrograms.length) {
+      document.getElementById("program-user-msg").className = "msg err";
+      document.getElementById("program-user-msg").textContent = "Для вашого підрозділу немає програм, які можна призначати.";
+      programSelect.disabled = true;
+      return;
+    }
+    await loadProgramUsers();
+  }
+
+  async function loadProgramUsers() {
+    programUsers = await Api.get("/api/coordinator/users/");
+    renderProgramUsers();
+  }
+
+  function renderProgramUsers() {
+    const tbody = document.getElementById("program-users");
+    const query = document.getElementById("program-user-search").value.trim().toLocaleLowerCase("uk");
+    const visible = programUsers.filter(function (user) {
+      return String(user.id).includes(query) || user.login.toLocaleLowerCase("uk").includes(query);
+    });
+    tbody.replaceChildren();
+    if (!visible.length) {
+      tbody.appendChild(el("tr", {}, [el("td", { colspan: "5", class: "muted", text: "Немає користувачів для призначення." })]));
+      return;
+    }
+    visible.forEach(function (user) {
+      const row = el("tr", {}, [
+        el("td", { text: String(user.id) }),
+        el("td", { text: user.login }),
+        el("td", { text: user.department_id ? Api.deptName(user.department_id) : "—" }),
+        el("td", { text: user.position || "—" }),
+      ]);
+      const assign = el("button", {
+        type: "button", class: "btn", text: "Надати програму",
+        onclick: async function () {
+          assign.disabled = true;
+          try {
+            await Api.patch("/api/coordinator/users/" + user.id + "/program", {
+              program_id: document.getElementById("program-user-program").value,
+            });
+            document.getElementById("program-user-msg").className = "msg ok";
+            document.getElementById("program-user-msg").textContent = "Програму надано користувачу " + user.login + ".";
+            await loadProgramUsers();
+          } catch (err) {
+            document.getElementById("program-user-msg").className = "msg err";
+            document.getElementById("program-user-msg").textContent = "Не вдалося призначити програму: " + err.message;
+          } finally {
+            assign.disabled = false;
+          }
+        },
+      });
+      row.appendChild(el("td", {}, [assign]));
+      tbody.appendChild(row);
+    });
+  }
+
+  document.getElementById("program-user-search").addEventListener("input", renderProgramUsers);
 
   async function load() {
     Api.showError(null);

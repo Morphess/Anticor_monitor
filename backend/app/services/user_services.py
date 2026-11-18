@@ -40,6 +40,9 @@ class UserService:
     def list_users(self, skip: int = 0, limit: int = 20) -> list[User]:
         return self.repo.list_users(skip, limit)
 
+    def list_program_assignment_candidates(self) -> list[User]:
+        return self.repo.list_program_assignment_candidates()
+
     # Отримання одного користувача
     def get_user(self, user_id: int) -> User:
 
@@ -151,6 +154,12 @@ class UserService:
                 self.db.rollback()
 
                 raise InvalidUserDataError("Не вдалося відв'язати програму") from error
+
+        if user.role_id in ("ADMIN", "KOORD"):
+            raise InvalidUserDataError("Адміністраторів і координаторів не можна призначати до програми цим способом")
+
+        if user.program_id not in (None, program_id):
+            raise InvalidUserDataError("Користувач уже закріплений за іншою програмою")
 
         # 3. Шукаємо програму в PostgreSQL.
         program = self.db.get(
