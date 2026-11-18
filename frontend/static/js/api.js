@@ -187,6 +187,7 @@
       }
 
       Api.setRole(role);
+      Api.me = me;
       if (role !== expectedRole) {
         location.replace(cabinet.home);
         return false;

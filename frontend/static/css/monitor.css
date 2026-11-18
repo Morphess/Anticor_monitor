@@ -95,6 +95,7 @@ code { font-size: .92em; background: var(--sunken); padding: 1px 5px; border-rad
 .brand-mark { width: 22px; height: 22px; border-radius: 6px; background: var(--accent); color: var(--accent-ink); display: inline-grid; place-items: center; font-size: 12px; font-weight: 700; }
 .who { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--muted); }
 .who [data-role-name] { padding-right: 8px; }
+.who .ident { padding-right: 8px; color: var(--ink); font-weight: 550; max-width: 46ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .icon-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   height: 32px; min-width: 32px; padding: 0 10px;
@@ -104,6 +105,24 @@ code { font-size: .92em; background: var(--sunken); padding: 1px 5px; border-rad
 .icon-btn:hover { border-color: var(--line-strong); background: var(--sunken); }
 .icon-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .theme-toggle .i-sun { display: none; }
+/* Дзвіночок сповіщень виконавця. */
+.notif { position: relative; }
+.bell { position: relative; }
+.bell .badge { position: absolute; top: -5px; right: -5px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 999px; background: var(--bad); color: #fff; font-size: 11px; font-weight: 700; line-height: 17px; text-align: center; }
+.notif-panel { position: absolute; right: 0; top: calc(100% + 8px); width: min(360px, calc(100vw - 32px)); max-height: 60vh; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 12px 32px rgba(0,0,0,.14); z-index: 20; }
+.notif-head { padding: 10px 14px; font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); border-bottom: 1px solid var(--line); }
+.notif-list { list-style: none; margin: 0; padding: 0; }
+.notif-list li + li { border-top: 1px solid var(--line); }
+.notif-list button { display: grid; grid-template-columns: 4px 1fr; gap: 10px; width: 100%; padding: 10px 14px; text-align: left; background: none; border: 0; cursor: pointer; color: var(--ink); }
+.notif-list button:hover { background: var(--sunken); }
+.notif-list .lvl { border-radius: 2px; background: var(--warn); }
+.notif-list .lvl.late { background: var(--bad); }
+.notif-list .lvl.rework { background: var(--review); }
+.notif-list .what { font-size: 13px; font-weight: 600; }
+.notif-list .which { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.notif-empty { padding: 14px; font-size: 13px; color: var(--muted); }
+.mrow.flash { animation: flash 1.6s ease-out; }
+@keyframes flash { from { background: var(--sunken); } to { background: transparent; } }
 :root[data-theme="dark"] .theme-toggle .i-sun { display: block; }
 :root[data-theme="dark"] .theme-toggle .i-moon { display: none; }
 @media (prefers-color-scheme: dark) {
@@ -180,9 +199,11 @@ table.grid td.num-cell { font-variant-numeric: tabular-nums; }
 
 /* ---------- Ієрархія координатора ---------- */
 .prog { border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 12px; background: var(--surface); box-shadow: var(--shadow); overflow: hidden; }
-.row-head { width: 100%; display: grid; grid-template-columns: 1fr auto auto; gap: 18px; align-items: center; text-align: left; background: none; border: 0; padding: 14px 18px; cursor: pointer; }
+.row-head { width: 100%; display: grid; grid-template-columns: 12px 1fr auto auto; gap: 18px; align-items: center; text-align: left; background: none; border: 0; padding: 14px 18px; cursor: pointer; }
 .row-head:hover { background: var(--sunken); }
-.row-head::before { content: ""; }
+/* Стрілка розгортання — перша колонка сітки. */
+.row-head::before { content: ""; width: 7px; height: 7px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(-45deg); transition: transform .15s; justify-self: center; }
+.row-head[aria-expanded="true"]::before { transform: rotate(45deg); }
 .row-head .title { font-weight: 600; }
 .row-head .meta { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
 .row-head[aria-expanded="true"] { background: var(--sunken); }
@@ -199,6 +220,14 @@ table.grid td.num-cell { font-variant-numeric: tabular-nums; }
 .measure > .row-head:hover { background: var(--sunken); }
 .measure .num { font-weight: 650; font-variant-numeric: tabular-nums; color: var(--muted); }
 .units { margin: 4px 0 14px 68px; }
+/* Кабінет виконавця: код програми та рядки заходів «назва | строк | наказ | статус». */
+.row-head .code { display: inline-block; margin-right: 8px; padding: 0 7px; border: 1px solid var(--line-strong); border-radius: 6px; font-size: 12px; font-weight: 650; color: var(--muted); font-variant-numeric: tabular-nums; }
+.row-head .sub { display: block; font-size: 12.5px; font-weight: 400; color: var(--muted); margin-top: 2px; }
+.mrow { display: grid; grid-template-columns: minmax(0, 1fr) 150px 230px 130px; gap: 16px; align-items: start; padding: 12px 18px 12px 52px; border-top: 1px solid var(--line); }
+.mrow.head { padding-top: 8px; padding-bottom: 8px; font-size: 12px; color: var(--muted); }
+.mrow .num { font-weight: 650; color: var(--muted); margin-right: 6px; font-variant-numeric: tabular-nums; }
+.mrow .chip { margin-top: 4px; }
+.mrow .order-title { font-size: 12px; color: var(--muted); margin-top: 4px; }
 .units table.grid th, .units table.grid td { padding: 8px 12px; }
 .units select { min-width: 160px; padding: 6px 8px; }
 
@@ -276,7 +305,7 @@ dialog h2 { margin-top: 0; font-size: 18px; }
 /* ---------- Сигнали Risk Flags, накази, підтвердження ---------- */
 .flag { display: inline-block; padding: 0 7px; border: 1px solid var(--bad); color: var(--bad); background: var(--bad-bg); border-radius: 999px; font-size: 11.5px; font-weight: 700; margin: 0 4px 4px 0; cursor: help; white-space: nowrap; line-height: 18px; }
 .flags { display: inline-flex; flex-wrap: wrap; align-items: center; }
-.measure .row-head { grid-template-columns: 56px 1fr auto auto auto; }
+.measure .row-head { grid-template-columns: 12px 56px 1fr auto auto auto; }
 .detail { margin: 4px 0 16px 68px; display: grid; gap: 16px; padding: 14px 0 4px; }
 .detail .units { margin: 0; }
 .detail h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 6px; font-weight: 650; }
@@ -298,13 +327,16 @@ dialog h2 { margin-top: 0; font-size: 18px; }
   .topbar { padding: 10px 16px; }
   .page { padding: 20px 16px 56px; }
   .unit h1 { font-size: 21px; }
-  .row-head { grid-template-columns: 1fr auto; }
-  .row-head .meta { grid-column: 1 / -1; }
+  .row-head { grid-template-columns: 12px 1fr auto; }
+  .row-head .meta { grid-column: 2 / -1; }
   .sec > .row-head { padding-left: 18px; }
   .sec-body { padding-left: 12px; padding-right: 12px; }
   .units, .detail { margin-left: 0; }
-  .measure .row-head { grid-template-columns: 44px 1fr; }
+  .measure .row-head { grid-template-columns: 12px 44px 1fr; }
+  .mrow { grid-template-columns: 1fr; gap: 8px; padding-left: 18px; }
+  .mrow.head { display: none; }
   .rec { grid-template-columns: 4px 1fr; }
   .rec .who-acts { grid-column: 2; text-align: left; }
   .who [data-role-name] { display: none; }
+  .who .ident { max-width: 38vw; font-size: 12.5px; }
 }

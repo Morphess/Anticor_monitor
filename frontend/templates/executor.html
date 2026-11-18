@@ -1,35 +1,35 @@
 {% extends "base.html" %}
-{% block title %}Заходи підрозділу — виконавець{% endblock %}
-{% block role_name %}Виконавець{% endblock %}
-{% block content %}
-<section class="unit">
-  <div>
-    <p class="label">Мої заходи</p>
-    <h1 id="unit-name">—</h1>
+{% block title %}Мої заходи — виконавець{% endblock %}
+{% block who_label %}<span class="ident" id="ident"></span>
+<div class="notif">
+  <button type="button" class="icon-btn bell" id="bell" aria-haspopup="true" aria-expanded="false" aria-controls="notif-panel" aria-label="Сповіщення" title="Сповіщення">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>
+    <span class="badge hidden" id="bell-count"></span>
+  </button>
+  <div class="notif-panel hidden" id="notif-panel" role="region" aria-label="Сповіщення">
+    <div class="notif-head">Сповіщення</div>
+    <ul class="notif-list" id="notif-list"></ul>
   </div>
-  <p class="hint">Введіть номер наказу й натисніть Enter — система перевірить його, статус оновиться сам.</p>
-</section>
+</div>{% endblock %}
+{% block content %}
 <div class="toolbar">
+  <label class="field" style="flex:1">Пошук
+    <input id="search" type="search" placeholder="Програма, розділ, захід або № наказу">
+  </label>
+  <label class="field">Фільтр
+    <select id="filter">
+      <option value="">Усі заходи</option>
+      <option value="todo">Потрібно подати наказ</option>
+      <option value="deadline">Строк минає або минув</option>
+      <option value="review">На розгляді</option>
+      <option value="rework">На доопрацюванні</option>
+      <option value="done">Виконано</option>
+    </select>
+  </label>
   <label class="field">Звітний період
     <select id="period"></select>
   </label>
 </div>
-<div class="table-wrap">
-  <table class="grid executor-table">
-    <thead>
-      <tr>
-        <th style="width:17%">Назва наказу</th>
-        <th style="width:10%">Орган, що видав</th>
-        <th style="width:8%">Поч. дата</th>
-        <th style="width:8%">Кін. дата</th>
-        <th style="width:14%">№ наказу</th>
-        <th style="width:10%">Статус</th>
-        <th style="width:19%">Ціль</th>
-        <th>Примітка</th>
-      </tr>
-    </thead>
-    <tbody id="rows"><tr><td colspan="8" class="muted">Завантаження…</td></tr></tbody>
-  </table>
-</div>
+<div id="programs"><p class="muted">Завантаження…</p></div>
 {% endblock %}
 {% block scripts %}<script src="/static/js/executor.js"></script>{% endblock %}
