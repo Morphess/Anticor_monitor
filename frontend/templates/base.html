@@ -18,7 +18,7 @@
   <header class="topbar">
     <a class="brand" href="/login"><span class="brand-mark" aria-hidden="true">А</span>Антикорупційна програма</a>
     <div class="who">
-      <span data-role-name>{% block role_name %}{% endblock %}</span>
+      {% block who_label %}<span data-role-name>{% block role_name %}{% endblock %}</span>{% endblock %}
       {{ theme_toggle() }}
       <button type="button" class="icon-btn" data-logout>Вийти</button>
     </div>
