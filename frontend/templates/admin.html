@@ -25,7 +25,7 @@
           <option value="KER">Керівник</option><option value="ANAL">Аналітик</option><option value="ADMIN">Адміністратор</option>
         </select>
       </label>
-      <label class="field">Програма<select name="program_id"><option value="">— Не призначено —</option></select></label>
+      <label class="field">Програма<span class="small muted hidden" data-program-required-hint>Обов’язково для цієї ролі</span><select name="program_id"><option value="">— Не призначено —</option></select></label>
       <label class="field">Підрозділ<select name="department_id"><option value="">— Не призначено —</option></select></label>
       <label class="field">Посада<input name="position"></label>
     </div>
@@ -54,7 +54,7 @@
             <option value="KER">Керівник</option><option value="ANAL">Аналітик</option><option value="ADMIN">Адміністратор</option>
           </select>
         </label>
-        <label class="field">Програма<select name="program_id"><option value="">— Не призначено —</option></select></label>
+        <label class="field">Програма<span class="small muted hidden" data-program-required-hint>Обов’язково для цієї ролі</span><select name="program_id"><option value="">— Не призначено —</option></select></label>
         <label class="field">Підрозділ<select name="department_id"><option value="">— Не призначено —</option></select></label>
         <label class="field">Посада<input name="position"></label>
         <label class="field">Новий пароль (необов’язково)<input name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password"></label>
@@ -109,4 +109,4 @@
   </dialog>
 </section>
 {% endblock %}
-{% block scripts %}<script src="/static/js/admin.js?v=5"></script>{% endblock %}
+{% block scripts %}<script src="/static/js/admin.js?v=6"></script>{% endblock %}
