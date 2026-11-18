@@ -17,6 +17,7 @@ from app.core.audit import enable_audit
 
 from app.api.auth import router as auth_router
 from app.api.users import router as users_router
+from app.api.departments import router as departments_router
 from app.api.programs import router as programs_router
 from app.api.sections import router as sections_router
 from app.api.measures import router as measures_router
@@ -83,6 +84,7 @@ app.add_middleware(
 # Підключення API
 app.include_router(auth_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
+app.include_router(departments_router, prefix="/api")
 app.include_router(programs_router, prefix="/api")
 app.include_router(sections_router, prefix="/api")
 app.include_router(measures_router, prefix="/api")
