@@ -35,7 +35,11 @@ class User(Base):
     # ORM-доступ до ролі користувача (об’єкт Role).
     role: Mapped["Role"] = relationship("Role", back_populates="users")
     # ORM-доступ до програми користувача (об’єкт Program).
-    program: Mapped["Program | None"] = relationship("Program", back_populates="users")
+    program: Mapped["Program | None"] = relationship(
+        "Program",
+        back_populates="users",
+        foreign_keys=[program_id],
+    )
     # ORM-доступ до підрозділу користувача (об’єкт Department).
     department: Mapped["Department | None"] = relationship(
         "Department", back_populates="users"
