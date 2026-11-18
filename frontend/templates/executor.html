@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Заходи підрозділу — виконавець{% endblock %}
+{% block role_name %}Виконавець{% endblock %}
+{% block content %}
+<section class="unit">
+  <div>
+    <p class="label">Назва підрозділу</p>
+    <h1 id="unit-name">—</h1>
+  </div>
+  <p class="hint">Введіть номер наказу й натисніть Enter — система перевірить його, статус оновиться сам.</p>
+</section>
+<div class="toolbar">
+  <label class="field hidden" id="dept-field">Підрозділ
+    <select id="dept"></select>
+  </label>
+  <label class="field">Звітний період
+    <select id="period"></select>
+  </label>
+</div>
+<p class="stub hidden" id="dept-stub">За вашим обліковим записом не закріплено жодного заходу, тому підрозділ обирається вручну. Накази чужих заходів сервер не показує.</p>
+<div class="table-wrap">
+  <table class="grid executor-table">
+    <thead>
+      <tr>
+        <th style="width:17%">Назва наказу</th>
+        <th style="width:10%">Орган, що видав</th>
+        <th style="width:8%">Поч. дата</th>
+        <th style="width:8%">Кін. дата</th>
+        <th style="width:14%">№ наказу</th>
+        <th style="width:10%">Статус</th>
+        <th style="width:19%">Ціль</th>
+        <th>Примітка</th>
+      </tr>
+    </thead>
+    <tbody id="rows"><tr><td colspan="8" class="muted">Завантаження…</td></tr></tbody>
+  </table>
+</div>
+{% endblock %}
+{% block scripts %}<script src="/static/js/executor.js"></script>{% endblock %}

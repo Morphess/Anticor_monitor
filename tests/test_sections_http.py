@@ -21,7 +21,7 @@ from app.services.section_services import SectionNotFoundError, SectionService
 
 class SectionsHttpTests(unittest.TestCase):
     def setUp(self):
-        self.db = Mock()
+        self.db = Mock(info={})
         app = FastAPI()
         app.include_router(sections_router, prefix="/api")
         app.dependency_overrides[get_db] = lambda: self.db
@@ -38,9 +38,7 @@ class SectionsHttpTests(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
 
     def test_member_cannot_list_sections(self):
-        response = self.client.get(
-            "/api/sections/", headers=self.headers_for("VYKON")
-        )
+        response = self.client.get("/api/sections/", headers=self.headers_for("VYKON"))
         self.assertEqual(response.status_code, 403)
 
     def test_admin_can_list_sections(self):
