@@ -23,11 +23,45 @@
 
     if (!await Api.requireRole("KOORD")) return;
     try {
-      const [progList, measures, secs, orders, evid, changes] = await Promise.all([
-        Api.get("/api/programs"), Api.measures(), Api.sections(),
-        Api.optional(Api.orders()), Api.optional(Api.evidences()), Api.optional(Api.deadlineChanges()),
-      ]);
-      programs = progList;
+      const [availablePrograms, allMeasures, secs, orders, evid, changes] =
+        await Promise.all([
+          Api.get("/api/program-routing/my/programs"),
+          Api.measures(),
+          Api.sections(),
+          Api.optional(Api.orders()),
+          Api.optional(Api.evidences()),
+          Api.optional(Api.deadlineChanges()),
+        ]);
+
+      const programDetails = await Promise.all(
+        availablePrograms.map(function (program) {
+          return Api.get(
+            "/api/program-routing/programs/" + encodeURIComponent(program.id)
+          );
+        })
+      );
+
+      const accessibleMeasures = await Promise.all(
+        availablePrograms.map(function (program) {
+          return Api.get(
+            "/api/program-routing/programs/" +
+            encodeURIComponent(program.id) +
+            "/measures"
+          );
+        })
+      );
+
+      const allowedMeasureIds = new Set();
+      accessibleMeasures.forEach(function (list) {
+        list.forEach(function (measure) {
+          allowedMeasureIds.add(measure.id);
+        });
+      });
+
+      const measures = allMeasures.filter(function (measure) {
+        return allowedMeasureIds.has(measure.id);
+      });
+      programs = programDetails;
       sections = secs;
       ordersByMeasure = Api.groupBy(orders.data, "measure_id");
       evidenceByMeasure = Api.groupBy(evid.data, "measure_id");
@@ -223,11 +257,67 @@
     ]);
   }
 
+  function orderAnalysisForm(order) {
+    const fileInput = el("input", {
+      type: "file",
+      accept: ".pdf,.docx,.txt",
+      required: "required",
+    });
+    const button = el("button", {
+      type: "submit",
+      class: "btn",
+      text: "Проаналізувати",
+    });
+    const message = el("div", { class: "msg", role: "status" });
+    const result = el("pre", {
+      class: "analysis-result",
+      style: "white-space:pre-wrap; overflow-wrap:anywhere",
+    });
+
+    const form = el("form", { class: "inline-form" }, [
+      el("label", { class: "field" }, [
+        "Документ для аналізу",
+        fileInput,
+      ]),
+      button,
+    ]);
+
+    form.addEventListener("submit", async function (event) {
+      event.preventDefault();
+      const file = fileInput.files[0];
+      if (!file) return;
+
+      button.disabled = true;
+      message.className = "msg";
+      message.textContent = "Документ аналізується. Зачекайте…";
+      result.textContent = "";
+
+      try {
+        const data = await Api.analyzeOrder(order.id, file);
+        result.textContent = data.analysis;
+        message.textContent = data.text_truncated
+          ? "Проаналізовано частину тексту: документ перевищив ліміт."
+          : "Аналіз завершено.";
+      } catch (error) {
+        message.className = "msg err";
+        message.textContent = "Помилка аналізу: " + error.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    return el("div", {}, [form, message, result]);
+  }
+
   function ordersBlock(m) {
     const orders = ordersByMeasure[m.id] || [];
     const list = orders.length
       ? el("ul", { class: "plain" }, orders.map(function (o) {
-          return el("li", {}, [Api.docLink(o.document_url, "№ " + o.number + " — " + o.title), o.issued_on ? " від " + Api.fmtDate(o.issued_on) : ""]);
+          return el("li", {}, [
+            Api.docLink(o.document_url, "№ " + o.number + " — " + o.title),
+            o.issued_on ? " від " + Api.fmtDate(o.issued_on) : "",
+            orderAnalysisForm(o),
+          ]);
         }))
       : el("p", { class: "small muted", style: "margin:0 0 8px", text: "Наказів у реєстрі немає — виконавець не зможе подати звіт." });
 

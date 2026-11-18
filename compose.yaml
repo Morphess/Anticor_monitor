@@ -17,6 +17,15 @@ services:
       retries: 5
       start_period: 30s
 
+  ollama:
+    image: ollama/ollama
+    profiles: ["ai"]
+    restart: unless-stopped
+    environment:
+      OLLAMA_NO_CLOUD: "1"
+    volumes:
+      - ollama_data:/root/.ollama
+
   api:
     build:
       context: .
@@ -27,6 +36,8 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL for the application user in .env}
       APP_NAME: ${APP_NAME:-BorderGroup}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
       DEBUG: ${DEBUG:-false}
       SQL_ECHO: ${SQL_ECHO:-false}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in .env}
@@ -36,3 +47,4 @@ services:
 
 volumes:
   postgres_data:
+  ollama_data:
