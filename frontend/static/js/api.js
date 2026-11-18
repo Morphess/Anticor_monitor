@@ -82,6 +82,7 @@
 
     logout: function (expired) {
       setItem(TOKEN_KEY, null);
+      setItem(ROLE_KEY, null);
       const next = expired ? "?next=" + encodeURIComponent(location.pathname) : "";
       location.href = "/login" + next;
     },

@@ -14,16 +14,6 @@
   <label class="field">Пароль
     <input name="password" type="password" autocomplete="current-password" required>
   </label>
-  <label class="field">Кабінет
-    <select name="role">
-      <option value="VYK">Виконавець</option>
-      <option value="KOORD">Координатор програми</option>
-      <option value="KER">Керівник</option>
-      <option value="ANAL">Аналітик</option>
-      <option value="ADMIN">Адміністратор</option>
-    </select>
-  </label>
-  <p class="stub">Кабінет поки обирається вручну: сервер ще не повертає роль користувача (потрібен <code>GET /api/auth/me</code>). Права все одно перевіряє сервер.</p>
   <button class="btn btn-dark" type="submit">Увійти</button>
 </form>
 {% endblock %}

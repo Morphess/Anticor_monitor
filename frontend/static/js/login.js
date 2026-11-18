@@ -1,14 +1,45 @@
-// Вхід: POST /api/auth/token (OAuth2-форма), далі перехід до кабінету.
+// Вхід через API: роль і кабінет визначаються профілем із /api/auth/me.
 (function () {
   "use strict";
   const form = document.getElementById("login-form");
   const errBox = document.getElementById("login-error");
-  const roleSel = form.elements.role;
-  if (Api.role() && Api.ROLES[Api.role()]) roleSel.value = Api.role();
+  const button = form.querySelector("button[type=submit]");
 
-  function fail(text) {
-    errBox.textContent = text;
+  function fail(message) {
+    errBox.textContent = message;
     errBox.classList.remove("hidden");
+  }
+
+  function setBusy(busy) {
+    button.disabled = busy;
+    form.elements.username.disabled = busy;
+    form.elements.password.disabled = busy;
+  }
+
+  async function loadCabinet() {
+    const me = await Api.get("/api/auth/me", { noRedirect: true });
+    const role = me && me.role_id;
+    const cabinet = Api.ROLES[role];
+    if (!cabinet) throw new Error("Для вашої ролі кабінет не налаштований.");
+    Api.setRole(role);
+    return cabinet.home;
+  }
+
+  function openCabinet(path) {
+    location.replace(path);
+  }
+
+  // Якщо сесія вже є, одразу відкриваємо кабінет без повторного входу.
+  if (Api.token()) {
+    setBusy(true);
+    loadCabinet().then(openCabinet).catch(function (err) {
+      Api.setToken(null);
+      Api.setRole(null);
+      setBusy(false);
+      if (!err.status || err.status !== 401) {
+        fail(err.status ? err.message : "Не вдалося зв'язатися із сервером. Спробуйте ще раз.");
+      }
+    });
   }
 
   form.addEventListener("submit", async function (e) {
@@ -17,25 +48,18 @@
     const username = form.elements.username.value.trim();
     const password = form.elements.password.value;
     if (!username || !password) return fail("Введіть логін і пароль.");
-    const btn = form.querySelector("button[type=submit]");
-    btn.disabled = true;
+
+    setBusy(true);
     try {
       const body = new URLSearchParams({ username: username, password: password });
-      const res = await Api.post("/api/auth/token", body, { noRedirect: true });
-      Api.setToken(res.access_token);
-      // ЗАГЛУШКА: коли з'явиться GET /api/auth/me, роль братиметься з сервера.
-      let role = roleSel.value;
-      try {
-        const me = await Api.get("/api/auth/me", { noRedirect: true });
-        if (me && me.role_id) role = me.role_id;
-      } catch (ignored) { /* ендпоінта ще немає */ }
-      Api.setRole(role);
-      const next = new URLSearchParams(location.search).get("next");
-      location.href = next && next.charAt(0) === "/" && next.charAt(1) !== "/" ? next : Api.ROLES[role].home;
+      const result = await Api.post("/api/auth/token", body, { noRedirect: true });
+      Api.setToken(result.access_token);
+      openCabinet(await loadCabinet());
     } catch (err) {
+      Api.setToken(null);
+      Api.setRole(null);
       fail(err.status === 401 ? "Неправильний логін або пароль." : err.message);
-    } finally {
-      btn.disabled = false;
+      setBusy(false);
     }
   });
 })();
