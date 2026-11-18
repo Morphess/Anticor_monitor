@@ -28,7 +28,9 @@ from app.api.reports import router as reports_router
 from app.api.action_logs import router as action_logs_router
 from app.api.orders import router as orders_router
 from app.api.risk_flags import router as risk_flags_router
-from app.web.pages import router as pages_router
+from app.api.program_import import router as program_import_router
+from app.api.program_workflow import router as program_workflow_router
+
 
 # Налаштування логування
 logger = logging.getLogger(__name__)
@@ -94,9 +96,9 @@ app.include_router(reports_router, prefix="/api")
 app.include_router(action_logs_router, prefix="/api")
 app.include_router(orders_router, prefix="/api")
 app.include_router(risk_flags_router, prefix="/api")
+app.include_router(program_import_router, prefix="/api")
+app.include_router(program_workflow_router, prefix="/api")
 
-# Сторінки кабінетів (HTML)
-app.include_router(pages_router)
 
 # HTML-шаблони
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
