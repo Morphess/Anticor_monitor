@@ -3,8 +3,10 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.dependencies import get_current_user
 from app.database.db_connection import get_db
 from app.models.user import User
+from app.schemas.users import UserRead
 from app.core.security import (
     verify_password,
     create_access_token,
@@ -25,3 +27,9 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
 
     # Повертаємо JWT-токен
     return {"access_token": create_access_token(user.id), "token_type": "bearer"}
+
+
+# Поточний користувач — фронтенд бере звідси роль і програму
+@router.get("/me", response_model=UserRead)
+def read_me(user: User = Depends(get_current_user)):
+    return user

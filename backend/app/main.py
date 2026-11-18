@@ -13,6 +13,8 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.database.db_connection import get_db, engine
 
+from app.core.audit import enable_audit
+
 from app.api.auth import router as auth_router
 from app.api.users import router as users_router
 from app.api.programs import router as programs_router
@@ -23,6 +25,10 @@ from app.api.execution import router as execution_router
 from app.api.evidences import router as evidences_router
 from app.api.deadline_changes import router as deadline_changes_router
 from app.api.reports import router as reports_router
+from app.api.action_logs import router as action_logs_router
+from app.api.orders import router as orders_router
+from app.api.risk_flags import router as risk_flags_router
+from app.web.pages import router as pages_router
 
 # Налаштування логування
 logger = logging.getLogger(__name__)
@@ -48,6 +54,8 @@ async def lifespan(app: FastAPI):
         engine.dispose()
         logger.info("Anticor Monitor завершив роботу.")
 
+
+enable_audit()
 
 # Створення FastAPI
 app = FastAPI(
@@ -83,7 +91,12 @@ app.include_router(execution_router, prefix="/api")
 app.include_router(evidences_router, prefix="/api")
 app.include_router(deadline_changes_router, prefix="/api")
 app.include_router(reports_router, prefix="/api")
+app.include_router(action_logs_router, prefix="/api")
+app.include_router(orders_router, prefix="/api")
+app.include_router(risk_flags_router, prefix="/api")
 
+# Сторінки кабінетів (HTML)
+app.include_router(pages_router)
 
 # HTML-шаблони
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))

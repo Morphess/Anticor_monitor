@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Моніторинг антикорупційної програми{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/monitor.css">
+</head>
+<body>
+  {% block header %}
+  <header class="topbar">
+    <a class="brand" href="/">Антикорупційна програма</a>
+    <div class="who">
+      <span data-role-name>{% block role_name %}{% endblock %}</span>
+      <button type="button" data-logout>Вийти</button>
+    </div>
+  </header>
+  {% endblock %}
+  <main class="page">
+    <div id="page-error" class="alert hidden" role="alert"></div>
+    {% block content %}{% endblock %}
+  </main>
+  <script src="/static/js/api.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

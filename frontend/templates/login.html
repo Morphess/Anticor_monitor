@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Вхід — моніторинг антикорупційної програми{% endblock %}
+{% block header %}
+<header class="topbar"><span class="brand">Антикорупційна програма</span></header>
+{% endblock %}
+{% block content %}
+<form class="login" id="login-form" novalidate>
+  <h1>Вхід до системи</h1>
+  <p class="muted small">Моніторинг виконання антикорупційної програми</p>
+  <div id="login-error" class="alert hidden" role="alert"></div>
+  <label class="field">Логін
+    <input name="username" autocomplete="username" required>
+  </label>
+  <label class="field">Пароль
+    <input name="password" type="password" autocomplete="current-password" required>
+  </label>
+  <button class="btn btn-dark" type="submit">Увійти</button>
+</form>
+{% endblock %}
+{% block scripts %}<script src="/static/js/login.js"></script>{% endblock %}

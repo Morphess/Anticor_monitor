@@ -31,9 +31,10 @@ MEASURE = {
     "resources": "Тестові ресурси",
 }
 
+
 class MeasuresAccessHttpTests(unittest.TestCase):
     def setUp(self):
-        self.db = Mock()
+        self.db = Mock(info={})
         app = FastAPI()
         app.include_router(measures_router, prefix="/api")
         app.dependency_overrides[get_db] = lambda: self.db

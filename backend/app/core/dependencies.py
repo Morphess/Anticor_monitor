@@ -43,6 +43,8 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    db.info["audit_actor_id"] = user.id
+
     return user
 
 
@@ -53,3 +55,13 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
         raise HTTPException(status_code=403, detail="Недостатньо прав")
 
     return user
+
+
+# Перевірка, що роль користувача входить до дозволених
+def require_roles(*roles: str):
+    def checker(user: User = Depends(get_current_user)) -> User:
+        if user.role_id not in roles:
+            raise HTTPException(status_code=403, detail="Недостатньо прав")
+        return user
+
+    return checker
