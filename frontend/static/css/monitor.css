@@ -117,11 +117,11 @@ code { font-size: .92em; background: var(--sunken); padding: 1px 5px; border-rad
 .notif-list button:hover { background: var(--sunken); }
 .notif-list .lvl { border-radius: 2px; background: var(--warn); }
 .notif-list .lvl.late { background: var(--bad); }
-.notif-list .lvl.rework { background: var(--review); }
+.notif-list .lvl.rework, .notif-list .lvl.review { background: var(--review); }
 .notif-list .what { font-size: 13px; font-weight: 600; }
 .notif-list .which { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
 .notif-empty { padding: 14px; font-size: 13px; color: var(--muted); }
-.mrow.flash { animation: flash 1.6s ease-out; }
+.flash { animation: flash 1.6s ease-out; }
 @keyframes flash { from { background: var(--sunken); } to { background: transparent; } }
 :root[data-theme="dark"] .theme-toggle .i-sun { display: block; }
 :root[data-theme="dark"] .theme-toggle .i-moon { display: none; }
@@ -211,6 +211,7 @@ table.grid td.num-cell { font-variant-numeric: tabular-nums; }
 .bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; margin-top: 6px; min-width: 80px; }
 .bar > span { display: block; height: 100%; background: var(--ok); border-radius: 2px; }
 .prog-body { border-top: 1px solid var(--line); padding: 4px 0 8px; }
+.prog-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 18px 10px 34px; }
 .sec { border-top: 1px solid var(--line); }
 .sec:first-child { border-top: 0; }
 .sec > .row-head { padding-left: 34px; background: none; }
@@ -293,6 +294,39 @@ button.card:hover { border-color: var(--line-strong); }
 dialog { border: 1px solid var(--line); border-radius: 14px; padding: 24px; max-width: 760px; width: calc(100% - 32px); background: var(--surface); color: var(--ink); box-shadow: 0 20px 60px rgba(0,0,0,.2); }
 dialog::backdrop { background: rgba(0,0,0,.45); }
 dialog h2 { margin-top: 0; font-size: 18px; }
+.dept-pick { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px 12px; margin: 0 0 14px; }
+.dept-pick legend { padding: 0 6px; font-size: 13px; color: var(--muted); }
+.dept-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.btn-sm { padding: 4px 10px; font-size: 12.5px; min-height: 0; }
+.dept-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px 16px; max-height: 220px; overflow: auto; }
+.dept-item { display: flex; align-items: center; gap: 8px; font-size: 13.5px; padding: 4px 0; cursor: pointer; }
+.dept-item input { accent-color: var(--accent); width: 16px; height: 16px; }
+.period-col { display: flex; flex-direction: column; gap: 8px; }
+dialog.wide { max-width: 1000px; }
+.assign-body { max-height: 62vh; overflow: auto; }
+.assign-body .prog { box-shadow: none; margin: 10px 0 0; }
+.assign-rows { padding: 0 18px 6px 52px; }
+.assign-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; padding: 10px 0; border-top: 1px solid var(--line); }
+.assign-row .num { font-weight: 650; color: var(--muted); }
+/* Випадний список із пошуком і множинним вибором. */
+.mpick { min-width: 0; }
+.mpick-field { width: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-height: 40px; padding: 4px 6px 4px 8px; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 8px; cursor: text; color: var(--ink); }
+.mpick-field:hover { border-color: var(--faint); }
+.mpick-field.open, .mpick-field:focus-within { border-color: var(--focus); }
+.mpick-chips { display: contents; }
+.mpick-input { flex: 1; min-width: 140px; border: 0; outline: 0; background: none; color: var(--ink); font-size: 13.5px; padding: 6px 2px; }
+.mpick-input::placeholder { color: var(--muted); }
+.mpick-arrow-btn { margin-left: auto; display: inline-grid; place-items: center; width: 28px; height: 28px; border: 0; background: none; cursor: pointer; border-radius: 6px; }
+.mpick-arrow-btn:hover { background: var(--sunken); }
+.mpick-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 4px 1px 8px; border-radius: 999px; background: var(--sunken); border: 1px solid var(--line); font-size: 12.5px; }
+.mpick-chip .x { padding: 0 4px; border-radius: 999px; color: var(--muted); cursor: pointer; }
+.mpick-chip .x:hover { background: var(--line); color: var(--ink); }
+.mpick-arrow { flex: none; width: 7px; height: 7px; margin: 0 2px 3px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(45deg); transition: transform .15s; }
+.mpick-field.open .mpick-arrow { transform: rotate(-135deg); margin-bottom: -3px; }
+.mpick-pop { margin-top: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow); padding: 4px 10px 8px; }
+.mpick-list { max-height: 240px; overflow: auto; }
+.mpick-group { position: sticky; top: 0; background: var(--surface); font-size: 11.5px; font-weight: 650; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 8px 2px 4px; }
+@media (max-width: 720px) { .assign-row { grid-template-columns: 1fr; } .assign-rows { padding-left: 18px; } }
 
 /* ---------- Вхід ---------- */
 .login { max-width: 400px; margin: 72px auto; border: 1px solid var(--line); border-radius: 14px; padding: 32px; background: var(--surface); box-shadow: var(--shadow); }
@@ -305,7 +339,7 @@ dialog h2 { margin-top: 0; font-size: 18px; }
 /* ---------- Сигнали Risk Flags, накази, підтвердження ---------- */
 .flag { display: inline-block; padding: 0 7px; border: 1px solid var(--bad); color: var(--bad); background: var(--bad-bg); border-radius: 999px; font-size: 11.5px; font-weight: 700; margin: 0 4px 4px 0; cursor: help; white-space: nowrap; line-height: 18px; }
 .flags { display: inline-flex; flex-wrap: wrap; align-items: center; }
-.measure .row-head { grid-template-columns: 12px 56px 1fr auto auto auto; }
+.measure .row-head { grid-template-columns: 12px 56px 1fr auto auto; }
 .detail { margin: 4px 0 16px 68px; display: grid; gap: 16px; padding: 14px 0 4px; }
 .detail .units { margin: 0; }
 .detail h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 6px; font-weight: 650; }

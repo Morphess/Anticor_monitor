@@ -40,7 +40,6 @@
       periodSel.addEventListener("change", load);
       search.addEventListener("input", render);
       filterSel.addEventListener("change", render);
-      setupBell();
       await load();
     } catch (err) {
       Api.showError(err);
@@ -79,10 +78,7 @@
       (ordersByMeasure[m.id] || []).some(function (o) { return matches(o.number, q) || matches(o.title, q); });
   }
 
-  function daysLeft(m) {
-    if (!m.deadline_on) return null;
-    return Math.round((new Date(m.deadline_on + "T00:00:00") - new Date(Api.today() + "T00:00:00")) / 86400000);
-  }
+  const daysLeft = Notify.daysLeft;
 
   function passesFilter(m, f) {
     if (!f) return true;
@@ -233,76 +229,37 @@
 
   // ---------- сповіщення (дзвіночок) ----------
 
-  const bell = document.getElementById("bell");
-  const panel = document.getElementById("notif-panel");
-
   // Що потребує уваги за обраний період: прострочено, строк ≤ 30 днів, повернуто на доопрацювання.
   // Заходи, уже подані на розгляд або виконані, не турбують.
-  function notifications() {
+  function renderNotifs() {
     const out = [];
     programs.forEach(function (p) {
       (measuresByProg[p.id] || []).forEach(function (m) {
         const st = Api.statusOf(executions[m.id]);
         if (st === "done" || st === "review") return;
-        const where = p.id + " · " + Api.measureNo(m) + " " + m.description;
-        if (st === "rework") out.push({ m: m, p: p, lvl: "rework", rank: 1, what: "Повернуто на доопрацювання", which: where });
+        const which = p.id + " · " + Api.measureNo(m) + " " + m.description;
+        const go = function () { goTo(p, m); };
+        if (st === "rework") out.push({ lvl: "rework", rank: 1, what: "Повернуто на доопрацювання", which: which, go: go });
         const d = daysLeft(m);
         if (d === null) return;
-        if (d < 0) out.push({ m: m, p: p, lvl: "late", rank: 0, days: d, what: "Прострочено на " + -d + " дн.", which: where });
-        else if (d <= 30) out.push({ m: m, p: p, lvl: "soon", rank: 2, days: d, what: d === 0 ? "Строк спливає сьогодні" : "Строк спливає через " + d + " дн.", which: where });
+        if (d < 0) out.push({ lvl: "late", rank: 0, days: d, what: "Прострочено на " + -d + " дн.", which: which, go: go });
+        else if (d <= 30) out.push({ lvl: "soon", rank: 2, days: d, what: d === 0 ? "Строк спливає сьогодні" : "Строк спливає через " + d + " дн.", which: which, go: go });
       });
     });
-    return out.sort(function (a, b) { return a.rank - b.rank || (a.days || 0) - (b.days || 0); });
-  }
-
-  function renderNotifs() {
-    const list = notifications();
-    const badge = document.getElementById("bell-count");
-    badge.textContent = list.length > 99 ? "99+" : String(list.length);
-    badge.classList.toggle("hidden", !list.length);
-    bell.setAttribute("aria-label", "Сповіщення: " + list.length);
-    const ul = document.getElementById("notif-list");
-    ul.innerHTML = "";
-    if (!list.length) {
-      ul.appendChild(el("li", { class: "notif-empty", text: "Усе гаразд — термінових справ немає." }));
-      return;
-    }
-    list.forEach(function (n) {
-      ul.appendChild(el("li", {}, [el("button", { type: "button", onclick: function () { goTo(n); } }, [
-        el("span", { class: "lvl " + n.lvl, "aria-hidden": "true" }),
-        el("span", {}, [el("div", { class: "what", text: n.what }), el("div", { class: "which", text: n.which })]),
-      ])]));
-    });
-  }
-
-  function setPanel(show) {
-    panel.classList.toggle("hidden", !show);
-    bell.setAttribute("aria-expanded", String(show));
-  }
-
-  function setupBell() {
-    bell.addEventListener("click", function (e) { e.stopPropagation(); setPanel(panel.classList.contains("hidden")); });
-    panel.addEventListener("click", function (e) { e.stopPropagation(); });
-    document.addEventListener("click", function () { setPanel(false); });
-    document.addEventListener("keydown", function (e) {
-      if (e.key === "Escape" && !panel.classList.contains("hidden")) { setPanel(false); bell.focus(); }
-    });
+    out.sort(function (a, b) { return a.rank - b.rank || (a.days || 0) - (b.days || 0); });
+    Notify.render(out, "Усе гаразд — термінових справ немає.");
   }
 
   // Перехід до заходу зі сповіщення: скинути пошук і фільтр, розгорнути гілку, підсвітити рядок.
-  function goTo(n) {
-    setPanel(false);
+  function goTo(p, m) {
     search.value = "";
     filterSel.value = "";
-    open.add("p:" + n.p.id);
-    open.add("s:" + n.p.id + ":" + n.m.section_id);
+    open.add("p:" + p.id);
+    open.add("s:" + p.id + ":" + m.section_id);
     render();
-    const row = document.getElementById("row-" + n.m.id);
-    if (!row) return;
-    row.scrollIntoView({ behavior: "smooth", block: "center" });
-    row.classList.add("flash");
-    setTimeout(function () { row.classList.remove("flash"); }, 1700);
-    const input = row.querySelector("input");
+    const row = document.getElementById("row-" + m.id);
+    Notify.flash(row);
+    const input = row && row.querySelector("input");
     if (input) input.focus({ preventScroll: true });
   }
 

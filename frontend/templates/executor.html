@@ -1,16 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Мої заходи — виконавець{% endblock %}
-{% block who_label %}<span class="ident" id="ident"></span>
-<div class="notif">
-  <button type="button" class="icon-btn bell" id="bell" aria-haspopup="true" aria-expanded="false" aria-controls="notif-panel" aria-label="Сповіщення" title="Сповіщення">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>
-    <span class="badge hidden" id="bell-count"></span>
-  </button>
-  <div class="notif-panel hidden" id="notif-panel" role="region" aria-label="Сповіщення">
-    <div class="notif-head">Сповіщення</div>
-    <ul class="notif-list" id="notif-list"></ul>
-  </div>
-</div>{% endblock %}
+{% block who_label %}<span class="ident" id="ident"></span>{% endblock %}
+{% block topbar_tools %}{% include "_bell.html" %}{% endblock %}
 {% block content %}
 <div class="toolbar">
   <label class="field" style="flex:1">Пошук
@@ -32,4 +23,4 @@
 </div>
 <div id="programs"><p class="muted">Завантаження…</p></div>
 {% endblock %}
-{% block scripts %}<script src="/static/js/executor.js"></script>{% endblock %}
+{% block scripts %}<script src="/static/js/notify.js"></script><script src="/static/js/executor.js"></script>{% endblock %}

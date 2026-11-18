@@ -53,6 +53,7 @@ class FrontendPagesTests(unittest.TestCase):
             "js/coordinator.js",
             "js/summary.js",
             "js/insights.js",
+            "js/notify.js",
             "js/manager.js",
             "js/analyst.js",
             "js/admin.js",
