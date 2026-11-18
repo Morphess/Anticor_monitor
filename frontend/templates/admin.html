@@ -1,65 +1,83 @@
-{% extends "_base.html" %}
-{% set role_name = "Адміністратор" %}
-{% set unit_hint = "" %}
-{% block title %}Користувачі — адміністратор{% endblock %}
-{% block nav_links %}<a class="link-light small" href="/coordinator">Програми</a>{% endblock %}
+{% extends "base.html" %}
+{% block title %}Адміністрування{% endblock %}
+{% block role_name %}Адміністратор{% endblock %}
 {% block content %}
-<div class="d-flex flex-wrap gap-2 mb-3">
-  <button class="btn btn-dark" type="button" id="create" aria-expanded="false" aria-controls="user-form">Створити користувача</button>
-  <div class="input-group flex-grow-1 search-group">
-    <span class="input-group-text bg-body" aria-hidden="true">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
-    </span>
-    <label class="visually-hidden" for="q">Пошук користувача</label>
-    <input class="form-control" type="search" id="q" placeholder="Пошук за логіном, підрозділом, посадою або роллю" autocomplete="off">
+<section class="unit">
+  <div>
+    <p class="label">Адміністрування</p>
+    <h1>Користувачі та журнал дій</h1>
   </div>
+</section>
+<div class="tabs" role="tablist">
+  <button type="button" role="tab" aria-selected="true" data-tab="users">Користувачі</button>
+  <button type="button" role="tab" aria-selected="false" data-tab="programs">Програми</button>
+  <button type="button" role="tab" aria-selected="false" data-tab="flags">Сигнали</button>
+  <button type="button" role="tab" aria-selected="false" data-tab="log">Журнал дій</button>
 </div>
 
-<form class="card card-body mb-3" id="user-form" hidden novalidate>
-  <h2 class="h5 mb-3">Новий користувач</h2>
-  <div class="row g-3">
-    <div class="col-md-4">
-      <label class="form-label fw-semibold" for="f-login">Логін</label>
-      <input class="form-control" id="f-login" name="login" autocomplete="off" required>
+<section data-panel="users">
+  <form id="user-form" class="card" style="margin-bottom:20px">
+    <h2 style="margin-top:0">Новий користувач</h2>
+    <div class="form-grid">
+      <label class="field">Логін<input name="login" required minlength="3" pattern="[A-Za-z0-9_.\-]+"></label>
+      <label class="field">Пароль (від 12 символів)<input name="password" type="password" required minlength="12" autocomplete="new-password"></label>
+      <label class="field">Роль
+        <select name="role_id">
+          <option value="VYK">Виконавець</option><option value="KOORD">Координатор програми</option>
+          <option value="KER">Керівник</option><option value="ANAL">Аналітик</option><option value="ADMIN">Адміністратор</option>
+        </select>
+      </label>
+      <label class="field">Програма<select name="program_id"><option value="">—</option></select></label>
+      <label class="field">Підрозділ<select name="department_id"><option value="">—</option></select></label>
+      <label class="field">Посада<input name="position"></label>
     </div>
-    <div class="col-md-4">
-      <label class="form-label fw-semibold" for="f-password">Пароль</label>
-      <input class="form-control" id="f-password" name="password" type="password" autocomplete="new-password" required aria-describedby="f-password-help">
-      <div class="form-text" id="f-password-help">Щонайменше 12 символів</div>
-    </div>
-    <div class="col-md-4">
-      <label class="form-label fw-semibold" for="f-role">Роль</label>
-      <select class="form-select" name="role_id" id="f-role"></select>
-    </div>
-    <div class="col-md-4">
-      <label class="form-label fw-semibold" for="f-department">Підрозділ</label>
-      <select class="form-select" name="department_id" id="f-department"></select>
-    </div>
-    <div class="col-md-4">
-      <label class="form-label fw-semibold" for="f-position">Посада</label>
-      <input class="form-control" id="f-position" name="position" autocomplete="off">
-    </div>
-    <div class="col-md-4">
-      <label class="form-label fw-semibold" for="f-program">Програма</label>
-      <select class="form-select" name="program_id" id="f-program"></select>
-    </div>
+    <div id="user-msg" class="msg"></div>
+    <button class="btn btn-dark" type="submit">Створити користувача</button>
+  </form>
+  <div class="table-wrap">
+    <table class="grid">
+      <thead><tr><th>ID</th><th>Логін</th><th>Роль</th><th>Підрозділ</th><th>Посада</th><th>Програма</th></tr></thead>
+      <tbody id="users"></tbody>
+    </table>
   </div>
-  <div class="text-danger small mt-3" id="form-error" role="alert"></div>
-  <div class="d-flex justify-content-end gap-2 mt-3">
-    <button class="btn btn-outline-dark" type="button" id="cancel">Скасувати</button>
-    <button class="btn btn-dark" type="submit">Створити</button>
-  </div>
-</form>
+</section>
 
-<div class="alert alert-success py-2" id="saved" role="status"></div>
-<div class="table-responsive border rounded">
-  <table class="table table-hover align-middle mb-0">
-    <thead class="table-dark">
-      <tr><th>Логін</th><th>Підрозділ</th><th class="d-none d-md-table-cell">Посада</th><th>Роль</th></tr>
-    </thead>
-    <tbody id="users"></tbody>
-  </table>
-  <p class="text-secondary p-3 mb-0" id="empty" hidden></p>
-</div>
+<section data-panel="programs" class="hidden">
+  <div class="table-wrap">
+    <table class="grid">
+      <thead><tr><th>Код</th><th>Назва</th><th>Початок</th><th>Завершення</th><th>Стан</th></tr></thead>
+      <tbody id="programs"></tbody>
+    </table>
+  </div>
+</section>
+
+<section data-panel="flags" class="hidden">
+  <form id="flags-form" class="toolbar">
+    <label class="field">Звітний період <select name="period" id="flags-period"></select></label>
+    <label class="field">Дата зрізу <input name="as_of" type="date" required></label>
+    <label class="field">Правило
+      <select name="code"><option value="">Усі</option></select>
+    </label>
+    <button class="btn btn-dark" type="submit">Перевірити</button>
+  </form>
+  <p class="muted small">Сигнал означає, що запис треба перевірити, а не доведене порушення. Дата зрізу не може бути раніше кінця періоду.</p>
+  <div id="flags-msg" class="msg"></div>
+  <div class="table-wrap">
+    <table class="grid">
+      <thead><tr><th>Код</th><th>Об'єкт</th><th>Сигнал</th><th>Пояснення</th></tr></thead>
+      <tbody id="flags"></tbody>
+    </table>
+  </div>
+</section>
+
+<section data-panel="log" class="hidden">
+  <div class="table-wrap">
+    <table class="grid">
+      <thead><tr><th>Час</th><th>Користувач</th><th>Дія</th><th>Об'єкт</th><th>Поле</th><th>Було</th><th>Стало</th></tr></thead>
+      <tbody id="log"></tbody>
+    </table>
+  </div>
+  <div class="toolbar" style="margin-top:12px"><button class="btn" type="button" id="log-more">Показати ще</button></div>
+</section>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', path='js/admin.js') }}"></script>{% endblock %}
+{% block scripts %}<script src="/static/js/admin.js"></script>{% endblock %}

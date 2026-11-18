@@ -1,26 +1,39 @@
-{% extends "_base.html" %}
-{% set role_name = "Виконавець" %}
-{% set unit_hint = "Введіть номер наказу й натисніть Enter — система перевірить його в базі, статус оновиться сам" %}
+{% extends "base.html" %}
 {% block title %}Заходи підрозділу — виконавець{% endblock %}
+{% block role_name %}Виконавець{% endblock %}
 {% block content %}
-<div class="table-responsive border rounded">
-  <table class="table table-hover align-top mb-0 executor-table">
-    <thead class="table-dark">
+<section class="unit">
+  <div>
+    <p class="label">Назва підрозділу</p>
+    <h1 id="unit-name">—</h1>
+  </div>
+  <p class="hint">Введіть номер наказу й натисніть Enter — система перевірить його, статус оновиться сам.</p>
+</section>
+<div class="toolbar">
+  <label class="field hidden" id="dept-field">Підрозділ
+    <select id="dept"></select>
+  </label>
+  <label class="field">Звітний період
+    <select id="period"></select>
+  </label>
+</div>
+<p class="stub hidden" id="dept-stub">За вашим обліковим записом не закріплено жодного заходу, тому підрозділ обирається вручну. Накази чужих заходів сервер не показує.</p>
+<div class="table-wrap">
+  <table class="grid executor-table">
+    <thead>
       <tr>
-        <th style="width:19%">Назва наказу</th>
-        <th style="width:11%">Орган, що видав</th>
+        <th style="width:17%">Назва наказу</th>
+        <th style="width:10%">Орган, що видав</th>
         <th style="width:8%">Поч. дата</th>
         <th style="width:8%">Кін. дата</th>
         <th style="width:14%">№ наказу</th>
         <th style="width:10%">Статус</th>
-        <th style="width:16%">Ціль</th>
+        <th style="width:19%">Ціль</th>
         <th>Примітка</th>
       </tr>
     </thead>
-    <tbody id="rows">
-      <tr><td colspan="8" class="text-secondary">Завантаження…</td></tr>
-    </tbody>
+    <tbody id="rows"><tr><td colspan="8" class="muted">Завантаження…</td></tr></tbody>
   </table>
 </div>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', path='js/executor.js') }}"></script>{% endblock %}
+{% block scripts %}<script src="/static/js/executor.js"></script>{% endblock %}

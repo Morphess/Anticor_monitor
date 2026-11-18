@@ -43,6 +43,8 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    db.info["audit_actor_id"] = user.id
+
     return user
 
 

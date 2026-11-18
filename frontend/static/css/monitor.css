@@ -1,85 +1,133 @@
-/* Доповнення до Bootstrap 5.3: мінімалістична чорно-біла тема й те, чого в Bootstrap немає
-   (кольорові позначки статусів, смуги графіків, підказка). Розмітку й відступи задають класи Bootstrap. */
-
-/* ---------- Тема ---------- */
+/* Мінімалістичний чорно-білий стиль кабінетів. Без зовнішніх шрифтів і CDN (закритий контур). */
 :root {
-  --bs-body-font-family: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
-  --bs-body-font-size: .95rem;
-  --bs-border-radius: .5rem;
-  --bs-link-color-rgb: 33, 37, 41;
-  --bs-link-hover-color-rgb: 0, 0, 0;
-  --bs-focus-ring-color: rgba(0, 0, 0, .25);
-  /* Кольори статусів — ті самі в позначках і на графіках */
-  --st-done: #2f6b4f;
-  --st-review: #2f6fb0;
-  --st-rework: #d79a22;
-  --st-not: #a5322b;
+  --ink: #000000;
+  --paper: #ffffff;
+  --muted: #595959;
+  --line: #d9d9d9;
+  --soft: #f4f4f4;
+  --ok: #2f6b4f;
+  --review: #2f6fb0;
+  --rework: #8a5a00;
+  --bad: #a5322b;
+  --idle: #8c8c8c;
 }
-.form-control:focus, .form-select:focus { border-color: #000; box-shadow: 0 0 0 .2rem var(--bs-focus-ring-color); }
-.btn:focus-visible, .nav-link:focus-visible, summary:focus-visible { outline: 2px solid #000; outline-offset: 2px; box-shadow: none; }
-.nav-underline { --bs-nav-link-color: var(--bs-secondary-color); --bs-nav-link-hover-color: #000; --bs-nav-underline-link-active-color: #000; border-bottom: 1px solid var(--bs-border-color); }
-.nav-underline .nav-link { font-weight: 600; padding-bottom: .6rem; }
-summary { cursor: pointer; }
-.unit-hint { max-width: 32rem; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--paper); color: var(--ink); }
+body { font: 15px/1.45 "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif; }
+a { color: var(--ink); }
+a:hover { color: #444; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 
-/* Порожні повідомлення не займають місця */
-#page-error:empty, #login-error:empty, #form-error:empty, #saved:empty { display: none; }
+.topbar { background: var(--ink); color: var(--paper); display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 14px 32px; }
+.topbar .brand { font-weight: 650; font-size: 16px; color: var(--paper); text-decoration: none; }
+.topbar .who { display: flex; align-items: center; gap: 20px; font-size: 14px; color: #c8c8c8; }
+.topbar .who a, .topbar .who button { color: var(--paper); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
 
-/* ---------- Статуси: кольорова позначка + текст ---------- */
-.st { display: inline-flex; align-items: center; gap: .45rem; white-space: nowrap; }
-.st::before { content: ""; width: .5rem; height: .5rem; border-radius: 50%; background: var(--dot, #9a9a9a); flex: none; }
-.st-done { --dot: var(--st-done); }
-.st-review { --dot: var(--st-review); }
-.st-rework { --dot: var(--st-rework); }
-.st-not { --dot: var(--st-not); }
-.legend-name { min-width: 10rem; }
+.page { max-width: 1376px; margin: 0 auto; padding: 32px 32px 64px; }
+.unit { border: 2px solid var(--ink); border-radius: 10px; padding: 20px 28px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.unit .label { margin: 0 0 4px; font-size: 13px; color: var(--muted); }
+.unit h1 { margin: 0; font-size: 28px; line-height: 1.2; font-weight: 700; }
+.unit .hint { margin: 0; font-size: 14px; color: var(--muted); max-width: 520px; }
+.toolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin-bottom: 20px; }
+.field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.field input, .field select, .field textarea { padding: 8px 10px; border: 1px solid var(--idle); border-radius: 4px; background: var(--paper); color: var(--ink); font-size: 14px; min-width: 180px; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border: 1px solid var(--ink); border-radius: 4px; background: var(--paper); cursor: pointer; font-size: 14px; font-weight: 600; }
+.btn:hover { background: var(--soft); }
+.btn-dark { background: var(--ink); color: var(--paper); }
+.btn-dark:hover { background: #333; }
+.btn[disabled] { opacity: .5; cursor: default; }
 
-/* ---------- Списки, що розгортаються (програми, заходи) ---------- */
-.row-btn { --bs-btn-hover-bg: var(--bs-tertiary-bg); --bs-btn-active-bg: var(--bs-tertiary-bg); border: 0; }
-.item-n { width: 3rem; }
+.alert { border: 1px solid var(--bad); color: var(--bad); border-radius: 6px; padding: 10px 14px; margin-bottom: 16px; }
+.stub { border: 1px dashed var(--idle); border-radius: 6px; padding: 10px 14px; color: var(--muted); font-size: 13px; margin: 0 0 16px; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.hidden { display: none !important; }
 
-/* ---------- Таблиці ---------- */
-.executor-table { min-width: 1100px; }
-.units-table { min-width: 520px; }
-.attention-table { min-width: 760px; }
-.font-monospace-num { font-variant-numeric: tabular-nums; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--ink); border-radius: 6px; }
+table.grid { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.grid th { background: var(--ink); color: var(--paper); text-align: left; font-weight: 600; padding: 12px 14px; }
+table.grid td { padding: 12px 14px; border-top: 1px solid var(--line); vertical-align: top; }
+table.grid td.nowrap { white-space: nowrap; }
+.executor-table { min-width: 1240px; }
+.order-input { width: 100%; padding: 8px 10px; border: 1px solid var(--idle); border-radius: 4px; font-size: 14px; background: var(--paper); }
+.order-input.ok { border-color: var(--ok); }
+.order-input.err { border-color: var(--bad); }
+.msg { margin-top: 6px; font-size: 13px; font-weight: 600; }
+.msg.ok { color: var(--ok); }
+.msg.err { color: var(--bad); }
 
-/* ---------- Графіки: складена смуга ---------- */
-.stack { display: flex; gap: 2px; height: 1.375rem; min-width: 0; }
-.seg { min-width: 4px; background: var(--dot); cursor: default; }
-.seg:first-child { border-radius: 4px 0 0 4px; }
-.seg:last-child { border-radius: 0 4px 4px 0; }
-.seg:only-child { border-radius: 4px; }
-.seg:hover { outline: 2px solid #000; outline-offset: 1px; }
-.seg-done { --dot: var(--st-done); }
-.seg-review { --dot: var(--st-review); }
-.seg-rework { --dot: var(--st-rework); }
-.seg-not { --dot: var(--st-not); }
-.seg-empty { flex: 1; background: var(--bs-secondary-bg); border-radius: 4px; }
-.bar-row { display: grid; grid-template-columns: minmax(0, 16rem) minmax(0, 1fr) 6.5rem; gap: 1rem; align-items: center; font-size: .875rem; }
-.bar-name { overflow-wrap: anywhere; }
-.bar-val { display: grid; text-align: right; line-height: 1.25; }
-.bar-val b { font-size: 1rem; }
-.chart-tip { position: fixed; z-index: 1080; pointer-events: none; background: #000; color: #fff; font-size: .8125rem; padding: .375rem .625rem; border-radius: .375rem; max-width: 20rem; }
+.st { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.st::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--idle); }
+.st-done::before { background: var(--ok); }
+.st-review::before { background: var(--review); }
+.st-rework::before { background: var(--rework); }
+.st-not::before { background: var(--bad); }
+.st-work::before { background: var(--review); opacity: .5; }
 
-/* ---------- Тексти звітів і запитів: зберігаємо абзаци ---------- */
-.text-prewrap { white-space: pre-wrap; overflow-wrap: anywhere; }
-.requests-table { min-width: 680px; }
-.context-table { min-width: 560px; }
-@media print {
-  .chart-panel, .card { break-inside: avoid; }
-  details.as-table, .chart-panel details { display: none; }
+/* Координатор: програма → розділ → захід → підрозділи */
+.prog { border: 1px solid var(--ink); border-radius: 8px; margin-bottom: 14px; }
+.row-head { width: 100%; display: grid; grid-template-columns: 1fr auto auto; gap: 18px; align-items: center; text-align: left; background: none; border: 0; padding: 14px 18px; cursor: pointer; }
+.row-head:hover { background: var(--soft); }
+.row-head .title { font-weight: 600; }
+.row-head .meta { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.count { font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; margin-top: 6px; }
+.bar > span { display: block; height: 100%; background: var(--ink); }
+.prog-body { border-top: 1px solid var(--line); padding: 4px 0 8px; }
+.sec { border-top: 1px solid var(--line); }
+.sec:first-child { border-top: 0; }
+.sec > .row-head { padding-left: 34px; }
+.sec-body { padding: 0 18px 10px 50px; }
+.measure > .row-head { padding: 10px 12px; grid-template-columns: 56px 1fr auto; border-top: 1px solid var(--soft); }
+.measure .num { font-weight: 700; font-variant-numeric: tabular-nums; }
+.units { margin: 4px 0 14px 68px; }
+.units table.grid th { padding: 8px 12px; }
+.units table.grid td { padding: 8px 12px; }
+.units select { padding: 6px 8px; border: 1px solid var(--idle); border-radius: 4px; background: var(--paper); }
+
+/* Зведення */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 24px; }
+.card { border: 1px solid var(--ink); border-radius: 8px; padding: 14px 16px; }
+.card .n { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.card .l { font-size: 13px; color: var(--muted); }
+h2 { font-size: 19px; margin: 28px 0 12px; }
+.tabs { display: flex; gap: 0; border-bottom: 2px solid var(--ink); margin-bottom: 20px; flex-wrap: wrap; }
+.tabs button { background: none; border: 0; padding: 10px 18px; cursor: pointer; font-weight: 600; color: var(--muted); }
+.tabs button[aria-selected="true"] { background: var(--ink); color: var(--paper); border-radius: 6px 6px 0 0; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 14px; }
+dialog { border: 2px solid var(--ink); border-radius: 10px; padding: 24px; max-width: 760px; width: calc(100% - 32px); }
+dialog::backdrop { background: rgba(0,0,0,.4); }
+
+/* Вхід */
+.login { max-width: 420px; margin: 72px auto; border: 2px solid var(--ink); border-radius: 10px; padding: 28px; }
+.login h1 { margin: 0 0 6px; font-size: 24px; }
+.login .field { margin-bottom: 14px; }
+.login .field input, .login .field select { min-width: 0; width: 100%; }
+
+@media (max-width: 720px) {
+  .topbar, .page { padding-left: 16px; padding-right: 16px; }
+  .unit { padding: 16px; }
+  .unit h1 { font-size: 22px; }
+  .row-head { grid-template-columns: 1fr auto; }
+  .row-head .meta { grid-column: 1 / -1; }
+  .sec-body { padding-left: 16px; }
+  .units { margin-left: 0; }
 }
 
-/* ---------- Рекомендації керівника: смуга ліворуч за рівнем уваги ---------- */
-.rec { border-left-width: 6px; }
-.rec-high { border-left-color: var(--st-not); }
-.rec-medium { border-left-color: var(--st-rework); }
-.rec-decided { border-left-color: #000; }
-
-@media (max-width: 767.98px) {
-  .bar-row { grid-template-columns: 1fr auto; }
-  .bar-row .stack { grid-column: 1 / -1; grid-row: 2; }
-  .nav-underline { flex-wrap: nowrap; overflow-x: auto; }
-  .nav-underline .nav-link { white-space: nowrap; }
+/* Сигнали Risk Flags, накази, підтвердження */
+.flag { display: inline-block; padding: 1px 7px; border: 1px solid var(--bad); color: var(--bad); border-radius: 10px; font-size: 12px; font-weight: 700; margin: 0 4px 4px 0; cursor: help; white-space: nowrap; }
+.flags { display: inline-flex; flex-wrap: wrap; align-items: center; }
+.measure .row-head { grid-template-columns: 56px 1fr auto auto; }
+.detail { margin: 4px 0 16px 68px; display: grid; gap: 14px; }
+.detail .units { margin: 0; }
+.detail h3 { font-size: 14px; margin: 0 0 6px; }
+.plain { margin: 0; padding-left: 18px; font-size: 14px; }
+.plain li { margin-bottom: 4px; }
+.inline-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.inline-form .field input { min-width: 140px; }
+.order-name a { font-weight: 500; }
+@media (max-width: 720px) {
+  .detail { margin-left: 0; }
+  .measure .row-head { grid-template-columns: 48px 1fr; }
 }

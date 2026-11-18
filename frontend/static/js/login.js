@@ -1,31 +1,41 @@
-// Вхід: OAuth2-форма -> JWT у localStorage -> сторінка за роллю
-document.getElementById("login-form").addEventListener("submit", async function (e) {
-  e.preventDefault();
-  var err = document.getElementById("login-error");
-  var btn = this.querySelector("button[type=submit]");
-  var login = document.getElementById("login").value.trim();
-  var password = document.getElementById("password").value;
-  err.textContent = "";
-  if (!login || !password) { err.textContent = "Введіть логін і пароль"; return; }
+// Вхід: POST /api/auth/token (OAuth2-форма), далі перехід до кабінету.
+(function () {
+  "use strict";
+  const form = document.getElementById("login-form");
+  const errBox = document.getElementById("login-error");
+  const roleSel = form.elements.role;
+  if (Api.role() && Api.ROLES[Api.role()]) roleSel.value = Api.role();
 
-  btn.disabled = true;
-  try {
-    var res = await fetch("/api/auth/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ username: login, password: password })
-    });
-    var data = await res.json().catch(function () { return {}; });
-    if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Не вдалося увійти");
-    Api.setToken(data.access_token);
-
-    var next = new URLSearchParams(location.search).get("next") || "";
-    if (/^\/(?!\/)/.test(next) && next !== "/login") { location.href = next; return; }
-    var me = await Api.get("/api/auth/me");
-    location.href = { VYK: "/executor", ADMIN: "/admin", ANAL: "/analyst", KER: "/manager" }[me.role_id] || "/coordinator";
-  } catch (ex) {
-    err.textContent = ex.message === "Failed to fetch" ? "Немає зв'язку з сервером" : ex.message;
-  } finally {
-    btn.disabled = false;
+  function fail(text) {
+    errBox.textContent = text;
+    errBox.classList.remove("hidden");
   }
-});
+
+  form.addEventListener("submit", async function (e) {
+    e.preventDefault();
+    errBox.classList.add("hidden");
+    const username = form.elements.username.value.trim();
+    const password = form.elements.password.value;
+    if (!username || !password) return fail("Введіть логін і пароль.");
+    const btn = form.querySelector("button[type=submit]");
+    btn.disabled = true;
+    try {
+      const body = new URLSearchParams({ username: username, password: password });
+      const res = await Api.post("/api/auth/token", body, { noRedirect: true });
+      Api.setToken(res.access_token);
+      // ЗАГЛУШКА: коли з'явиться GET /api/auth/me, роль братиметься з сервера.
+      let role = roleSel.value;
+      try {
+        const me = await Api.get("/api/auth/me", { noRedirect: true });
+        if (me && me.role_id) role = me.role_id;
+      } catch (ignored) { /* ендпоінта ще немає */ }
+      Api.setRole(role);
+      const next = new URLSearchParams(location.search).get("next");
+      location.href = next && next.charAt(0) === "/" && next.charAt(1) !== "/" ? next : Api.ROLES[role].home;
+    } catch (err) {
+      fail(err.status === 401 ? "Неправильний логін або пароль." : err.message);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+})();

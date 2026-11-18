@@ -1,50 +1,33 @@
-{% extends "_base.html" %}
-{% set role_name = "Керівник" %}
-{% set unit_hint = "Ви ухвалюєте рішення за рекомендаціями системи й отримуєте аналітичні звіти від аналітика." %}
-{% set in_tabs = true %}
-{% block title %}Рекомендації й рішення — керівник{% endblock %}
+{% extends "base.html" %}
+{% block title %}Зведення — керівник{% endblock %}
+{% block role_name %}Керівник{% endblock %}
 {% block content %}
-<ul class="nav nav-underline mb-4 d-print-none" role="tablist" aria-label="Розділи кабінету">
-  <li class="nav-item" role="presentation"><button class="nav-link active" type="button" role="tab" id="t-recs" aria-controls="tab-recs" aria-selected="true">Рекомендації <span class="badge rounded-pill text-bg-danger ms-1" id="recs-count" hidden></span></button></li>
-  <li class="nav-item" role="presentation"><button class="nav-link" type="button" role="tab" id="t-reports" aria-controls="tab-reports" aria-selected="false" tabindex="-1">Аналітичні звіти <span class="badge rounded-pill text-bg-danger ms-1" id="reports-count" hidden></span></button></li>
-  <li class="nav-item" role="presentation"><button class="nav-link" type="button" role="tab" id="t-programs" aria-controls="tab-programs" aria-selected="false" tabindex="-1">Програми й заходи</button></li>
-</ul>
-
-<!-- ---------- Рекомендації ---------- -->
-<section id="tab-recs" role="tabpanel" aria-labelledby="t-recs">
-  <details class="card card-body mb-3 small guide" id="recs-guide">
-    <summary class="fw-semibold">Як працювати з рекомендаціями</summary>
-    <ul class="mt-2 mb-0 ps-3">
-      <li>Система щодня перевіряє дані програми за <b>явними правилами</b>: прострочені строки, виконання без підтвердження, ризики без заходів тощо.</li>
-      <li>Коли правило спрацьовує, з'являється <b>рекомендація</b>. У ній видно, що сталося, на підставі яких даних і що система пропонує зробити.</li>
-      <li>Перед рішенням відкрийте <b>«Переглянути деталі»</b>: там програма, розділ, підрозділи-виконавці, наказ і статус заходу.</li>
-      <li>Рекомендація — привід перевірити, а не висновок про порушення. Рішення ухвалюєте ви:
-        <ul class="mb-0">
-          <li><b>Доручити</b> — призначити відповідальний підрозділ і строк. Пропоновані значення вже заповнено, їх можна змінити.</li>
-          <li><b>Відхилити</b> — якщо дія не потрібна. Причину треба вказати: вона зберігається в журналі.</li>
-        </ul>
-      </li>
-      <li>Ухвалені рішення переходять у розділ «Ухвалені рішення» й записуються в журнал дій.</li>
-    </ul>
-  </details>
-
-  <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
-    <div class="btn-group" role="group" aria-label="Які рекомендації показати">
-      <button type="button" class="btn btn-outline-dark active" id="show-pending" aria-pressed="true">Потребують рішення <span class="badge text-bg-light border ms-1" id="n-pending">0</span></button>
-      <button type="button" class="btn btn-outline-dark" id="show-done" aria-pressed="false">Ухвалені рішення <span class="badge text-bg-light border ms-1" id="n-done">0</span></button>
-    </div>
-    <p class="small text-secondary mb-0" id="recs-period"></p>
+<section class="unit">
+  <div>
+    <p class="label">Стан виконання</p>
+    <h1 id="program-title">—</h1>
   </div>
-  <div id="recs" aria-live="polite"></div>
+  <label class="field">Звітний період <select id="period"></select></label>
 </section>
-
-{% include "_reports.html" %}
-{% include "_programs.html" %}
+<div class="cards" id="cards"></div>
+<h2>Потребують уваги</h2>
+<p class="muted small">Строк минув і виконання не погоджено, або система виявила сигнали Risk Flags.</p>
+<div class="table-wrap">
+  <table class="grid">
+    <thead><tr><th>№</th><th>Захід</th><th>Підрозділ</th><th>Строк</th><th>Статус</th><th>Сигнали</th></tr></thead>
+    <tbody id="attention"></tbody>
+  </table>
+</div>
+<h2>Сигнали Risk Flags</h2>
+<div id="flags-summary"></div>
+<h2>За розділами</h2>
+<div class="table-wrap">
+  <table class="grid">
+    <thead><tr><th>Розділ</th><th>Виконано</th><th style="width:40%">Прогрес</th></tr></thead>
+    <tbody id="by-section"></tbody>
+  </table>
+</div>
+<h2>Рішення керівника</h2>
+<p class="stub">Тимчасово недоступно: на сервері поки немає API для доручень і рішень керівника.</p>
 {% endblock %}
-{% block scripts %}
-<script src="{{ url_for('static', path='js/tabs.js') }}"></script>
-<script src="{{ url_for('static', path='js/charts.js') }}"></script>
-<script src="{{ url_for('static', path='js/coordinator.js') }}"></script>
-<script src="{{ url_for('static', path='js/manager.js') }}"></script>
-<script src="{{ url_for('static', path='js/reports.js') }}"></script>
-{% endblock %}
+{% block scripts %}<script src="/static/js/summary.js"></script><script src="/static/js/manager.js"></script>{% endblock %}

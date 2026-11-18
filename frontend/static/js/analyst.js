@@ -1,35 +1,53 @@
-// Кабінет аналітика, вкладка «Аналітика»: зведення й графіки за даними /api/analyst/overview.
-// Графіки — charts.js, вкладки — tabs.js, «Програми й заходи» — coordinator.js, «Запити й звіти» — reports.js.
+// Кабінет аналітика: розріз за підрозділами й розділами, вивантаження CSV.
 (function () {
-  var DATA = null;
+  "use strict";
+  const el = Api.el;
+  let last = null;
 
-  function render() {
-    Charts.render(document.getElementById("analytics-view"),
-      Charts.summarize(DATA, document.getElementById("program").value));
-  }
+  Summary.start(function (d) {
+    last = d;
+    Summary.cards(Summary.countBy(d.measures, d.executions));
+    Summary.bySection(d);
+    Summary.flagsByCode(d);
+    const tbody = document.getElementById("by-dept");
+    tbody.innerHTML = "";
+    const groups = {};
+    d.measures.forEach(function (m) {
+      const k = m.responsible_department_id || "";
+      (groups[k] = groups[k] || []).push(m);
+    });
+    const keys = Object.keys(groups).sort();
+    if (!keys.length) return Summary.emptyRow(tbody, 7, "Заходів немає.");
+    keys.forEach(function (k) {
+      const c = Summary.countBy(groups[k], d.executions);
+      tbody.appendChild(el("tr", {}, [
+        el("td", { text: Api.deptName(k) }),
+        el("td", { text: String(c.total) }),
+        el("td", { text: String(c.done) }),
+        el("td", { text: String(c.review) }),
+        el("td", { text: String(c.rework) }),
+        el("td", { text: String(c.not + c.work + c.none) }),
+        el("td", {}, [Summary.bar(c.done, c.total)]),
+      ]));
+    });
+  });
 
-  // Підказку «Як читати» відкриваємо при першому візиті
-  var guide = document.getElementById("guide");
-  try {
-    if (!localStorage.getItem("analyst_guide_seen")) guide.open = true;
-    guide.addEventListener("toggle", function () { if (!guide.open) localStorage.setItem("analyst_guide_seen", "1"); });
-  } catch (e) { guide.open = true; }
-
-  document.getElementById("program").addEventListener("change", render);
-
-  Api.get("/api/analyst/overview")
-    .then(function (data) {
-      DATA = data;
-      document.getElementById("unit").textContent = data.unit;
-      document.getElementById("period").textContent =
-        "Звітний період: " + Charts.periodText(data.period) + " · дані на " + data.today;
-      var sel = document.getElementById("program");
-      data.programs.forEach(function (p) {
-        var o = Charts.el("option", "", p.name + " (" + p.start + " – " + p.end + ")");
-        o.value = p.id;
-        sel.appendChild(o);
-      });
-      render();
-    })
-    .catch(function (ex) { document.getElementById("page-error").textContent = ex.message; });
+  // Вивантаження таблиці заходів у CSV (формується в браузері, без сервера).
+  document.getElementById("export-csv").addEventListener("click", function () {
+    if (!last) return;
+    const q = function (v) { return '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"'; };
+    const lines = [["№", "Захід", "Підрозділ", "Строк", "Статус", "№ наказу", "Дата", "Сигнали"].map(q).join(";")];
+    last.measures.forEach(function (m) {
+      const ex = last.executions[m.id];
+      lines.push([Api.measureNo(m), m.description, Api.deptName(m.responsible_department_id),
+        m.deadline_on ? Api.fmtDate(m.deadline_on) : (m.deadline_description || ""),
+        Api.STATUS[Api.statusOf(ex)].label, Api.orderNumber(ex), ex && ex.completed_on ? Api.fmtDate(ex.completed_on) : "",
+        (last.flagsByMeasure[m.id] || []).map(function (f) { return f.code; }).join(" ")].map(q).join(";"));
+    });
+    const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const a = el("a", { href: URL.createObjectURL(blob), download: "vykonannia-" + last.period + ".csv" });
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  });
 })();

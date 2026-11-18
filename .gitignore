@@ -7,8 +7,9 @@ __pycache__/
 .mypy_cache/
 .rope/
 .env/
-
-
+.env.example/
 .env
 .env.*
 !.env.example
+.gitignore
+alembic.ini
