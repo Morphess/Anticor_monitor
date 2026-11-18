@@ -1,29 +1,37 @@
-// Кабінет координатора: програма → розділ → захід → підрозділи; зміна статусу виконання.
+// Кабінет координатора: програма → розділ → захід → підрозділ, накази, підтвердження,
+// перенесення строків, сигнали Risk Flags і зміна статусу виконання.
 (function () {
   "use strict";
   if (!Api.requireLogin()) return;
   const el = Api.el;
   const root = document.getElementById("programs");
+  const flagsNote = document.getElementById("flags-note");
   const periodSel = document.getElementById("period");
   const search = document.getElementById("search");
+  const STATUSES = ["done", "review", "rework", "not"];
 
   let programs = [];
   let measuresByProg = {};
   let sections = {};
   let executions = {};
-  const open = new Set(); // ключі розгорнутих вузлів: p:ID, s:ID:N, m:ID
+  let ordersByMeasure = {};
+  let evidenceByMeasure = {};
+  let changesByMeasure = {};
+  let flagsByMeasure = {};
+  const open = new Set(); // розгорнуті вузли: p:ID, s:ID:R, m:ID
 
   async function init() {
     try {
-      const [progList, measures, secs] = await Promise.all([
+      const [progList, measures, secs, orders, evid, changes] = await Promise.all([
         Api.get("/api/programs"), Api.measures(), Api.sections(),
+        Api.optional(Api.orders()), Api.optional(Api.evidences()), Api.optional(Api.deadlineChanges()),
       ]);
       programs = progList;
       sections = secs;
-      measuresByProg = {};
-      measures.sort(Api.byMeasureOrder).forEach(function (m) {
-        (measuresByProg[m.program_id] = measuresByProg[m.program_id] || []).push(m);
-      });
+      ordersByMeasure = Api.groupBy(orders.data, "measure_id");
+      evidenceByMeasure = Api.groupBy(evid.data, "measure_id");
+      changesByMeasure = Api.groupBy(changes.data, "measure_id");
+      measuresByProg = Api.groupBy(measures.sort(Api.byMeasureOrder), "program_id");
       const coordDept = programs.map(function (p) { return p.coordinator_department_id; }).filter(Boolean)[0];
       document.getElementById("unit-name").textContent = coordDept ? Api.deptName(coordDept) : "Координатор програми";
       if (programs.length === 1) open.add("p:" + programs[0].id);
@@ -40,13 +48,28 @@
   async function load() {
     Api.showError(null);
     try {
-      const list = await Api.executions(periodSel.value);
+      const [list, flags] = await Promise.all([Api.executions(periodSel.value), Api.riskFlags(periodSel.value)]);
       executions = {};
       list.forEach(function (x) { executions[x.measure_id] = x; });
+      flagsByMeasure = Api.groupBy(flags.data.filter(function (f) { return f.object_type === "zakhid"; }), "object_id");
+      renderFlagsNote(flags);
       render();
     } catch (err) {
       Api.showError(err);
     }
+  }
+
+  function renderFlagsNote(flags) {
+    flagsNote.innerHTML = "";
+    if (!flags.ok) {
+      flagsNote.appendChild(el("p", { class: "stub", text: "Сигнали Risk Flags поки бачить лише адміністратор: сервер не відкриває /api/risk-flags для координатора." }));
+      return;
+    }
+    const n = flags.data.length;
+    flagsNote.appendChild(el("p", { class: "small", style: "margin:0 0 14px" }, [
+      el("strong", { text: "Сигналів за період: " + n + ". " }),
+      n ? "Заходи з сигналами позначені кодами RF — наведіть курсор, щоб побачити причину." : "Порушень правил не виявлено.",
+    ]));
   }
 
   function isDone(m) { return Api.statusOf(executions[m.id]) === "done"; }
@@ -62,8 +85,10 @@
 
   function matches(text, q) { return (text || "").toLowerCase().indexOf(q) !== -1; }
   function measureMatches(m, q) {
-    return matches(m.description, q) || matches(Api.measureNo(m), q) ||
-      matches(Api.deptName(m.responsible_department_id), q) || matches(Api.orderNumber(executions[m.id]), q);
+    return matches(m.description, q) || matches(Api.measureNo(m), q) || matches(m.id, q) ||
+      matches(Api.deptName(m.responsible_department_id), q) || matches(Api.orderNumber(executions[m.id]), q) ||
+      (ordersByMeasure[m.id] || []).some(function (o) { return matches(o.number, q) || matches(o.title, q); }) ||
+      (flagsByMeasure[m.id] || []).some(function (f) { return matches(f.code, q); });
   }
 
   function render() {
@@ -86,16 +111,16 @@
   function programNode(p, all, list, forceOpen) {
     const key = "p:" + p.id;
     const isOpen = forceOpen || open.has(key);
-    const head = el("button", { type: "button", class: "row-head", "aria-expanded": String(isOpen), onclick: function () { toggle(key); } }, [
-      el("span", { class: "title", text: p.title }),
-      el("span", { class: "meta", text: Api.fmtDate(p.start_date) + " – " + Api.fmtDate(p.end_date) }),
-      counter(all),
+    const node = el("div", { class: "prog" }, [
+      el("button", { type: "button", class: "row-head", "aria-expanded": String(isOpen), onclick: function () { toggle(key); } }, [
+        el("span", { class: "title", text: p.title }),
+        el("span", { class: "meta", text: Api.fmtDate(p.start_date) + " – " + Api.fmtDate(p.end_date) }),
+        counter(all),
+      ]),
     ]);
-    const node = el("div", { class: "prog" }, [head]);
     if (!isOpen) return node;
     const body = el("div", { class: "prog-body" });
-    const bySec = {};
-    list.forEach(function (m) { (bySec[m.section_id] = bySec[m.section_id] || []).push(m); });
+    const bySec = Api.groupBy(list, "section_id");
     const secIds = Object.keys(bySec).sort(Api.compareSections);
     if (!secIds.length) body.appendChild(el("p", { class: "muted", style: "padding:8px 18px", text: "У програмі ще немає заходів." }));
     secIds.forEach(function (sid) { body.appendChild(sectionNode(p, sid, bySec[sid], forceOpen)); });
@@ -105,19 +130,19 @@
 
   function finalDeadline(list) {
     const dates = list.map(function (m) { return m.deadline_on; }).filter(Boolean).sort();
-    if (dates.length) return "Кінцевий строк: " + Api.fmtDate(dates[dates.length - 1]);
-    return "Строк: постійно";
+    return dates.length ? "Кінцевий строк: " + Api.fmtDate(dates[dates.length - 1]) : "Строк: постійно";
   }
 
   function sectionNode(p, sid, list, forceOpen) {
     const key = "s:" + p.id + ":" + sid;
     const isOpen = forceOpen || open.has(key);
-    const head = el("button", { type: "button", class: "row-head", "aria-expanded": String(isOpen), onclick: function () { toggle(key); } }, [
-      el("span", { class: "title", text: Api.sectionTitle(sections, sid) }),
-      el("span", { class: "meta", text: finalDeadline(list) }),
-      counter(list),
+    const node = el("div", { class: "sec" }, [
+      el("button", { type: "button", class: "row-head", "aria-expanded": String(isOpen), onclick: function () { toggle(key); } }, [
+        el("span", { class: "title", text: Api.sectionTitle(sections, sid) }),
+        el("span", { class: "meta", text: finalDeadline(list) }),
+        counter(list),
+      ]),
     ]);
-    const node = el("div", { class: "sec" }, [head]);
     if (!isOpen) return node;
     const body = el("div", { class: "sec-body" });
     list.forEach(function (m) { body.appendChild(measureNode(m)); });
@@ -128,31 +153,47 @@
   function measureNode(m) {
     const key = "m:" + m.id;
     const isOpen = open.has(key);
-    const head = el("button", { type: "button", class: "row-head", "aria-expanded": String(isOpen), onclick: function () { toggle(key); } }, [
-      el("span", { class: "num", text: Api.measureNo(m) }),
-      el("span", { text: m.description }),
-      Api.statusBadge(Api.statusOf(executions[m.id])),
+    const flags = flagsByMeasure[m.id] || [];
+    const node = el("div", { class: "measure" }, [
+      el("button", { type: "button", class: "row-head", "aria-expanded": String(isOpen), onclick: function () { toggle(key); } }, [
+        el("span", { class: "num", text: Api.measureNo(m) }),
+        el("span", { text: m.description }),
+        el("span", { class: "flags" }, flags.map(Api.flagBadge)),
+        Api.statusBadge(Api.statusOf(executions[m.id])),
+      ]),
     ]);
-    const node = el("div", { class: "measure" }, [head]);
-    if (isOpen) node.appendChild(unitsNode(m));
+    if (isOpen) node.appendChild(detailNode(m));
     return node;
   }
 
+  function detailNode(m) {
+    return el("div", { class: "detail" }, [
+      unitsTable(m),
+      flagsBlock(m),
+      ordersBlock(m),
+      evidenceBlock(m),
+      changesBlock(m),
+    ]);
+  }
+
   // ЗАГЛУШКА: співвиконавців API не віддає — показуємо відповідальний підрозділ.
-  function unitsNode(m) {
+  function unitsTable(m) {
     const ex = executions[m.id];
     const key = Api.statusOf(ex);
     const select = el("select", { "aria-label": "Статус виконання заходу " + Api.measureNo(m) });
-    if (["done", "review", "rework", "not"].indexOf(key) === -1) {
-      select.appendChild(el("option", { value: "", text: Api.STATUS[key].label }));
-    }
-    ["done", "review", "rework", "not"].forEach(function (k) {
-      select.appendChild(el("option", { value: k, text: Api.STATUS[k].label }));
-    });
-    select.value = ["done", "review", "rework", "not"].indexOf(key) !== -1 ? key : "";
+    if (STATUSES.indexOf(key) === -1) select.appendChild(el("option", { value: "", text: Api.STATUS[key].label }));
+    STATUSES.forEach(function (k) { select.appendChild(el("option", { value: k, text: Api.STATUS[k].label })); });
+    select.value = STATUSES.indexOf(key) !== -1 ? key : "";
     const msg = el("div", { class: "msg", role: "status" });
     select.addEventListener("change", function () { changeStatus(m, select.value, select, msg); });
-    const order = Api.orderNumber(ex);
+
+    const number = Api.orderNumber(ex);
+    const order = Api.findOrder(ordersByMeasure[m.id], number);
+    let orderCell;
+    if (!number) orderCell = el("td", { text: "—" });
+    else if (order) orderCell = el("td", {}, [Api.docLink(order.document_url, "№ " + order.number)]);
+    else orderCell = el("td", {}, ["№ " + number, el("div", { class: "msg err", text: "немає в реєстрі" })]);
+
     return el("div", { class: "units table-wrap" }, [
       el("table", { class: "grid" }, [
         el("thead", {}, [el("tr", {}, [
@@ -162,11 +203,90 @@
         el("tbody", {}, [el("tr", {}, [
           el("td", { text: Api.deptName(m.responsible_department_id) }),
           el("td", { class: "nowrap", text: ex && ex.completed_on ? Api.fmtDate(ex.completed_on) : "—" }),
-          el("td", { title: order ? "Посилання на документ з'явиться з реєстром наказів" : null, text: order ? "№ " + order : "—" }),
+          orderCell,
           el("td", { class: "muted", text: Api.noteOf(ex) || "—" }),
           el("td", {}, [select, msg]),
         ])]),
       ]),
+    ]);
+  }
+
+  function flagsBlock(m) {
+    const flags = flagsByMeasure[m.id] || [];
+    if (!flags.length) return null;
+    return el("div", {}, [
+      el("h3", { text: "Сигнали для перевірки" }),
+      el("ul", { class: "plain" }, flags.map(function (f) {
+        return el("li", {}, [Api.flagBadge(f), " " + f.message + (f.explanation ? " (" + f.explanation + ")" : "")]);
+      })),
+    ]);
+  }
+
+  function ordersBlock(m) {
+    const orders = ordersByMeasure[m.id] || [];
+    const list = orders.length
+      ? el("ul", { class: "plain" }, orders.map(function (o) {
+          return el("li", {}, [Api.docLink(o.document_url, "№ " + o.number + " — " + o.title), o.issued_on ? " від " + Api.fmtDate(o.issued_on) : ""]);
+        }))
+      : el("p", { class: "small muted", style: "margin:0 0 8px", text: "Наказів у реєстрі немає — виконавець не зможе подати звіт." });
+
+    const form = el("form", { class: "inline-form", style: "margin-top:8px" }, [
+      el("label", { class: "field" }, ["№ наказу", el("input", { name: "number", required: "required", maxlength: "150" })]),
+      el("label", { class: "field", style: "flex:1" }, ["Назва", el("input", { name: "title", required: "required" })]),
+      el("label", { class: "field" }, ["Дата", el("input", { name: "issued_on", type: "date" })]),
+      el("label", { class: "field" }, ["Посилання на документ", el("input", { name: "document_url", type: "url", placeholder: "https://" })]),
+      el("button", { class: "btn", type: "submit", text: "Додати наказ" }),
+    ]);
+    const msg = el("div", { class: "msg", role: "status" });
+    form.addEventListener("submit", async function (e) {
+      e.preventDefault();
+      if (!form.reportValidity()) return;
+      const data = Object.fromEntries(new FormData(form).entries());
+      const body = {
+        id: ("O-" + m.id + "-" + Date.now().toString(36)).slice(0, 50),
+        number: data.number.trim(),
+        title: data.title.trim(),
+        issued_on: data.issued_on || null,
+        document_url: data.document_url.trim() || null,
+        measure_id: m.id,
+      };
+      if (Api.findOrder(orders, body.number)) {
+        msg.className = "msg err";
+        msg.textContent = "Наказ № " + body.number + " уже є для цього заходу";
+        return;
+      }
+      try {
+        const created = await Api.post("/api/orders/", body);
+        (ordersByMeasure[m.id] = ordersByMeasure[m.id] || []).push(created);
+        render();
+      } catch (err) {
+        msg.className = "msg err";
+        msg.textContent = "Помилка: " + err.message;
+      }
+    });
+    return el("div", {}, [el("h3", { text: "Накази" }), list, form, msg]);
+  }
+
+  function evidenceBlock(m) {
+    const list = evidenceByMeasure[m.id] || [];
+    return el("div", {}, [
+      el("h3", { text: "Підтвердні матеріали (" + list.length + ")" }),
+      list.length
+        ? el("ul", { class: "plain" }, list.map(function (e) {
+            return el("li", {}, [Api.docLink(e.source_url, e.title), " — " + e.document_type + (e.document_date ? ", " + Api.fmtDate(e.document_date) : "")]);
+          }))
+        : el("p", { class: "small muted", style: "margin:0", text: "Підтверджень немає." }),
+    ]);
+  }
+
+  function changesBlock(m) {
+    const list = changesByMeasure[m.id] || [];
+    if (!list.length) return null;
+    return el("div", {}, [
+      el("h3", { text: "Перенесення строку (" + list.length + ")" }),
+      el("ul", { class: "plain" }, list.map(function (c) {
+        return el("li", { text: Api.fmtDate(c.previous_deadline) + " → " + Api.fmtDate(c.new_deadline) + " (рішення " + Api.fmtDate(c.decision_date) + "): " + c.reason });
+      })),
     ]);
   }
 
@@ -179,11 +299,9 @@
     try {
       let ex = executions[m.id];
       const fields = Object.assign({}, Api.STATUS_PATCH[key]);
-      if (!ex) {
-        ex = await Api.post("/api/executions/", Object.assign({ measure_id: m.id, period: period, result_description: "" }, fields));
-      } else {
-        ex = await Api.patch(Api.executionUrl(m.id, period), fields);
-      }
+      ex = ex
+        ? await Api.patch(Api.executionUrl(m.id, period), fields)
+        : await Api.post("/api/executions/", Object.assign({ measure_id: m.id, period: period, result_description: "" }, fields));
       const approve = key === "done";
       if (ex.approved_by_coordinator !== approve) {
         ex = await Api.patch(Api.executionUrl(m.id, period) + "/approval", { approved_by_coordinator: approve });

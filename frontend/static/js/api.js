@@ -257,6 +257,83 @@
     return "Розділ " + Api.sectionNo(id);
   };
 
+  // ---------- Поточний користувач ----------
+  // Токен містить лише id користувача (поле sub). Підпис перевіряє сервер;
+  // тут id потрібен тільки, щоб показати виконавцю його заходи.
+  Api.userId = function () {
+    const t = Api.token();
+    if (!t) return null;
+    try {
+      const part = t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+      const json = decodeURIComponent(atob(part).split("").map(function (c) {
+        return "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2);
+      }).join(""));
+      const id = parseInt(JSON.parse(json).sub, 10);
+      return isNaN(id) ? null : id;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  // ---------- Накази, підтвердження, перенесення ----------
+  // Сервер сам обмежує видимість: виконавець бачить лише свої заходи,
+  // координатор/керівник/аналітик — свою програму.
+  Api.groupBy = function (list, key) {
+    const map = {};
+    (list || []).forEach(function (x) { (map[x[key]] = map[x[key]] || []).push(x); });
+    return map;
+  };
+  Api.orders = function () { return Api.getAll("/api/orders/", 100, "skip"); };
+  Api.evidences = function () { return Api.getAll("/api/evidences/", 100, "skip"); };
+  Api.deadlineChanges = function () { return Api.getAll("/api/deadline-changes/", 100, "skip"); };
+  // Не дає впасти сторінці, якщо роль не має доступу до допоміжних даних.
+  Api.optional = async function (promise) {
+    try { return { ok: true, data: await promise }; }
+    catch (e) { return { ok: false, data: [], error: e }; }
+  };
+  Api.normNumber = function (s) {
+    return String(s || "").replace(/^№\s*/, "").replace(/\s+/g, "").toLowerCase();
+  };
+  Api.findOrder = function (orders, number) {
+    const n = Api.normNumber(number);
+    return (orders || []).filter(function (o) { return Api.normNumber(o.number) === n; })[0] || null;
+  };
+  Api.docLink = function (url, text) {
+    if (!url || !/^https?:\/\//i.test(url)) return document.createTextNode(text);
+    return Api.el("a", { href: url, target: "_blank", rel: "noopener noreferrer", text: text });
+  };
+
+  // ---------- Risk Flags ----------
+  Api.FLAGS = {
+    RF1: "Прострочений захід",
+    RF2: "Немає підтверджень",
+    RF3: "Формальне закриття",
+    RF4: "Опис повторює зміст заходу",
+    RF5: "Показник нижче цільового",
+    RF6: "Повторні перенесення / прострочення",
+    RF7a: "Дата виконання поза періодом",
+    RF7b: "Документи пізніші за виконання",
+    RF7c: "Немає пояснення невиконання",
+    RF7d: "Ризик без заходів",
+    RF7e: "Опис для заходу, строк якого не настав",
+  };
+  Api.OBJECT_TYPES = { zakhid: "Захід", pidrozdil: "Підрозділ", ryzyk: "Ризик" };
+  // Дата зрізу: сьогодні, але не раніше кінця періоду (так вимагає сервер).
+  Api.flagsAsOf = function (period) {
+    const m = /^(\d{4})-H([12])$/.exec(period || "");
+    const end = m ? m[1] + (m[2] === "1" ? "-06-30" : "-12-31") : Api.today();
+    return Api.today() > end ? Api.today() : end;
+  };
+  // Повертає {ok, data}; ok=false, коли роль не має доступу (зараз лише ADMIN).
+  Api.riskFlags = function (period, asOf, code) {
+    let url = "/api/risk-flags/?period=" + encodeURIComponent(period) + "&as_of=" + encodeURIComponent(asOf || Api.flagsAsOf(period));
+    if (code) url += "&code=" + encodeURIComponent(code);
+    return Api.optional(Api.get(url, { noRedirect: true }));
+  };
+  Api.flagBadge = function (f) {
+    return Api.el("span", { class: "flag", title: (Api.FLAGS[f.code] || f.message) + (f.explanation ? ": " + f.explanation : ""), text: f.code });
+  };
+
   // ---------- Дрібниці ----------
   Api.fmtDate = function (iso) {
     if (!iso) return "";

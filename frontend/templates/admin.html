@@ -11,6 +11,7 @@
 <div class="tabs" role="tablist">
   <button type="button" role="tab" aria-selected="true" data-tab="users">Користувачі</button>
   <button type="button" role="tab" aria-selected="false" data-tab="programs">Програми</button>
+  <button type="button" role="tab" aria-selected="false" data-tab="flags">Сигнали</button>
   <button type="button" role="tab" aria-selected="false" data-tab="log">Журнал дій</button>
 </div>
 
@@ -46,6 +47,25 @@
     <table class="grid">
       <thead><tr><th>Код</th><th>Назва</th><th>Початок</th><th>Завершення</th><th>Стан</th></tr></thead>
       <tbody id="programs"></tbody>
+    </table>
+  </div>
+</section>
+
+<section data-panel="flags" class="hidden">
+  <form id="flags-form" class="toolbar">
+    <label class="field">Звітний період <select name="period" id="flags-period"></select></label>
+    <label class="field">Дата зрізу <input name="as_of" type="date" required></label>
+    <label class="field">Правило
+      <select name="code"><option value="">Усі</option></select>
+    </label>
+    <button class="btn btn-dark" type="submit">Перевірити</button>
+  </form>
+  <p class="muted small">Сигнал означає, що запис треба перевірити, а не доведене порушення. Дата зрізу не може бути раніше кінця періоду.</p>
+  <div id="flags-msg" class="msg"></div>
+  <div class="table-wrap">
+    <table class="grid">
+      <thead><tr><th>Код</th><th>Об'єкт</th><th>Сигнал</th><th>Пояснення</th></tr></thead>
+      <tbody id="flags"></tbody>
     </table>
   </div>
 </section>

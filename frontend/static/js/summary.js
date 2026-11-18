@@ -19,10 +19,13 @@
         const load = async function () {
           Api.showError(null);
           try {
-            const list = await Api.executions(periodSel.value);
+            const [list, flags] = await Promise.all([Api.executions(periodSel.value), Api.riskFlags(periodSel.value)]);
             const executions = {};
             list.forEach(function (x) { executions[x.measure_id] = x; });
-            onData({ programs: programs, measures: measures, executions: executions, sections: sections, period: periodSel.value });
+            onData({
+              programs: programs, measures: measures, executions: executions, sections: sections, period: periodSel.value,
+              flags: flags, flagsByMeasure: Api.groupBy(flags.data.filter(function (f) { return f.object_type === "zakhid"; }), "object_id"),
+            });
           } catch (err) { Api.showError(err); }
         };
         periodSel.addEventListener("change", load);
@@ -68,6 +71,34 @@
           el("td", {}, [Summary.bar(c.done, c.total)]),
         ]));
       });
+    },
+
+    // Таблиця сигналів за кодами правил; без доступу — пояснення-заглушка.
+    flagsByCode: function (d) {
+      const box = document.getElementById("flags-summary");
+      if (!box) return;
+      box.innerHTML = "";
+      if (!d.flags.ok) {
+        box.appendChild(el("p", { class: "stub", text: "Сигнали Risk Flags поки бачить лише адміністратор: сервер не відкриває /api/risk-flags для цієї ролі." }));
+        return;
+      }
+      const groups = Api.groupBy(d.flags.data, "code");
+      const codes = Object.keys(groups).sort(function (a, b) { return a.localeCompare(b, "uk", { numeric: true }); });
+      if (!codes.length) {
+        box.appendChild(el("p", { class: "muted", text: "Сигналів за період немає." }));
+        return;
+      }
+      box.appendChild(el("div", { class: "table-wrap" }, [el("table", { class: "grid" }, [
+        el("thead", {}, [el("tr", {}, [el("th", { text: "Код" }), el("th", { text: "Правило" }), el("th", { text: "Кількість" }), el("th", { text: "Об'єкти" })])]),
+        el("tbody", {}, codes.map(function (c) {
+          return el("tr", {}, [
+            el("td", {}, [Api.flagBadge(groups[c][0])]),
+            el("td", { text: Api.FLAGS[c] || groups[c][0].message }),
+            el("td", { text: String(groups[c].length) }),
+            el("td", { class: "small", text: groups[c].map(function (f) { return f.object_id; }).join(", ") }),
+          ]);
+        })),
+      ])]));
     },
 
     emptyRow: function (tbody, cols, text) {

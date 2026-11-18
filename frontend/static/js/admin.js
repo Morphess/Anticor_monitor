@@ -12,6 +12,7 @@
       document.querySelectorAll("[data-tab]").forEach(function (x) { x.setAttribute("aria-selected", String(x === b)); });
       document.querySelectorAll("[data-panel]").forEach(function (p) { p.classList.toggle("hidden", p.dataset.panel !== b.dataset.tab); });
       if (b.dataset.tab === "log" && logSkip === 0) loadLog();
+      if (b.dataset.tab === "flags" && !flagsLoaded) loadFlags();
     });
   });
 
@@ -33,6 +34,10 @@
 
   async function loadPrograms() {
     programs = await Api.get("/api/programs");
+    const periodSel = document.getElementById("flags-period");
+    Api.fillPeriods(periodSel, programs);
+    periodSel.addEventListener("change", syncAsOf);
+    syncAsOf();
     const tbody = document.getElementById("programs");
     tbody.innerHTML = "";
     const sel = document.querySelector("#user-form [name=program_id]");
@@ -80,6 +85,46 @@
     tbody.appendChild(el("tr", {}, [el("td", { colspan: "7", class: "muted", text: "Записів немає." })]));
   }
   document.getElementById("log-more").addEventListener("click", loadLog);
+
+  // ---------- Сигнали Risk Flags ----------
+  let flagsLoaded = false;
+  const flagsForm = document.getElementById("flags-form");
+  const flagsMsg = document.getElementById("flags-msg");
+  Object.keys(Api.FLAGS).forEach(function (c) {
+    flagsForm.elements.code.appendChild(el("option", { value: c, text: c + " — " + Api.FLAGS[c] }));
+  });
+  function syncAsOf() { flagsForm.elements.as_of.value = Api.flagsAsOf(flagsForm.elements.period.value); }
+  async function loadFlags() {
+    flagsLoaded = true;
+    const tbody = document.getElementById("flags");
+    const f = flagsForm.elements;
+    flagsMsg.className = "msg";
+    flagsMsg.textContent = "Перевірка…";
+    const res = await Api.riskFlags(f.period.value, f.as_of.value, f.code.value);
+    tbody.innerHTML = "";
+    if (!res.ok) {
+      flagsMsg.className = "msg err";
+      flagsMsg.textContent = "Помилка: " + res.error.message;
+      return;
+    }
+    flagsMsg.textContent = "Знайдено сигналів: " + res.data.length;
+    if (!res.data.length) {
+      tbody.appendChild(el("tr", {}, [el("td", { colspan: "4", class: "muted", text: "Сигналів немає." })]));
+      return;
+    }
+    res.data.forEach(function (x) {
+      tbody.appendChild(el("tr", {}, [
+        el("td", {}, [Api.flagBadge(x)]),
+        el("td", { class: "nowrap", text: (Api.OBJECT_TYPES[x.object_type] || x.object_type) + " " + x.object_id }),
+        el("td", { text: x.message }),
+        el("td", { class: "small", text: x.explanation }),
+      ]));
+    });
+  }
+  flagsForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (flagsForm.reportValidity()) loadFlags();
+  });
 
   const form = document.getElementById("user-form");
   const msg = document.getElementById("user-msg");

@@ -8,6 +8,7 @@
     last = d;
     Summary.cards(Summary.countBy(d.measures, d.executions));
     Summary.bySection(d);
+    Summary.flagsByCode(d);
     const tbody = document.getElementById("by-dept");
     tbody.innerHTML = "";
     const groups = {};
@@ -35,12 +36,13 @@
   document.getElementById("export-csv").addEventListener("click", function () {
     if (!last) return;
     const q = function (v) { return '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"'; };
-    const lines = [["№", "Захід", "Підрозділ", "Строк", "Статус", "№ наказу", "Дата"].map(q).join(";")];
+    const lines = [["№", "Захід", "Підрозділ", "Строк", "Статус", "№ наказу", "Дата", "Сигнали"].map(q).join(";")];
     last.measures.forEach(function (m) {
       const ex = last.executions[m.id];
       lines.push([Api.measureNo(m), m.description, Api.deptName(m.responsible_department_id),
         m.deadline_on ? Api.fmtDate(m.deadline_on) : (m.deadline_description || ""),
-        Api.STATUS[Api.statusOf(ex)].label, Api.orderNumber(ex), ex && ex.completed_on ? Api.fmtDate(ex.completed_on) : ""].map(q).join(";"));
+        Api.STATUS[Api.statusOf(ex)].label, Api.orderNumber(ex), ex && ex.completed_on ? Api.fmtDate(ex.completed_on) : "",
+        (last.flagsByMeasure[m.id] || []).map(function (f) { return f.code; }).join(" ")].map(q).join(";"));
     });
     const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
     const a = el("a", { href: URL.createObjectURL(blob), download: "vykonannia-" + last.period + ".csv" });
