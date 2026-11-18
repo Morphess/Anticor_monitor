@@ -90,4 +90,5 @@ jobs:
         env:
           PYTHONPATH: backend
           DEPARTMENT_TEST_DATABASE_URL: "postgresql+psycopg://ci_user:ci_test_only@127.0.0.1:5432/bordergroup_ci"
+          ORDER_TEST_DATABASE_URL: "postgresql+psycopg://ci_user:ci_test_only@127.0.0.1:5432/bordergroup_ci"
         run: python -m unittest discover -s tests -v

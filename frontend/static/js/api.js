@@ -42,7 +42,9 @@
     const token = getItem(TOKEN_KEY);
     if (token) headers.Authorization = "Bearer " + token;
     let payload;
-    if (body instanceof URLSearchParams) {
+    if (body instanceof FormData) {
+      payload = body;
+    } else if (body instanceof URLSearchParams) {
       payload = body;
       headers["Content-Type"] = "application/x-www-form-urlencoded";
     } else if (body !== undefined) {
@@ -331,6 +333,15 @@
   Api.docLink = function (url, text) {
     if (!url || !/^https?:\/\//i.test(url)) return document.createTextNode(text);
     return Api.el("a", { href: url, target: "_blank", rel: "noopener noreferrer", text: text });
+  };
+
+  Api.analyzeOrder = function (orderId, file) {
+    const form = new FormData();
+    form.append("file", file);
+    return Api.post(
+      "/api/orders/" + encodeURIComponent(orderId) + "/analyze",
+      form
+    );
   };
 
   // ---------- Risk Flags ----------
