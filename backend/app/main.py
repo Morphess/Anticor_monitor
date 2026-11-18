@@ -26,6 +26,9 @@ from app.api.evidences import router as evidences_router
 from app.api.deadline_changes import router as deadline_changes_router
 from app.api.reports import router as reports_router
 from app.api.action_logs import router as action_logs_router
+from app.api.orders import router as orders_router
+from app.api.risk_flags import router as risk_flags_router
+
 
 # Налаштування логування
 logger = logging.getLogger(__name__)
@@ -89,6 +92,8 @@ app.include_router(evidences_router, prefix="/api")
 app.include_router(deadline_changes_router, prefix="/api")
 app.include_router(reports_router, prefix="/api")
 app.include_router(action_logs_router, prefix="/api")
+app.include_router(orders_router, prefix="/api")
+app.include_router(risk_flags_router, prefix="/api")
 
 # HTML-шаблони
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
