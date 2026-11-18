@@ -348,6 +348,11 @@ dialog.wide { max-width: 1000px; }
 .inline-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
 .inline-form .field input { min-width: 140px; }
 .order-name a { font-weight: 500; }
+.order-list { display: grid; gap: 10px; }
+.order-analysis { display: grid; gap: 8px; }
+.analysis-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.analysis-controls .field { min-width: min(100%, 280px); }
+.analysis-result { margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--sunken); color: var(--ink); font: inherit; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 @media (max-width: 960px) {
   .grid-2 { grid-template-columns: 1fr; }

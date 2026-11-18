@@ -85,3 +85,11 @@ class OrderRead(OrderBase):
 
     id: str
     created_at: datetime
+
+
+class OrderAnalysisRead(BaseModel):
+    order_id: str
+    file_name: str
+    model: str
+    analysis: str
+    text_truncated: bool

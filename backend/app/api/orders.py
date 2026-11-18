@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user
@@ -7,7 +7,12 @@ from app.database.db_connection import get_db
 from app.models.measure import Measure
 from app.models.user import User
 
-from app.schemas.orders import OrderCreate, OrderRead, OrderUpdate
+from app.schemas.orders import OrderAnalysisRead, OrderCreate, OrderRead, OrderUpdate
+from app.services.order_analysis_services import (
+    MAX_DOCUMENT_BYTES,
+    OrderAnalysisError,
+    analyze_order_document,
+)
 from app.services.order_services import OrderError, OrderService
 
 
@@ -130,6 +135,35 @@ def get_order(
     _require_read_access(user, _get_measure(db, order.measure_id))
 
     return order
+
+
+@router.post("/{order_id}/analyze", response_model=OrderAnalysisRead)
+async def analyze_order(
+    order_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    try:
+        order = OrderService(db).get_order(order_id)
+    except OrderError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+    measure = _get_measure(db, order.measure_id)
+    _require_edit_access(user, measure)
+
+    try:
+        file_bytes = await file.read(MAX_DOCUMENT_BYTES + 1)
+        return await analyze_order_document(
+            order=order,
+            measure=measure,
+            file_name=file.filename or "document",
+            file_bytes=file_bytes,
+        )
+    except OrderAnalysisError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    finally:
+        await file.close()
 
 
 # UPDATE — редагувати наказ
