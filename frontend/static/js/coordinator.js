@@ -238,10 +238,69 @@
 
   function ordersBlock(m) {
     const orders = ordersByMeasure[m.id] || [];
+    function orderItem(order) {
+      const fileInput = el("input", {
+        type: "file",
+        accept: ".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain",
+        "aria-label": "Документ наказу для аналізу",
+      });
+      const message = el("div", { class: "msg", role: "status" });
+      const result = el("pre", { class: "analysis-result hidden" });
+      const analyzeButton = el("button", {
+        class: "btn",
+        type: "button",
+        text: "Проаналізувати документ",
+        onclick: async function () {
+          const file = fileInput.files && fileInput.files[0];
+          if (!file) {
+            message.className = "msg err";
+            message.textContent = "Спочатку виберіть файл наказу (PDF, DOCX або TXT).";
+            return;
+          }
+          if (file.size > 15 * 1024 * 1024) {
+            message.className = "msg err";
+            message.textContent = "Максимальний розмір файла — 15 МБ.";
+            return;
+          }
+
+          analyzeButton.disabled = true;
+          result.classList.add("hidden");
+          message.className = "msg";
+          message.textContent = "Документ аналізується локальною моделлю на сервері…";
+          const formData = new FormData();
+          formData.append("file", file);
+          try {
+            const response = await Api.post(
+              "/api/orders/" + encodeURIComponent(order.id) + "/analyze",
+              formData,
+            );
+            result.textContent = response.analysis;
+            result.classList.remove("hidden");
+            message.className = "msg ok";
+            message.textContent = "Аналіз завершено моделлю " + response.model +
+              (response.text_truncated ? "; для аналізу використано лише початок документа." : "") +
+              " Перевірте висновки за оригіналом.";
+          } catch (error) {
+            message.className = "msg err";
+            message.textContent = "Не вдалося проаналізувати документ: " + error.message;
+          } finally {
+            analyzeButton.disabled = false;
+          }
+        },
+      });
+
+      return el("li", { class: "order-analysis" }, [
+        el("div", {}, [Api.docLink(order.document_url, "№ " + order.number + " — " + order.title), order.issued_on ? " від " + Api.fmtDate(order.issued_on) : ""]),
+        el("div", { class: "analysis-controls" }, [
+          el("label", { class: "field" }, ["Файл наказу для аналізу", fileInput]),
+          analyzeButton,
+        ]),
+        message,
+        result,
+      ]);
+    }
     const list = orders.length
-      ? el("ul", { class: "plain" }, orders.map(function (o) {
-          return el("li", {}, [Api.docLink(o.document_url, "№ " + o.number + " — " + o.title), o.issued_on ? " від " + Api.fmtDate(o.issued_on) : ""]);
-        }))
+      ? el("ul", { class: "plain order-list" }, orders.map(orderItem))
       : el("p", { class: "small muted", style: "margin:0 0 8px", text: "Наказів у реєстрі немає — виконавець не зможе подати звіт." });
 
     const form = el("form", { class: "inline-form", style: "margin-top:8px" }, [
@@ -278,7 +337,13 @@
         msg.textContent = "Помилка: " + err.message;
       }
     });
-    return el("div", {}, [el("h3", { text: "Накази" }), list, form, msg]);
+    return el("div", {}, [
+      el("h3", { text: "Накази" }),
+      list,
+      orders.length ? el("p", { class: "small muted", text: "Файл передається на локальну модель на сервері й не зберігається в системі." }) : null,
+      form,
+      msg,
+    ]);
   }
 
   function evidenceBlock(m) {

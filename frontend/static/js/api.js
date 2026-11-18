@@ -45,6 +45,8 @@
     if (body instanceof URLSearchParams) {
       payload = body;
       headers["Content-Type"] = "application/x-www-form-urlencoded";
+    } else if (typeof FormData !== "undefined" && body instanceof FormData) {
+      payload = body;
     } else if (body !== undefined) {
       payload = JSON.stringify(body);
       headers["Content-Type"] = "application/json";
