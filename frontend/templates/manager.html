@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Зведення — керівник{% endblock %}
+{% block role_name %}Керівник{% endblock %}
+{% block content %}
+<section class="unit">
+  <div>
+    <p class="label">Стан виконання</p>
+    <h1 id="program-title">—</h1>
+  </div>
+  <label class="field">Звітний період <select id="period"></select></label>
+</section>
+<div class="cards" id="cards"></div>
+<h2>Потребують уваги</h2>
+<p class="muted small">Строк минув і виконання не погоджено, або система виявила сигнали Risk Flags.</p>
+<div class="table-wrap">
+  <table class="grid">
+    <thead><tr><th>№</th><th>Захід</th><th>Підрозділ</th><th>Строк</th><th>Статус</th><th>Сигнали</th></tr></thead>
+    <tbody id="attention"></tbody>
+  </table>
+</div>
+<h2>Сигнали Risk Flags</h2>
+<div id="flags-summary"></div>
+<h2>За розділами</h2>
+<div class="table-wrap">
+  <table class="grid">
+    <thead><tr><th>Розділ</th><th>Виконано</th><th style="width:40%">Прогрес</th></tr></thead>
+    <tbody id="by-section"></tbody>
+  </table>
+</div>
+<h2>Рішення керівника</h2>
+<p class="stub">Тимчасово недоступно: на сервері поки немає API для доручень і рішень керівника.</p>
+{% endblock %}
+{% block scripts %}<script src="/static/js/summary.js"></script><script src="/static/js/manager.js"></script>{% endblock %}
