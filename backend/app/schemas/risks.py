@@ -8,8 +8,6 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 # Основні дані корупційного ризику
 class RiskBase(BaseModel):
 
-    program_id: str = Field(min_length=1, max_length=50)
-
     process_name: str = Field(min_length=1)
     title: str = Field(min_length=1)
     description: str = Field(min_length=1)
@@ -58,8 +56,6 @@ class RiskCreate(RiskBase):
 
 # Часткове редагування ризику
 class RiskUpdate(BaseModel):
-
-    program_id: str | None = Field(default=None, min_length=1, max_length=50)
 
     process_name: str | None = Field(default=None, min_length=1)
 
