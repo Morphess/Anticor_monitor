@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, String, Text
+from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base
@@ -55,8 +55,18 @@ class Program(Base):
     # Зв'язок із підрозділом-координатором.
     coordinator_department: Mapped["Department | None"] = relationship("Department")
 
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     # Користувачі програми.
-    users: Mapped[list["User"]] = relationship("User", back_populates="program")
+    users: Mapped[list["User"]] = relationship(
+        "User",
+        back_populates="program",
+        foreign_keys="User.program_id",
+    )
 
     # Заходи програми.
     measures: Mapped[list["Measure"]] = relationship(

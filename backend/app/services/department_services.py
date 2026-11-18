@@ -1,70 +1,118 @@
-from sqlalchemy import select
+from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.department import Department
+from app.repositories.department_repository import DepartmentRepository
 from app.schemas.departments import DepartmentCreate, DepartmentUpdate
-
-
-class DepartmentAlreadyExistsError(Exception):
-    pass
-
-
-class DepartmentNotFoundError(Exception):
-    pass
-
-
-class DepartmentUpdateError(Exception):
-    pass
 
 
 class DepartmentService:
     def __init__(self, db: Session):
         self.db = db
+        self.repository = DepartmentRepository(db)
 
-    def list_departments(self) -> list[Department]:
-        return list(
-            self.db.scalars(select(Department).order_by(Department.id)).all()
-        )
-
-    def create_department(self, data: DepartmentCreate) -> Department:
-        if self.db.get(Department, data.id) is not None:
-            raise DepartmentAlreadyExistsError("Підрозділ із таким кодом уже існує")
-
-        department = Department(**data.model_dump())
-        self.db.add(department)
-        try:
-            self.db.commit()
-        except IntegrityError as error:
-            self.db.rollback()
-            raise DepartmentAlreadyExistsError(
-                "Підрозділ із таким кодом уже існує"
-            ) from error
-
-        self.db.refresh(department)
+    def _get_or_404(self, department_id: str) -> Department:
+        department = self.repository.get_by_id(department_id)
+        if department is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Підрозділ не знайдено",
+            )
         return department
 
-    def update_department(
+    @staticmethod
+    def _required_text(value: str, field: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Поле '{field}' не може бути порожнім",
+            )
+        return cleaned
+
+    def get_all(self) -> list[Department]:
+        return self.repository.get_all()
+
+    def get_by_id(self, department_id: str) -> Department:
+        return self._get_or_404(department_id)
+
+    def create(self, data: DepartmentCreate) -> Department:
+        department_id = self._required_text(data.id, "id")
+        name = self._required_text(data.name, "name")
+        department_type = self._required_text(
+            data.department_type, "department_type"
+        )
+
+        if self.repository.get_by_id(department_id) is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Підрозділ із таким кодом уже існує",
+            )
+
+        department = Department(
+            id=department_id,
+            name=name,
+            department_type=department_type,
+            notes=data.notes,
+        )
+        try:
+            self.repository.add(department)
+            self.db.commit()
+            self.db.refresh(department)
+            return department
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Операцію неможливо виконати через обмеження бази даних",
+            ) from exc
+        except Exception:
+            self.db.rollback()
+            raise
+
+    def update(
         self, department_id: str, data: DepartmentUpdate
     ) -> Department:
-        department = self.db.get(Department, department_id)
-        if department is None:
-            raise DepartmentNotFoundError("Підрозділ не знайдено")
-
+        department = self._get_or_404(department_id)
         changes = data.model_dump(exclude_unset=True)
-        if not changes:
-            return department
-        if any(value is None for value in changes.values()):
-            raise DepartmentUpdateError("Поля підрозділу не можуть бути порожніми")
 
         for field, value in changes.items():
+            if value is None:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Поле '{field}' не може бути null",
+                )
+            if field in {"name", "department_type"}:
+                value = self._required_text(value, field)
             setattr(department, field, value)
 
         try:
+            self.repository.save()
             self.db.commit()
-        except IntegrityError as error:
+            self.db.refresh(department)
+            return department
+        except IntegrityError as exc:
             self.db.rollback()
-            raise DepartmentUpdateError("Не вдалося оновити підрозділ") from error
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Операцію неможливо виконати через обмеження бази даних",
+            ) from exc
+        except Exception:
+            self.db.rollback()
+            raise
 
-        self.db.refresh(department)
-        return department
+    def delete(self, department_id: str) -> None:
+        department = self._get_or_404(department_id)
+        try:
+            self.repository.delete(department)
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Підрозділ використовується в інших записах",
+            ) from exc
+        except Exception:
+            self.db.rollback()
+            raise

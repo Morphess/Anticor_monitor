@@ -16,6 +16,7 @@ from .action_log import ActionLog
 from .report import Report
 from .management_decision import ManagementDecision
 from .analytics_report import AnalyticsReport, AnalyticsRequest
+from .program_workflow import ProgramDepartment, MeasureAssignment
 
 __all__ = [
     "Department",
@@ -36,4 +37,6 @@ __all__ = [
     "ManagementDecision",
     "AnalyticsRequest",
     "AnalyticsReport",
+    "ProgramDepartment",
+    "MeasureAssignment",
 ]
