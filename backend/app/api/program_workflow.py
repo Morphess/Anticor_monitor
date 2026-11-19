@@ -1,5 +1,4 @@
 """HTTP-шар: програми до підрозділів -> підрозділи -> конкретні виконавці."""
-
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, status
@@ -29,20 +28,15 @@ from app.services.program_workflow_services import ProgramWorkflowService, Workf
 WORKFLOW_ERROR_RESPONSES = {
     401: {"description": "Немає токена або JWT недійсний."},
     403: {"description": "Недостатньо прав або підрозділ за межами дозволеної гілки."},
-    404: {
-        "description": "Програму, захід, підрозділ, користувача чи призначення не знайдено."
-    },
+    404: {"description": "Програму, захід, підрозділ, користувача чи призначення не знайдено."},
     409: {"description": "Конфлікт бізнес-правил або некоректна ієрархія підрозділів."},
     422: {"description": "Помилка валідації даних запиту."},
 }
 
-
 def require_workflow_user(user: User = Depends(get_current_user)) -> User:
     """ADMIN та інші сторонні ролі не мають доступу до жодного маршруту."""
     if user.role_id not in {"MAIN_KOORD", "KOORD", "VYK"}:
-        raise HTTPException(
-            status_code=403, detail="Ця роль не має доступу до маршрутизації програм"
-        )
+        raise HTTPException(status_code=403, detail="Ця роль не має доступу до маршрутизації програм")
     return user
 
 
@@ -64,66 +58,58 @@ def handle(action):
 @router.get(
     "/programs/{program_id}/available-departments",
     response_model=list[DepartmentScopeRead],
-    summary="Отримати доступні підрозділи",
+    summary='Отримати доступні підрозділи',
     description="""Повертає підрозділи, які користувач може бачити у списку вибору для вказаної програми.
 
-**Права:** `MAIN_KOORD` — усі підрозділи власної програми; `KOORD`, якому програму **безпосередньо** направлено, — власний підрозділ та всі нижчі рівні. `ADMIN`, `VYK` та іншим ролям — `403`.
+**Права:** `MAIN_KOORD` — підрозділи, де є `KOORD` (для направлення власної програми); `KOORD`, якому програму **безпосередньо** направлено, — власний підрозділ та всі нижчі рівні (для вибору виконавців, координатор у дочірньому підрозділі не потрібен). `ADMIN`, `VYK` та іншим ролям — `403`.
 
 **Важливо:** цей список потрібен інтерфейсу. Кожен POST/DELETE окремо перевіряє підпорядкування на сервері.
 
 Поля відповіді: `id`, `name`, `parent_id`.""",
-    response_description="Список підрозділів, доступних для вибору.",
+    response_description='Список підрозділів, доступних для вибору.',
 )
 def available_departments(
-    program_id: Annotated[
-        str, Path(description="Ідентифікатор антикорупційної програми")
-    ],
+    program_id: Annotated[str, Path(description='Ідентифікатор антикорупційної програми')],
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     """Повернути доступні підрозділи для селектора в кабінеті координатора."""
-    return handle(
-        lambda: ProgramWorkflowService(db).available_departments(program_id, user)
-    )
+    return handle(lambda: ProgramWorkflowService(db).available_departments(program_id, user))
 
 
 @router.post(
     "/programs/{program_id}/departments",
     response_model=DispatchDepartmentsOut,
-    summary="Направити програму підрозділам",
+    summary='Направити програму підрозділам',
     description="""Передає наявну програму одному або кільком підрозділам. Для кожного підрозділу обовʼязково має існувати користувач із роллю `KOORD`; інакше — `409`.
 
-**Права:** `MAIN_KOORD` може направляти **власну** програму до будь-якого підрозділу. `KOORD`, якому програму вже **безпосередньо** направлено, може передати її тільки **строго підлеглим** підрозділам, не собі чи сусідній гілці. `ADMIN` та `VYK` не мають права направляти програми.
+**Права:** лише `MAIN_KOORD`, який створив програму, направляє її підрозділам із користувачем `KOORD`. Підрозділовий `KOORD` не перенаправляє програму; він самостійно призначає `VYK` у власному та підлеглих підрозділах. `ADMIN`, `VYK` також не мають права направляти програми.
 
 **Тіло запиту:** `department_ids` — список кодів підрозділів. Дублікати кодів прибираються. Усі підрозділи перевіряються **до** запису в базу. Повторне направлення повертає `already_sent: true`, не створюючи дубліката.""",
-    response_description="Результат направлення по кожному підрозділу та знайдені координатори.",
+    response_description='Результат направлення по кожному підрозділу та знайдені координатори.',
 )
 def send_program(
-    program_id: Annotated[
-        str, Path(description="Ідентифікатор антикорупційної програми")
-    ],
+    program_id: Annotated[str, Path(description='Ідентифікатор антикорупційної програми')],
     data: DispatchDepartmentsIn,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     """Направити програму до підрозділів, у яких є KOORD."""
-    return handle(
-        lambda: ProgramWorkflowService(db).send_to_departments(
-            program_id, data.department_ids, user
-        )
-    )
+    return handle(lambda: ProgramWorkflowService(db).send_to_departments(
+        program_id, data.department_ids, user
+    ))
 
 
 @router.get(
     "/my/programs",
     response_model=list[ProgramAccessRead],
-    summary="Отримати мої програми",
+    summary='Отримати мої програми',
     description="""Повертає лише програми, доступні поточному користувачу за його JWT-токеном. ID користувача у запиті не передається.
 
 **Права:** `MAIN_KOORD` — лише програми, які він створив; `KOORD` — програми, безпосередньо направлені його підрозділу; `VYK` — програми з чинними персональними призначеннями. `ADMIN` та інші ролі отримують `403`.
 
 `access_type`: `owner`, `department_coordinator` або `executor`.""",
-    response_description="Список програм із видом доступу.",
+    response_description='Список програм із видом доступу.',
 )
 def my_programs(
     db: Session = Depends(get_db),
@@ -136,16 +122,14 @@ def my_programs(
 @router.get(
     "/programs/{program_id}",
     response_model=ProgramRead,
-    summary="Переглянути доступну програму",
+    summary='Переглянути доступну програму',
     description="""Повертає паспорт програми (`ProgramRead`) **тільки якщо** поточний користувач має доступ до неї за правилами `GET /my/programs`.
 
 **Помилки:** `404` — програми немає; `403` — існує, але користувач не має прав на перегляд.""",
-    response_description="Повна інформація про доступну програму.",
+    response_description='Повна інформація про доступну програму.',
 )
 def read_visible_program(
-    program_id: Annotated[
-        str, Path(description="Ідентифікатор антикорупційної програми")
-    ],
+    program_id: Annotated[str, Path(description='Ідентифікатор антикорупційної програми')],
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -156,16 +140,14 @@ def read_visible_program(
 @router.get(
     "/programs/{program_id}/sections",
     response_model=list[SectionBriefRead],
-    summary="Переглянути розділи програми",
+    summary='Переглянути розділи програми',
     description="""Після перевірки доступу до програми повертає розділи з довідника `sections`: код, номер і назву.
 
 **Важливо:** довідник `sections` спільний для всіх програм, але цей ендпоінт повертає **тільки розділи, що містять доступні користувачу заходи** вказаної програми.""",
-    response_description="Довідник розділів із кодами, номерами й назвами.",
+    response_description='Довідник розділів із кодами, номерами й назвами.',
 )
 def program_sections(
-    program_id: Annotated[
-        str, Path(description="Ідентифікатор антикорупційної програми")
-    ],
+    program_id: Annotated[str, Path(description='Ідентифікатор антикорупційної програми')],
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -176,18 +158,16 @@ def program_sections(
 @router.get(
     "/programs/{program_id}/measures",
     response_model=list[MeasureBriefRead],
-    summary="Переглянути доступні заходи програми",
+    summary='Переглянути доступні заходи програми',
     description="""Повертає короткі відомості про заходи вказаної програми з урахуванням прав користувача.
 
-**Права:** `MAIN_KOORD` бачить усі заходи **власної** програми; `KOORD` із прямим направленням — заходи, що стосуються його гілки, з урахуванням батьківських/дочірніх підрозділів; `VYK` — лише свої **дійсні персональні призначення**. `ADMIN` доступу не має.
+**Права:** `MAIN_KOORD` бачить усі заходи **власної** програми; `KOORD` із прямим направленням — **усі заходи цієї програми**, щоб призначати виконавців зі своєї гілки; `VYK` — лише свої **дійсні персональні призначення**. `ADMIN` доступу не має.
 
 Виконавець без призначених заходів цієї програми отримає `403`. Для інших сторонніх користувачів доступ заборонено.""",
-    response_description="Список доступних заходів у скороченому вигляді.",
+    response_description='Список доступних заходів у скороченому вигляді.',
 )
 def program_measures(
-    program_id: Annotated[
-        str, Path(description="Ідентифікатор антикорупційної програми")
-    ],
+    program_id: Annotated[str, Path(description='Ідентифікатор антикорупційної програми')],
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -198,13 +178,13 @@ def program_measures(
 @router.get(
     "/my/measures",
     response_model=list[MeasureBriefRead],
-    summary="Переглянути мої призначені заходи",
+    summary='Переглянути мої призначені заходи',
     description="""Повертає всі доступні особисто призначені заходи поточного користувача.
 
-**Права:** тільки користувач із роллю `VYK`, якому визначено `department_id`. Необхідні чинне призначення в `measure_assignments`, направлення програми до його підрозділу або предка і відповідність заходу цій гілці.
+**Права:** тільки користувач із роллю `VYK`, якому визначено `department_id`. Необхідні чинне призначення в `measure_assignments` і направлення програми до його підрозділу або предка. `responsible_department_id` не блокує персональне призначення.
 
 Якщо виконавець ще не має заходів, повертається порожній список (`200`), а не помилка.""",
-    response_description="Список особисто призначених заходів виконавця.",
+    response_description='Список особисто призначених заходів виконавця.',
 )
 def my_measures(
     db: Session = Depends(get_db),
@@ -217,99 +197,89 @@ def my_measures(
 @router.get(
     "/programs/{program_id}/departments/{department_id}/coordinators",
     response_model=list[CoordinatorRead],
-    summary="Знайти координаторів підрозділу",
+    summary='Знайти координаторів підрозділу',
     description="""Повертає користувачів вибраного підрозділу з роллю `KOORD`. Це потрібно перед направленням програми: одержати її може тільки підрозділ, у якому є координатор.
 
 **Права:** `MAIN_KOORD`-власник може переглядати координаторів будь-якого підрозділу для своєї програми; `KOORD` — лише власного підрозділу та нащадків, якщо програму безпосередньо направлено його підрозділу. `ADMIN` і `VYK` не мають доступу.
 
 Повертаються: `id`, `login`, `role_id`, `department_id`.""",
-    response_description="Координатори вибраного підрозділу.",
+    response_description='Координатори вибраного підрозділу.',
 )
 def get_coordinators(
-    program_id: Annotated[
-        str, Path(description="Ідентифікатор антикорупційної програми")
-    ],
-    department_id: Annotated[str, Path(description="Код підрозділу в ієрархії")],
+    program_id: Annotated[str, Path(description='Ідентифікатор антикорупційної програми')],
+    department_id: Annotated[str, Path(description='Код підрозділу в ієрархії')],
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     """Знайти користувачів KOORD у доступному підрозділі."""
-    return handle(
-        lambda: ProgramWorkflowService(db).department_coordinators(
-            program_id, department_id, user
-        )
-    )
+    return handle(lambda: ProgramWorkflowService(db).department_coordinators(
+        program_id, department_id, user
+    ))
 
 
 @router.get(
     "/programs/{program_id}/departments/{department_id}/executors",
     response_model=list[CoordinatorRead],
-    summary="Знайти виконавців підрозділу",
+    summary='Знайти виконавців підрозділу',
     description="""Повертає користувачів підрозділу з роллю `VYK`, яких можна вибрати для призначення на захід.
 
 **Права:** тільки `KOORD`, який безпосередньо отримав програму, може переглядати виконавців свого підрозділу та нащадків. `MAIN_KOORD`, `VYK` та `ADMIN` у цьому ендпоінті не мають доступу.
 
 **Примітка:** використовується схема відповіді `CoordinatorRead`, але самі записи мають роль `VYK`.""",
-    response_description="Виконавці обраного підрозділу.",
+    response_description='Виконавці обраного підрозділу.',
 )
 def get_executors(
-    program_id: Annotated[
-        str, Path(description="Ідентифікатор антикорупційної програми")
-    ],
-    department_id: Annotated[str, Path(description="Код підрозділу в ієрархії")],
+    program_id: Annotated[str, Path(description='Ідентифікатор антикорупційної програми')],
+    department_id: Annotated[str, Path(description='Код підрозділу в ієрархії')],
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     """Знайти користувачів VYK у дозволеному підрозділі."""
-    return handle(
-        lambda: ProgramWorkflowService(db).department_executors(
-            program_id, department_id, user
-        )
-    )
+    return handle(lambda: ProgramWorkflowService(db).department_executors(
+        program_id, department_id, user
+    ))
 
 
 @router.post(
     "/measures/{measure_id}/assign",
     response_model=AssignmentResult,
-    summary="Призначити виконавця на захід",
+    summary='Призначити виконавця на захід',
     description="""Створює персональний доступ користувача до конкретного заходу. Передай `department_id` та `user_id` у JSON.
 
 **Права:** призначати може тільки `KOORD`, який безпосередньо отримав програму. `ADMIN`, `MAIN_KOORD` і `VYK` не можуть призначати виконавців.
 
-Сервер перевіряє: **(1)** право керувати цією гілкою; **(2)** відповідність заходу відповідальному підрозділу/співвиконавцю або їхнім нащадкам; **(3)** існування користувача з роллю `VYK` саме у вибраному підрозділі.
+Сервер перевіряє: **(1)** програма безпосередньо направлена підрозділу `KOORD`; **(2)** вибраний підрозділ є власним або нащадком підрозділу `KOORD`; **(3)** користувач має роль `VYK` і належить обраному підрозділу. `responsible_department_id` заходу не обмежує призначення.
 
 **Результат:** `assignment` і `already_assigned`. Якщо призначення вже існує, новий запис не створюється.
 
-**Помилки:** `403` — чужа гілка/програма; `404` — відсутній захід, підрозділ або користувач; `409` — захід не стосується вибраної гілки; `422` — користувач не відповідає ролі чи підрозділу.""",
-    response_description="Створене або вже існуюче призначення.",
+**Помилки:** `403` — чужа гілка/програма; `404` — відсутній захід, підрозділ або користувач; `409` — попереднє призначення цього користувача в іншому підрозділі; `422` — користувач не відповідає ролі чи підрозділу.""",
+    response_description='Створене або вже існуюче призначення.',
 )
 def assign_measure(
-    measure_id: Annotated[str, Path(description="Ідентифікатор заходу")],
+    measure_id: Annotated[str, Path(description='Ідентифікатор заходу')],
     data: AssignMeasureIn,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     """Призначити виконавця на захід із перевіркою ієрархії."""
-    return handle(
-        lambda: ProgramWorkflowService(db).assign(
-            measure_id, data.department_id, data.user_id, user
-        )
-    )
+    return handle(lambda: ProgramWorkflowService(db).assign(
+        measure_id, data.department_id, data.user_id, user
+    ))
 
 
 @router.get(
     "/measures/{measure_id}/assignments",
     response_model=list[MeasureAssignmentRead],
-    summary="Переглянути призначення на захід",
+    summary='Переглянути призначення на захід',
     description="""Повертає перелік персональних призначень на конкретний захід.
 
-**Права:** `MAIN_KOORD`-власник — усі призначення в межах власної програми; `KOORD` із прямим направленням — **лише призначення у власному підрозділі та підлеглих**, якщо захід належить до його сфери видимості. `ADMIN` доступу не має.
+**Права:** `MAIN_KOORD`-власник — усі призначення в межах власної програми; `KOORD` із прямим направленням — **лише призначення у власному підрозділі та підлеглих** для заходів отриманої програми. `ADMIN` доступу не має.
 
 Виконавці та сторонні координатори не можуть переглядати цей список. Відповідь містить користувача, підрозділ, автора й час призначення.""",
-    response_description="Список призначень, доступних координатору.",
+    response_description='Список призначень, доступних координатору.',
 )
 def measure_assignments(
-    measure_id: Annotated[str, Path(description="Ідентифікатор заходу")],
+    measure_id: Annotated[str, Path(description='Ідентифікатор заходу')],
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -320,20 +290,17 @@ def measure_assignments(
 @router.delete(
     "/measures/{measure_id}/assign/{user_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Скасувати призначення виконавця",
+    summary='Скасувати призначення виконавця',
     description="""Видаляє персональне призначення конкретного виконавця до заходу. Не видаляє ані самого користувача, ані захід.
 
 **Права:** тільки `KOORD` може скасувати призначення у власному підрозділі або підлеглих, якщо програму безпосередньо направлено його підрозділу. `ADMIN`, `MAIN_KOORD` і `VYK` не можуть скасовувати призначення.
 
 **Успіх:** `204 No Content` — без JSON-тіла. **Якщо запису призначення немає:** `404`.""",
-    response_description="Призначення видалено; тіло відповіді відсутнє.",
+    response_description='Призначення видалено; тіло відповіді відсутнє.',
 )
 def unassign_measure(
-    measure_id: Annotated[str, Path(description="Ідентифікатор заходу")],
-    user_id: Annotated[
-        int,
-        Path(ge=1, description="Числовий ID виконавця, якому скасовують призначення"),
-    ],
+    measure_id: Annotated[str, Path(description='Ідентифікатор заходу')],
+    user_id: Annotated[int, Path(ge=1, description='Числовий ID виконавця, якому скасовують призначення')],
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):

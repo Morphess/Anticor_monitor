@@ -88,24 +88,13 @@ class ProgramWorkflowService:
         if not self.tree.is_within(target_department_id, actor.department_id):
             deny("Можна обирати лише свій та підпорядковані підрозділи")
 
-    def _measure_allows_target(self, measure, target_department_id: str) -> bool:
-        """Захід відповідального/співвиконавця може передаватися НИЖЧЕ його підрозділу.
-
-        Приклад: відповідальний P01 => можна призначити P01-A, але не P02-A;
-        відповідальний P01-A => не можна призначити P01-B (сусідня гілка).
-        """
-        allowed_sources = self.repo.measure_department_ids(measure)
-        return bool(allowed_sources & self.tree.ancestors(target_department_id))
-
-    def _visible_to_coordinator(
-        self, measure, actor_department: str, source_departments: set[str]
-    ) -> bool:
-        """Координатор бачить заходи своєї гілки та батьківського рівня."""
-        my_ancestors = self.tree.ancestors(actor_department)
-        my_descendants = self.tree.descendants(actor_department)
-        return bool(source_departments & (my_ancestors | my_descendants))
-
     def _accessible_assigned_measures(self, actor, program_id: str | None = None):
+        """Лише особисті призначення VYK у його поточному підрозділі.
+
+        Передача програми координатору батьківського підрозділу дозволяє
+        призначення VYK у всіх підлеглих підрозділах. Немає залежності від
+        measures.responsible_department_id / measure_collaborators.
+        """
         if actor.role_id != "VYK" or not actor.department_id:
             return []
         if not self.tree.exists(actor.department_id):
@@ -115,10 +104,7 @@ class ProgramWorkflowService:
             for measure in self.repo.assigned_measures(
                 actor.id, actor.department_id, program_id
             )
-            if (
-                self._is_delivered_to(measure.program_id, actor.department_id)
-                and self._measure_allows_target(measure, actor.department_id)
-            )
+            if self._is_delivered_to(measure.program_id, actor.department_id)
         ]
 
     def available_departments(self, program_id: str, actor):
@@ -126,7 +112,12 @@ class ProgramWorkflowService:
         self._require_role(actor)
         program = self._program(program_id)
         if self._owner(actor, program):
-            departments = list(self.tree.by_id.values())
+            # MAIN_KOORD може направити програму тільки туди, де є KOORD.
+            coordinator_departments = self.repo.coordinator_department_ids()
+            departments = [
+                dept for dept in self.tree.by_id.values()
+                if dept.id in coordinator_departments
+            ]
         elif self._direct_recipient(actor, program_id):
             departments = [
                 self.tree.by_id[dep_id]
@@ -142,11 +133,8 @@ class ProgramWorkflowService:
     def send_to_departments(self, program_id: str, department_ids: list[str], actor):
         self._require_role(actor)
         program = self._program(program_id)
-        is_central = self._owner(actor, program)
-        if not is_central and not self._direct_recipient(actor, program_id):
-            deny(
-                "Направляти програму може її головний координатор або координатор-одержувач"
-            )
+        if not self._owner(actor, program):
+            deny("Направляти програму може тільки MAIN_KOORD — власник програми")
         unique_ids = list(dict.fromkeys(department_ids))
         if not unique_ids or any(not dep or dep != dep.strip() for dep in unique_ids):
             raise WorkflowError(422, "Передай непорожні коректні коди підрозділів")
@@ -156,13 +144,6 @@ class ProgramWorkflowService:
         for target in unique_ids:
             if not self.tree.exists(target):
                 raise WorkflowError(422, f"Невідомий підрозділ: {target}")
-            if not is_central:
-                if target == actor.department_id or not self.tree.is_within(
-                    target, actor.department_id
-                ):
-                    deny(
-                        "Координатор може перенаправляти програму лише в підлеглі підрозділи"
-                    )
             coordinators = self.repo.coordinators(target)
             if not coordinators:
                 raise WorkflowError(
@@ -251,13 +232,10 @@ class ProgramWorkflowService:
         if self._owner(actor, program):
             measures = self.repo.all_measures(program_id)
         elif self._direct_recipient(actor, program_id):
-            all_measures = self.repo.all_measures(program_id)
-            sources = self.repo.measure_department_map(program_id, all_measures)
-            measures = [
-                m
-                for m in all_measures
-                if self._visible_to_coordinator(m, actor.department_id, sources[m.id])
-            ]
+            # KOORD бачить УСІ заходи надісланої йому програми.
+            # Доступ до VYK визначається ПЕРСОНАЛЬНИМ призначенням,
+            # а не відповідальним підрозділом, зазначеним у заході.
+            measures = self.repo.all_measures(program_id)
         elif actor.role_id == "VYK" and actor.department_id:
             measures = self._accessible_assigned_measures(actor, program_id)
             if not measures:
@@ -300,8 +278,6 @@ class ProgramWorkflowService:
         self._require_role(actor)
         measure = self._measure(measure_id)
         self._can_manage_target(actor, measure.program_id, department_id)
-        if not self._measure_allows_target(measure, department_id):
-            raise WorkflowError(409, "Захід не стосується цієї гілки підрозділів")
         target = self.repo.user(user_id)
         if target is None:
             raise WorkflowError(404, "Користувача не знайдено")
@@ -309,6 +285,12 @@ class ProgramWorkflowService:
             raise WorkflowError(422, "Користувач має бути VYK обраного підрозділу")
         old = self.repo.assignment(measure_id, user_id)
         if old is not None:
+            if old.department_id != department_id:
+                raise WorkflowError(
+                    409,
+                    "Для користувача вже існує призначення в іншому підрозділі. "
+                    "Спочатку відклич призначення, потім створи нове.",
+                )
             return {"assignment": old, "already_assigned": True}
         record = MeasureAssignment(
             measure_id=measure_id,
@@ -333,10 +315,6 @@ class ProgramWorkflowService:
             return self.repo.assignments(measure_id)
         if not self._direct_recipient(actor, measure.program_id):
             deny()
-        if not self._visible_to_coordinator(
-            measure, actor.department_id, self.repo.measure_department_ids(measure)
-        ):
-            deny("Захід не стосується гілки координатора")
         return [
             row
             for row in self.repo.assignments(measure_id)

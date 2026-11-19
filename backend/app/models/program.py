@@ -62,7 +62,12 @@ class Program(Base):
         index=True,
     )
     # Користувачі програми.
-    users: Mapped[list["User"]] = relationship("User", back_populates="program")
+
+    users: Mapped[list["User"]] = relationship(
+        "User",
+        back_populates="program",
+        foreign_keys="User.program_id",
+    )
 
     # Заходи програми.
     measures: Mapped[list["Measure"]] = relationship(

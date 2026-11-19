@@ -1,8 +1,16 @@
+import os
 from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 BASE_DIR = Path(__file__).resolve().parents[3]
+
+# Вибір середовища
+DB_ENV = os.getenv("DB_ENV", "local").lower()
+
+if DB_ENV not in ("local", "server"):
+    raise ValueError("DB_ENV повинен бути 'local' або 'server'")
 
 
 class Settings(BaseSettings):
@@ -15,7 +23,7 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str
 
     model_config = SettingsConfigDict(
-        env_file=BASE_DIR / ".env",
+        env_file=BASE_DIR / f".env.{DB_ENV}",
         env_file_encoding="utf-8",
         extra="ignore",
     )
