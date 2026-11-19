@@ -10,8 +10,8 @@ from app.core.dependencies import get_current_user
 from app.database.db_connection import get_db
 from app.models.user import User
 from app.schemas.management_dashboard import (
-    ManagementDeadline, ManagementRecommendationsResponse,
-    ManagementRisk, ManagementSummary,
+    ManagementDeadline, ManagementMeasure, ManagementProgram,
+    ManagementRecommendationsResponse, ManagementRisk, ManagementSummary,
 )
 from app.services.management_dashboard_services import (
     ManagementDashboardError, ManagementDashboardService, default_period,
@@ -104,4 +104,33 @@ def deadlines(
     return _call(lambda: ManagementDashboardService(db).deadlines(
         actor, program_id=program_id, period=chosen_period, as_of=chosen_date,
         horizon_days=horizon_days
+    ))
+
+
+@router.get("/programs", response_model=list[ManagementProgram],
+            summary="Програми керівника й підрозділи, на які їх координовано")
+def programs(
+    period: str | None = Query(default=None, pattern=r"^\d{4}-H[12]$"),
+    as_of: date | None = None,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_department_head),
+):
+    chosen_period, chosen_date = _params(period, as_of)
+    return _call(lambda: ManagementDashboardService(db).programs(
+        actor, period=chosen_period, as_of=chosen_date
+    ))
+
+
+@router.get("/measures", response_model=list[ManagementMeasure],
+            summary="Заходи програм керівника зі станом виконання (лише читання)")
+def measures(
+    program_id: str | None = Query(default=None, min_length=1, max_length=50),
+    period: str | None = Query(default=None, pattern=r"^\d{4}-H[12]$"),
+    as_of: date | None = None,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_department_head),
+):
+    chosen_period, chosen_date = _params(period, as_of)
+    return _call(lambda: ManagementDashboardService(db).measures(
+        actor, program_id=program_id, period=chosen_period, as_of=chosen_date
     ))

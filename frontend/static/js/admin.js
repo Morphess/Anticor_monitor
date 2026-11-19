@@ -42,49 +42,11 @@
     return query.split(/\s+/).every(function (word) { return hay.indexOf(word) !== -1; });
   }
 
-  // Номери сторінок: 1 … 4 5 6 … 20.
-  function pageList(page, pages) {
-    const out = [];
-    for (let i = 1; i <= pages; i++) {
-      if (i === 1 || i === pages || Math.abs(i - page) <= 1) out.push(i);
-      else if (out[out.length - 1] !== "…") out.push("…");
-    }
-    return out;
-  }
-
-  // Нижня панель таблиці: «Показано 1–25 з 1126», розмір сторінки, перемикач сторінок.
+  // Панель сторінок (спільна з кабінетом керівника — Api.renderPager).
   function renderPager(box, state, total, key, rerender) {
-    const pages = Math.max(1, Math.ceil(total / state.size));
-    if (state.page > pages) state.page = pages;
-    const from = total ? (state.page - 1) * state.size + 1 : 0;
-    const to = Math.min(total, state.page * state.size);
-    const size = el("select", { "aria-label": "Записів на сторінці" });
-    PAGE_SIZES.forEach(function (n) { size.appendChild(el("option", { value: String(n), text: String(n) })); });
-    size.value = String(state.size);
-    size.addEventListener("change", function () {
-      state.size = Number(size.value);
-      state.page = 1;
-      saveSize(key, state.size);
-      rerender();
+    Api.renderPager(box, state, total, {
+      sizes: PAGE_SIZES, rerender: rerender, onSize: function (v) { saveSize(key, v); },
     });
-    function pageBtn(label, target, aria, current) {
-      const b = el("button", { type: "button", class: "icon-btn" + (current ? " current" : ""), text: label, "aria-label": aria });
-      if (current) b.setAttribute("aria-current", "page");
-      if (target < 1 || target > pages) b.disabled = true;
-      else b.addEventListener("click", function () { state.page = target; rerender(); });
-      return b;
-    }
-    const nav = el("nav", { class: "pages", "aria-label": "Сторінки" });
-    nav.appendChild(pageBtn("‹", state.page - 1, "Попередня сторінка", false));
-    pageList(state.page, pages).forEach(function (p) {
-      nav.appendChild(p === "…" ? el("span", { class: "gap", text: "…" }) : pageBtn(String(p), p, "Сторінка " + p, p === state.page));
-    });
-    nav.appendChild(pageBtn("›", state.page + 1, "Наступна сторінка", false));
-    box.replaceChildren(
-      el("span", { class: "pager-info", text: total ? "Показано " + from + "–" + to + " з " + total : "Нічого не знайдено" }),
-      el("label", { class: "pager-size" }, ["На сторінці", size]),
-      pages > 1 ? nav : el("span")
-    );
   }
 
   function departmentNameOf(id) {
