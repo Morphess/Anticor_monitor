@@ -24,6 +24,7 @@ class OrderRepository:
         measure_id: str | None = None,
         program_id: str | None = None,
         assigned_user_id: int | None = None,
+        measure_ids: list[str] | None = None,
     ) -> list[Order]:
 
         stmt = select(Order)
@@ -42,6 +43,8 @@ class OrderRepository:
         # Фільтрація за конкретним заходом
         if measure_id is not None:
             stmt = stmt.where(Order.measure_id == measure_id)
+        if measure_ids is not None:
+            stmt = stmt.where(Order.measure_id.in_(measure_ids))
 
         stmt = (
             stmt.order_by(Order.created_at.desc(), Order.id.asc())

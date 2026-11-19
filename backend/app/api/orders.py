@@ -8,13 +8,18 @@ from app.models.measure import Measure
 from app.models.user import User
 
 from app.schemas.orders import OrderAnalysisRead, OrderCreate, OrderRead, OrderUpdate
+from app.services.order_services import OrderError, OrderService
+
 from app.services.order_analysis_services import (
     MAX_DOCUMENT_BYTES,
     OrderAnalysisError,
     analyze_order_document,
 )
-from app.services.order_services import OrderError, OrderService
 
+from app.services.program_workflow_services import (
+    ProgramWorkflowService,
+    WorkflowError,
+)
 
 router = APIRouter(
     prefix="/orders",
@@ -107,7 +112,26 @@ def list_orders(
     elif user.role_id == "VYK":
         scope = {"assigned_user_id": user.id}
 
-    elif user.role_id in {"KOORD", "KER", "ANAL"} and user.program_id is not None:
+    elif user.role_id == "KOORD":
+        workflow = ProgramWorkflowService(db)
+
+        try:
+            programs = workflow.my_programs(user)
+            allowed_measure_ids = set()
+
+            for program in programs:
+                measures = workflow.program_measures(program["id"], user)
+                allowed_measure_ids.update(item["id"] for item in measures)
+
+        except WorkflowError as exc:
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail=exc.detail,
+            ) from exc
+
+        scope = {"measure_ids": sorted(allowed_measure_ids)}
+
+    elif user.role_id in {"KER", "ANAL"} and user.program_id is not None:
         scope = {"program_id": user.program_id}
 
     else:
@@ -136,7 +160,6 @@ def get_order(
 
     return order
 
-
 @router.post("/{order_id}/analyze", response_model=OrderAnalysisRead)
 async def analyze_order(
     order_id: str,
@@ -150,7 +173,29 @@ async def analyze_order(
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
     measure = _get_measure(db, order.measure_id)
-    _require_edit_access(user, measure)
+
+    if user.role_id != "ADMIN":
+        if user.role_id != "KOORD":
+            raise HTTPException(
+                status_code=403,
+                detail="Аналіз доступний координатору або адміністратору",
+            )
+
+        try:
+            visible_measures = ProgramWorkflowService(db).program_measures(
+                measure.program_id, user
+            )
+        except WorkflowError as exc:
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail=exc.detail,
+            ) from exc
+
+        if not any(item["id"] == measure.id for item in visible_measures):
+            raise HTTPException(
+                status_code=403,
+                detail="Немає доступу до цього заходу",
+            )
 
     try:
         file_bytes = await file.read(MAX_DOCUMENT_BYTES + 1)
@@ -164,7 +209,6 @@ async def analyze_order(
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     finally:
         await file.close()
-
 
 # UPDATE — редагувати наказ
 @router.patch("/{order_id}", response_model=OrderRead)

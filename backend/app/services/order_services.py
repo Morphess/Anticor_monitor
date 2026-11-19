@@ -41,6 +41,7 @@ class OrderService:
         measure_id: str | None = None,
         program_id: str | None = None,
         assigned_user_id: int | None = None,
+        measure_ids: list[str] | None = None,
     ) -> list[Order]:
 
         return self.repo.list_orders(
@@ -49,6 +50,7 @@ class OrderService:
             measure_id=measure_id,
             program_id=program_id,
             assigned_user_id=assigned_user_id,
+            measure_ids=measure_ids,
         )
 
     # Перевірка існування заходу

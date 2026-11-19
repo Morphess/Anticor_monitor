@@ -50,21 +50,17 @@
       ordersByMeasure = Api.groupBy(orders.data, "measure_id");
       changesByMeasure = Api.groupBy(changes.data, "measure_id");
 
-      if (regional) {
-        // Лише надіслані програми й заходи, які бекенд відкриває цьому координатору.
-        programs = progList.filter(function (p) { return access[p.id]; });
-        const visible = {};
-        await Promise.all(programs.map(async function (p) {
-          const list = await Api.optional(Api.get(ROUTING + "/programs/" + encodeURIComponent(p.id) + "/measures"));
-          list.data.forEach(function (m) { visible[m.id] = true; });
-          await loadDepartments(p.id);
-        }));
-        measuresByProg = Api.groupBy(measures.filter(function (m) { return visible[m.id]; }).sort(Api.byMeasureOrder), "program_id");
-        await loadAssignments(measures.filter(function (m) { return visible[m.id]; }));
-      } else {
-        programs = progList;
-        measuresByProg = Api.groupBy(measures.sort(Api.byMeasureOrder), "program_id");
-      }
+      // Лише програми й заходи, які бекенд відкриває цьому координатору (program-routing).
+      programs = progList.filter(function (p) { return access[p.id]; });
+      const visible = {};
+      await Promise.all(programs.map(async function (p) {
+        const list = await Api.optional(Api.get(ROUTING + "/programs/" + encodeURIComponent(p.id) + "/measures"));
+        list.data.forEach(function (m) { visible[m.id] = true; });
+        if (regional) await loadDepartments(p.id);
+      }));
+      const mineMeasures = measures.filter(function (m) { return visible[m.id]; });
+      measuresByProg = Api.groupBy(mineMeasures.sort(Api.byMeasureOrder), "program_id");
+      if (regional) await loadAssignments(mineMeasures);
 
       await Api.optional(loadProgramAssignmentPanel());
 
