@@ -21,7 +21,6 @@
   let ordersByMeasure = {};
   let changesByMeasure = {};
   let flagsByMeasure = {};
-  let programUsers = [];
   let access = {};          // program_id -> owner | department_coordinator | admin
   let regional = false;     // координатор-отримувач без власних програм
   const assignments = {};   // measure_id -> [{user_id, department_id}]
@@ -50,19 +49,21 @@
       ordersByMeasure = Api.groupBy(orders.data, "measure_id");
       changesByMeasure = Api.groupBy(changes.data, "measure_id");
 
-      // Лише програми й заходи, які бекенд відкриває цьому координатору (program-routing).
-      programs = progList.filter(function (p) { return access[p.id]; });
-      const visible = {};
-      await Promise.all(programs.map(async function (p) {
-        const list = await Api.optional(Api.get(ROUTING + "/programs/" + encodeURIComponent(p.id) + "/measures"));
-        list.data.forEach(function (m) { visible[m.id] = true; });
-        if (regional) await loadDepartments(p.id);
-      }));
-      const mineMeasures = measures.filter(function (m) { return visible[m.id]; });
-      measuresByProg = Api.groupBy(mineMeasures.sort(Api.byMeasureOrder), "program_id");
-      if (regional) await loadAssignments(mineMeasures);
-
-      await Api.optional(loadProgramAssignmentPanel());
+      if (regional) {
+        // Лише надіслані програми й заходи, які бекенд відкриває цьому координатору.
+        programs = progList.filter(function (p) { return access[p.id]; });
+        const visible = {};
+        await Promise.all(programs.map(async function (p) {
+          const list = await Api.optional(Api.get(ROUTING + "/programs/" + encodeURIComponent(p.id) + "/measures"));
+          list.data.forEach(function (m) { visible[m.id] = true; });
+          await loadDepartments(p.id);
+        }));
+        measuresByProg = Api.groupBy(measures.filter(function (m) { return visible[m.id]; }).sort(Api.byMeasureOrder), "program_id");
+        await loadAssignments(measures.filter(function (m) { return visible[m.id]; }));
+      } else {
+        programs = progList;
+        measuresByProg = Api.groupBy(measures.sort(Api.byMeasureOrder), "program_id");
+      }
 
       const coordDept = (Api.me && Api.me.department_id) ||
         programs.map(function (p) { return p.coordinator_department_id; }).filter(Boolean)[0];
@@ -77,73 +78,6 @@
       root.innerHTML = "";
     }
   }
-
-  async function loadProgramAssignmentPanel() {
-    const panel = document.getElementById("user-program-panel");
-    const programSelect = document.getElementById("program-user-program");
-    const availablePrograms = await Api.get("/api/coordinator/users/programs");
-    panel.hidden = false;
-    programSelect.replaceChildren();
-    availablePrograms.forEach(function (program) {
-      programSelect.appendChild(el("option", { value: program.id, text: program.id + " — " + program.title }));
-    });
-    if (!availablePrograms.length) {
-      document.getElementById("program-user-msg").className = "msg err";
-      document.getElementById("program-user-msg").textContent = "Для вашого підрозділу немає програм, які можна призначати.";
-      programSelect.disabled = true;
-      return;
-    }
-    await loadProgramUsers();
-  }
-
-  async function loadProgramUsers() {
-    programUsers = await Api.get("/api/coordinator/users/");
-    renderProgramUsers();
-  }
-
-  function renderProgramUsers() {
-    const tbody = document.getElementById("program-users");
-    const query = document.getElementById("program-user-search").value.trim().toLocaleLowerCase("uk");
-    const visible = programUsers.filter(function (user) {
-      return String(user.id).includes(query) || user.login.toLocaleLowerCase("uk").includes(query);
-    });
-    tbody.replaceChildren();
-    if (!visible.length) {
-      tbody.appendChild(el("tr", {}, [el("td", { colspan: "5", class: "muted", text: "Немає користувачів для призначення." })]));
-      return;
-    }
-    visible.forEach(function (user) {
-      const row = el("tr", {}, [
-        el("td", { text: String(user.id) }),
-        el("td", { text: user.login }),
-        el("td", { text: user.department_id ? Api.deptName(user.department_id) : "—" }),
-        el("td", { text: user.position || "—" }),
-      ]);
-      const assign = el("button", {
-        type: "button", class: "btn", text: "Надати програму",
-        onclick: async function () {
-          assign.disabled = true;
-          try {
-            await Api.patch("/api/coordinator/users/" + user.id + "/program", {
-              program_id: document.getElementById("program-user-program").value,
-            });
-            document.getElementById("program-user-msg").className = "msg ok";
-            document.getElementById("program-user-msg").textContent = "Програму надано користувачу " + user.login + ".";
-            await loadProgramUsers();
-          } catch (err) {
-            document.getElementById("program-user-msg").className = "msg err";
-            document.getElementById("program-user-msg").textContent = "Не вдалося призначити програму: " + err.message;
-          } finally {
-            assign.disabled = false;
-          }
-        },
-      });
-      row.appendChild(el("td", {}, [assign]));
-      tbody.appendChild(row);
-    });
-  }
-
-  document.getElementById("program-user-search").addEventListener("input", renderProgramUsers);
 
   async function load() {
     Api.showError(null);
