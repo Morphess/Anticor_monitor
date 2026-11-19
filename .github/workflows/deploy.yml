@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       commit:
-        description: "Повний SHA коміту з main"
+        description: "Повний SHA останнього коміту main для розгортання"
         required: true
         type: string
 
@@ -46,12 +46,12 @@ jobs:
             exit 1
           fi
 
-          if ! git merge-base --is-ancestor "$DEPLOY_COMMIT" HEAD; then
-            echo "Коміт не належить до історії main на момент запуску."
+          if [[ "$DEPLOY_COMMIT" != "$(git rev-parse HEAD)" ]]; then
+            echo "Обраний SHA не є поточним комітом main на момент запуску."
             exit 1
           fi
 
-          echo "Обраний коміт входить до історії main: $DEPLOY_COMMIT"
+          echo "Обрано поточний коміт main: $DEPLOY_COMMIT"
 
       - name: Перевірити CI обраного коміту
         env:
@@ -101,7 +101,7 @@ jobs:
       - name: Підтвердити доступ до сервера
         run: echo "Основний сервер доступний через Tailscale."
 
-      - name: Перевірити обмежений SSH-доступ
+      - name: Запустити контрольоване розгортання
         env:
           DEPLOY_COMMIT: ${{ inputs.commit }}
           SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
