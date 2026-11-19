@@ -1,8 +1,13 @@
-// Кабінет координатора: створення й редагування програм, програма → розділ → захід → підрозділ,
-// перенесення строків, сигнали Risk Flags, зміна статусу виконання і дзвіночок сповіщень.
+// Кабінет координатора.
+// Головний координатор (власник програми): створення й редагування програм, розсилка програми
+// підрозділам (/api/program-routing/programs/{id}/departments).
+// Координатор підрозділу (отримувач програми): бачить лише надіслані йому програми й заходи своєї
+// гілки та призначає виконавців зі свого й підпорядкованих підрозділів (/measures/{id}/assign).
+// Спільне: програма → розділ → захід, статус виконання, сигнали Risk Flags, дзвіночок сповіщень.
 (function () {
   "use strict";
   const el = Api.el;
+  const ROUTING = "/api/program-routing";
   const root = document.getElementById("programs");
   const flagsNote = document.getElementById("flags-note");
   const periodSel = document.getElementById("period");
@@ -17,33 +22,52 @@
   let changesByMeasure = {};
   let flagsByMeasure = {};
   let programUsers = [];
-  // Регіональний / обласний координатор: програм не створює й не редагує, лише призначає виконавців.
-  // ЗАГЛУШКА: бекенд не розрізняє рівні координаторів — визначаємо за підрозділом користувача.
-  let regional = false;
-  const assignees = {};    // measure_id -> [id відділу/підрозділу] (макет, лише в пам'яті)
-  const open = new Set(); // розгорнуті вузли: p:ID, s:ID:R, m:ID
+  let access = {};          // program_id -> owner | department_coordinator | admin
+  let regional = false;     // координатор-отримувач без власних програм
+  const assignments = {};   // measure_id -> [{user_id, department_id}]
+  const people = {};        // user_id -> {id, login, department_id}
+  const sentTo = {};        // program_id -> [department_id], надіслані в цій сесії
+  const open = new Set();   // розгорнуті вузли: p:ID, s:ID:R, m:ID
 
   async function init() {
-
     if (!await Api.requireRole("KOORD")) return;
-    regional = !!(Api.me && Api.REGIONAL_UNITS[Api.me.department_id]);
-    if (regional) {
-      document.getElementById("coord-kind").textContent = "Регіональний координатор";
-      document.getElementById("create-program").classList.add("hidden");
-      document.getElementById("assign-open").classList.remove("hidden");
-    }
     try {
+      const mine = await Api.optional(Api.get(ROUTING + "/my/programs", { noRedirect: true }));
+      mine.data.forEach(function (row) { access[row.id] = row.access_type; });
+      const types = mine.data.map(function (row) { return row.access_type; });
+      regional = types.indexOf("department_coordinator") !== -1 && types.indexOf("owner") === -1;
+      if (regional) {
+        document.getElementById("coord-kind").textContent = "Координатор підрозділу";
+        document.getElementById("create-program").classList.add("hidden");
+        document.getElementById("assign-open").classList.remove("hidden");
+      }
+
       const [progList, measures, secs, orders, changes] = await Promise.all([
         Api.get("/api/programs"), Api.measures(), Api.sections(),
         Api.optional(Api.orders()), Api.optional(Api.deadlineChanges()),
       ]);
-      programs = progList;
-      await loadProgramAssignmentPanel();
       sections = secs;
       ordersByMeasure = Api.groupBy(orders.data, "measure_id");
       changesByMeasure = Api.groupBy(changes.data, "measure_id");
-      measuresByProg = Api.groupBy(measures.sort(Api.byMeasureOrder), "program_id");
-      // Підрозділ самого координатора; якщо не вказано — підрозділ-координатор програми.
+
+      if (regional) {
+        // Лише надіслані програми й заходи, які бекенд відкриває цьому координатору.
+        programs = progList.filter(function (p) { return access[p.id]; });
+        const visible = {};
+        await Promise.all(programs.map(async function (p) {
+          const list = await Api.optional(Api.get(ROUTING + "/programs/" + encodeURIComponent(p.id) + "/measures"));
+          list.data.forEach(function (m) { visible[m.id] = true; });
+          await loadDepartments(p.id);
+        }));
+        measuresByProg = Api.groupBy(measures.filter(function (m) { return visible[m.id]; }).sort(Api.byMeasureOrder), "program_id");
+        await loadAssignments(measures.filter(function (m) { return visible[m.id]; }));
+      } else {
+        programs = progList;
+        measuresByProg = Api.groupBy(measures.sort(Api.byMeasureOrder), "program_id");
+      }
+
+      await Api.optional(loadProgramAssignmentPanel());
+
       const coordDept = (Api.me && Api.me.department_id) ||
         programs.map(function (p) { return p.coordinator_department_id; }).filter(Boolean)[0];
       document.getElementById("unit-name").textContent = coordDept ? Api.deptName(coordDept) : "Координатор програми";
@@ -139,6 +163,53 @@
     }
   }
 
+  // ---------- довідник підрозділів і виконавців (з бекенду розсилки) ----------
+
+  const deptCache = {};     // program_id -> [{id, name, parent_id}]
+  const execCache = {};     // program_id -> [{dept, users:[{id, login, department_id}]}]
+
+  // Підрозділи, доступні для вибору в цій програмі; заодно поповнюємо довідник назв.
+  async function loadDepartments(programId) {
+    if (deptCache[programId]) return deptCache[programId];
+    const res = await Api.optional(Api.get(ROUTING + "/programs/" + encodeURIComponent(programId) + "/available-departments"));
+    deptCache[programId] = res.ok ? res.data : null;
+    (res.data || []).forEach(function (d) { Api.DEPARTMENTS[d.id] = d.name; });
+    return deptCache[programId];
+  }
+
+  // Виконавці (VYK) кожного підрозділу гілки координатора.
+  async function loadExecutors(programId) {
+    if (execCache[programId]) return execCache[programId];
+    const depts = await loadDepartments(programId) || [];
+    const groups = await Promise.all(depts.map(async function (d) {
+      const res = await Api.optional(Api.get(ROUTING + "/programs/" + encodeURIComponent(programId) +
+        "/departments/" + encodeURIComponent(d.id) + "/executors"));
+      res.data.forEach(function (u) { people[u.id] = u; });
+      return { dept: d, users: res.data };
+    }));
+    execCache[programId] = groups.filter(function (g) { return g.users.length; });
+    return execCache[programId];
+  }
+
+  async function loadAssignments(measures) {
+    await Promise.all(measures.map(async function (m) {
+      const res = await Api.optional(Api.get(ROUTING + "/measures/" + encodeURIComponent(m.id) + "/assignments"));
+      assignments[m.id] = res.data.map(function (a) { return { user_id: a.user_id, department_id: a.department_id }; });
+    }));
+  }
+
+  function personLabel(id) {
+    const u = people[id];
+    return u ? u.login + " · " + Api.deptName(u.department_id) : "Користувач №" + id;
+  }
+
+  function assigneeText(m) {
+    const list = assignments[m.id] || [];
+    return list.length ? list.map(function (a) { return personLabel(a.user_id); }).join(", ") : "Не призначено";
+  }
+
+  // ---------- дерево програм ----------
+
   function renderFlagsNote(flags) {
     flagsNote.innerHTML = "";
     if (!flags.ok) return; // ролі без доступу до сигналів блок не показується
@@ -179,8 +250,13 @@
       shown++;
       root.appendChild(programNode(p, all, list, q && !progHit));
     });
-    if (!shown) root.appendChild(el("p", { class: "muted", text: q ? "Нічого не знайдено." : "Програм ще немає. Створіть першу." }));
+    if (!shown) {
+      const empty = regional ? "Вашому підрозділу ще не надіслано програм." : "Програм ще немає. Створіть першу.";
+      root.appendChild(el("p", { class: "muted", text: q ? "Нічого не знайдено." : empty }));
+    }
   }
+
+  function canEdit(p) { return !regional && access[p.id] !== "department_coordinator"; }
 
   function programNode(p, all, list, forceOpen) {
     const key = "p:" + p.id;
@@ -201,9 +277,9 @@
       el("div", { class: "prog-tools" }, [
         el("div", {}, [
           el("div", { class: "small muted", text: (p.approval_reference || "") + (p.approval_status ? " · " + approvalLabel(p.approval_status) : "") }),
-          deptSummary(p),
+          sentSummary(p),
         ]),
-        regional ? null : el("button", { type: "button", class: "btn", onclick: function () { openDialog(p); } }, ["Редагувати програму"]),
+        canEdit(p) ? el("button", { type: "button", class: "btn", onclick: function () { openDialog(p); } }, ["Редагувати програму"]) : null,
       ]),
     ]);
     const bySec = Api.groupBy(list, "section_id");
@@ -212,6 +288,12 @@
     secIds.forEach(function (sid) { body.appendChild(sectionNode(p, sid, bySec[sid], forceOpen)); });
     node.appendChild(body);
     return node;
+  }
+
+  function sentSummary(p) {
+    const ids = sentTo[p.id] || [];
+    if (!ids.length) return null;
+    return el("div", { class: "small", style: "margin-top:2px", text: "Надіслано на координацію: " + ids.map(Api.deptName).join(", ") });
   }
 
   function finalDeadline(list) {
@@ -253,210 +335,7 @@
   }
 
   function detailNode(m) {
-    return el("div", { class: "detail" }, [
-      unitsTable(m),
-      flagsBlock(m),
-      changesBlock(m),
-    ]);
-  }
-
-  // ---------- призначення виконавців — відділів і підрозділів (регіональний координатор) ----------
-  // ЗАГЛУШКА: умовний перелік структури регіонального управління. У бекенді для заходу є лише один
-  // responsible_department_id / assigned_user_id, тож вибір кількох виконавців живе в пам'яті сторінки.
-  const UNIT_GROUPS = [
-    ["Апарат управління", [
-      "Відділ кадрового забезпечення", "Відділ закупівель", "Фінансово-економічний відділ", "Юридичний відділ",
-      "Відділ документального забезпечення", "Сектор з питань запобігання корупції", "Відділ внутрішнього аудиту",
-      "Відділ цифрової трансформації", "Відділ комунікацій", "Відділ контролю та звітності",
-    ]],
-    ["Територіальні відділи", [
-      "Білоцерківський районний відділ", "Бориспільський районний відділ", "Броварський районний відділ",
-      "Бучанський районний відділ", "Вишгородський районний відділ", "Обухівський районний відділ",
-      "Фастівський районний відділ",
-    ]],
-    ["Підпорядковані установи", [
-      "Обласний центр комплектування (умовний)", "Навчальний центр «Умовний»", "Обласний госпітальний центр (умовний)",
-      "База матеріально-технічного забезпечення (умовна)", "Ремонтна майстерня (умовна)",
-      "Інформаційно-аналітичний центр (умовний)", "Центр обслуговування громадян (умовний)",
-    ]],
-    ["Служби", [
-      "Служба логістики", "Служба зв'язку", "Служба охорони праці", "Служба психологічної підтримки",
-      "Прес-служба", "Служба безпеки інформації",
-    ]],
-  ];
-  const UNITS_FLAT = [];
-  UNIT_GROUPS.forEach(function (g, gi) {
-    g[1].forEach(function (name, i) { UNITS_FLAT.push({ id: "U" + (gi + 1) + "-" + (i + 1), name: name, group: g[0] }); });
-  });
-
-  function unitLabel(id) {
-    const u = UNITS_FLAT.find(function (x) { return x.id === id; });
-    return u ? u.name : id;
-  }
-
-  function assigneeText(m) {
-    const ids = assignees[m.id] || [];
-    return ids.length ? ids.map(unitLabel).join(", ") : "Не призначено";
-  }
-
-  // Поле з чипами, що саме є рядком пошуку; під ним розкривається список із галочками.
-  // chosen — масив id, змінюється на місці.
-  function multiPick(chosen, label) {
-    const chips = el("span", { class: "mpick-chips" });
-    const input = el("input", { type: "text", class: "mpick-input", autocomplete: "off", "aria-label": label, "aria-expanded": "false" });
-    const arrow = el("button", { type: "button", class: "mpick-arrow-btn", "aria-label": "Показати список", tabindex: "-1" }, [
-      el("span", { class: "mpick-arrow", "aria-hidden": "true" }),
-    ]);
-    const field = el("div", { class: "mpick-field" }, [chips, input, arrow]);
-    const list = el("div", { class: "mpick-list", role: "group", "aria-label": label });
-    const pop = el("div", { class: "mpick-pop hidden" }, [list]);
-
-    function drawChips() {
-      chips.innerHTML = "";
-      chosen.forEach(function (id) {
-        chips.appendChild(el("span", { class: "mpick-chip" }, [
-          unitLabel(id),
-          el("span", { class: "x", role: "button", "aria-label": "Прибрати " + unitLabel(id), title: "Прибрати", text: "×",
-            onclick: function (e) { e.stopPropagation(); toggleUnit(id); } }),
-        ]));
-      });
-      input.placeholder = chosen.length ? "Додати ще…" : "Оберіть відділи та підрозділи";
-    }
-
-    function toggleUnit(id) {
-      const i = chosen.indexOf(id);
-      if (i === -1) chosen.push(id); else chosen.splice(i, 1);
-      drawChips();
-      if (!pop.classList.contains("hidden")) drawList();
-    }
-
-    function drawList() {
-      const q = input.value.trim().toLowerCase();
-      list.innerHTML = "";
-      let any = false;
-      UNIT_GROUPS.forEach(function (g) {
-        const items = UNITS_FLAT.filter(function (u) { return u.group === g[0] && (!q || matches(u.name, q) || matches(u.group, q)); });
-        if (!items.length) return;
-        any = true;
-        list.appendChild(el("div", { class: "mpick-group", text: g[0] }));
-        items.forEach(function (u) {
-          const box = el("input", { type: "checkbox", value: u.id });
-          box.checked = chosen.indexOf(u.id) !== -1;
-          box.addEventListener("change", function () { toggleUnit(u.id); });
-          list.appendChild(el("label", { class: "dept-item" }, [box, u.name]));
-        });
-      });
-      if (!any) list.appendChild(el("p", { class: "small muted", style: "margin:6px 0", text: "Нічого не знайдено." }));
-    }
-
-    function setOpen(show) {
-      if (show) closeAllPicks(pop);
-      pop.classList.toggle("hidden", !show);
-      field.classList.toggle("open", show);
-      input.setAttribute("aria-expanded", String(show));
-      if (show) drawList(); else input.value = "";
-    }
-
-    field.addEventListener("click", function () { input.focus(); if (pop.classList.contains("hidden")) setOpen(true); });
-    arrow.addEventListener("click", function (e) { e.stopPropagation(); setOpen(pop.classList.contains("hidden")); if (!pop.classList.contains("hidden")) input.focus(); });
-    input.addEventListener("input", function () { if (pop.classList.contains("hidden")) setOpen(true); else drawList(); });
-    input.addEventListener("keydown", function (e) {
-      if (e.key === "Escape" && !pop.classList.contains("hidden")) { e.stopPropagation(); e.preventDefault(); setOpen(false); }
-      if (e.key === "Backspace" && !input.value && chosen.length) toggleUnit(chosen[chosen.length - 1]);
-    });
-    pop.close = function () { setOpen(false); };
-    drawChips();
-    return el("div", { class: "mpick" }, [field, pop]);
-  }
-
-  function closeAllPicks(except) {
-    document.querySelectorAll(".mpick-pop").forEach(function (p) { if (p !== except && p.close && !p.classList.contains("hidden")) p.close(); });
-  }
-  document.addEventListener("click", function (e) { if (!e.target.closest(".mpick")) closeAllPicks(null); });
-
-  // ---------- вікно «Призначити виконавця» ----------
-  const assignDialog = document.getElementById("assign-dialog");
-  const assignBody = document.getElementById("assign-body");
-  const assignSearch = document.getElementById("assign-search");
-  const assignMsg = document.getElementById("assign-msg");
-  let draft = {}; // чернетка призначень у вікні: measure_id -> [unit id]
-
-  function openAssign() {
-    draft = {};
-    Object.keys(assignees).forEach(function (k) { draft[k] = assignees[k].slice(); });
-    assignSearch.value = "";
-    assignMsg.textContent = "";
-    assignMsg.className = "msg";
-    renderAssign();
-    assignDialog.showModal();
-  }
-
-  const aOpen = new Set(); // розгорнуті у вікні: p:ID, s:ID:R
-
-  function aToggle(key) { aOpen.has(key) ? aOpen.delete(key) : aOpen.add(key); renderAssign(); }
-
-  function renderAssign() {
-    const q = assignSearch.value.trim().toLowerCase();
-    assignBody.innerHTML = "";
-    let shown = 0;
-    programs.forEach(function (p) {
-      const all = measuresByProg[p.id] || [];
-      const progHit = !q || matches(p.title, q) || matches(p.id, q);
-      const list = progHit ? all : all.filter(function (m) { return matches(m.description, q) || matches(Api.measureNo(m), q); });
-      if (!list.length) return;
-      shown++;
-      const key = "p:" + p.id;
-      const isOpen = !!q || aOpen.has(key);
-      const node = el("div", { class: "prog" }, [
-        el("button", { type: "button", class: "row-head", "aria-expanded": String(isOpen), onclick: function () { aToggle(key); } }, [
-          el("span", { class: "title" }, [el("span", { class: "code", text: p.id }), p.title]),
-          el("span"),
-        ]),
-      ]);
-      if (isOpen) {
-        const body = el("div", { class: "prog-body" });
-        const bySec = Api.groupBy(list, "section_id");
-        Object.keys(bySec).sort(Api.compareSections).forEach(function (sid) {
-          const sKey = "s:" + p.id + ":" + sid;
-          const sOpen = !!q || aOpen.has(sKey);
-          const sec = el("div", { class: "sec" }, [
-            el("button", { type: "button", class: "row-head", "aria-expanded": String(sOpen), onclick: function () { aToggle(sKey); } }, [
-              el("span", { class: "title", text: Api.sectionTitle(sections, sid) }),
-              el("span"),
-            ]),
-          ]);
-          if (sOpen) sec.appendChild(el("div", { class: "assign-rows" }, bySec[sid].map(assignRow)));
-          body.appendChild(sec);
-        });
-        node.appendChild(body);
-      }
-      assignBody.appendChild(node);
-    });
-    if (!shown) assignBody.appendChild(el("p", { class: "muted", text: q ? "Нічого не знайдено." : "Заходів немає." }));
-  }
-
-  function assignRow(m) {
-    const chosen = draft[m.id] = draft[m.id] || [];
-    return el("div", { class: "assign-row" }, [
-      el("div", {}, [
-        el("div", {}, [el("span", { class: "num", text: Api.measureNo(m) + " " }), m.description]),
-        el("div", { class: "small muted", text: "Виконати до: " + deadlineText(m) }),
-      ]),
-      multiPick(chosen, "Виконавці заходу " + Api.measureNo(m)),
-    ]);
-  }
-
-  function saveAssign() {
-    Object.keys(draft).forEach(function (k) { assignees[k] = draft[k].slice(); });
-    assignDialog.close();
-    render();
-  }
-
-  if (document.getElementById("assign-open")) {
-    document.getElementById("assign-open").addEventListener("click", openAssign);
-    document.getElementById("assign-cancel").addEventListener("click", function () { assignDialog.close(); });
-    document.getElementById("assign-save").addEventListener("click", saveAssign);
-    assignSearch.addEventListener("input", renderAssign);
+    return el("div", { class: "detail" }, [unitsTable(m), flagsBlock(m), changesBlock(m)]);
   }
 
   function deadlineText(m) {
@@ -465,7 +344,6 @@
     return m.deadline_description || "—";
   }
 
-  // ЗАГЛУШКА: співвиконавців API не віддає — показуємо відповідальний підрозділ.
   function unitsTable(m) {
     const ex = executions[m.id];
     const key = Api.statusOf(ex);
@@ -486,9 +364,9 @@
     return el("div", { class: "units table-wrap" }, [
       el("table", { class: "grid" }, [
         el("thead", {}, [el("tr", {}, [
-          el("th", { text: "Підрозділ" }), regional ? el("th", { text: "Виконавці" }) : null, el("th", { text: "Виконати до" }), el("th", { text: "Фактично виконано" }),
-          el("th", { text: "№ наказу" }),
-          el("th", { text: "Примітка" }), el("th", { text: "Статус" }),
+          el("th", { text: "Підрозділ" }), regional ? el("th", { text: "Виконавці" }) : null,
+          el("th", { text: "Виконати до" }), el("th", { text: "Фактично виконано" }),
+          el("th", { text: "№ наказу" }), el("th", { text: "Примітка" }), el("th", { text: "Статус" }),
         ])]),
         el("tbody", {}, [el("tr", {}, [
           el("td", { text: Api.deptName(m.responsible_department_id) }),
@@ -550,6 +428,230 @@
     }
   }
 
+  // ---------- випадний список із пошуком і множинним вибором ----------
+  // Поле з чипами саме є рядком пошуку; під ним розкривається список із галочками.
+  // groups: [{name, items: [{id, label}]}]; chosen — масив id, змінюється на місці.
+  function multiPick(groups, chosen, label, placeholder) {
+    const labels = {};
+    groups.forEach(function (g) { g.items.forEach(function (it) { labels[it.id] = it.label; }); });
+    const nameOf = function (id) { return labels[id] || String(id); };
+    const chips = el("span", { class: "mpick-chips" });
+    const input = el("input", { type: "text", class: "mpick-input", autocomplete: "off", "aria-label": label, "aria-expanded": "false" });
+    const arrow = el("button", { type: "button", class: "mpick-arrow-btn", "aria-label": "Показати список", tabindex: "-1" }, [
+      el("span", { class: "mpick-arrow", "aria-hidden": "true" }),
+    ]);
+    const field = el("div", { class: "mpick-field" }, [chips, input, arrow]);
+    const list = el("div", { class: "mpick-list", role: "group", "aria-label": label });
+    const pop = el("div", { class: "mpick-pop hidden" }, [list]);
+
+    function drawChips() {
+      chips.innerHTML = "";
+      chosen.forEach(function (id) {
+        chips.appendChild(el("span", { class: "mpick-chip" }, [
+          nameOf(id),
+          el("span", { class: "x", role: "button", "aria-label": "Прибрати " + nameOf(id), title: "Прибрати", text: "×",
+            onclick: function (e) { e.stopPropagation(); toggleItem(id); } }),
+        ]));
+      });
+      input.placeholder = chosen.length ? "Додати ще…" : placeholder;
+    }
+
+    function toggleItem(id) {
+      const i = chosen.indexOf(id);
+      if (i === -1) chosen.push(id); else chosen.splice(i, 1);
+      drawChips();
+      if (!pop.classList.contains("hidden")) drawList();
+    }
+
+    function drawList() {
+      const q = input.value.trim().toLowerCase();
+      list.innerHTML = "";
+      let any = false;
+      groups.forEach(function (g) {
+        const items = g.items.filter(function (it) { return !q || matches(it.label, q) || matches(g.name, q); });
+        if (!items.length) return;
+        any = true;
+        list.appendChild(el("div", { class: "mpick-group", text: g.name }));
+        items.forEach(function (it) {
+          const box = el("input", { type: "checkbox" });
+          box.checked = chosen.indexOf(it.id) !== -1;
+          box.addEventListener("change", function () { toggleItem(it.id); });
+          list.appendChild(el("label", { class: "dept-item" }, [box, it.label]));
+        });
+      });
+      if (!any) list.appendChild(el("p", { class: "small muted", style: "margin:6px 0", text: groups.length ? "Нічого не знайдено." : "Список порожній." }));
+    }
+
+    function setOpen(show) {
+      if (show) closeAllPicks(pop);
+      pop.classList.toggle("hidden", !show);
+      field.classList.toggle("open", show);
+      input.setAttribute("aria-expanded", String(show));
+      if (show) drawList(); else input.value = "";
+    }
+
+    field.addEventListener("click", function () { input.focus(); if (pop.classList.contains("hidden")) setOpen(true); });
+    arrow.addEventListener("click", function (e) { e.stopPropagation(); setOpen(pop.classList.contains("hidden")); if (!pop.classList.contains("hidden")) input.focus(); });
+    input.addEventListener("input", function () { if (pop.classList.contains("hidden")) setOpen(true); else drawList(); });
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !pop.classList.contains("hidden")) { e.stopPropagation(); e.preventDefault(); setOpen(false); }
+      if (e.key === "Backspace" && !input.value && chosen.length) toggleItem(chosen[chosen.length - 1]);
+      if (e.key === "Enter") e.preventDefault(); // не відправляти форму
+    });
+    pop.close = function () { setOpen(false); };
+    drawChips();
+    return el("div", { class: "mpick" }, [field, pop]);
+  }
+
+  function closeAllPicks(except) {
+    document.querySelectorAll(".mpick-pop").forEach(function (p) { if (p !== except && p.close && !p.classList.contains("hidden")) p.close(); });
+  }
+  document.addEventListener("click", function (e) { if (!e.target.closest(".mpick")) closeAllPicks(null); });
+
+  // Групування підрозділів за батьківським: «Назва батька» → дочірні.
+  function deptGroups(depts) {
+    const byId = {};
+    depts.forEach(function (d) { byId[d.id] = d; });
+    const groups = {};
+    depts.forEach(function (d) {
+      const parent = d.parent_id && byId[d.parent_id] ? byId[d.parent_id].name : "Верхній рівень";
+      (groups[parent] = groups[parent] || []).push({ id: d.id, label: d.name });
+    });
+    return Object.keys(groups).map(function (name) { return { name: name, items: groups[name] }; });
+  }
+
+  // ---------- вікно «Призначити виконавця» (координатор підрозділу) ----------
+  const assignDialog = document.getElementById("assign-dialog");
+  const assignBody = document.getElementById("assign-body");
+  const assignSearch = document.getElementById("assign-search");
+  const assignMsg = document.getElementById("assign-msg");
+  const aOpen = new Set();  // розгорнуті у вікні: p:ID, s:ID:R
+  let draft = {};           // measure_id -> [user_id]
+  let pickGroups = {};      // program_id -> групи для multiPick
+
+  async function openAssign() {
+    assignSearch.value = "";
+    setAssignMsg("", "Завантаження виконавців…");
+    assignBody.innerHTML = "";
+    assignDialog.showModal();
+    pickGroups = {};
+    await Promise.all(programs.map(async function (p) {
+      const groups = await loadExecutors(p.id);
+      pickGroups[p.id] = groups.map(function (g) {
+        return { name: g.dept.name, items: g.users.map(function (u) { return { id: u.id, label: u.login }; }) };
+      });
+    }));
+    draft = {};
+    Object.keys(assignments).forEach(function (k) {
+      draft[k] = assignments[k].map(function (a) { return a.user_id; });
+    });
+    setAssignMsg("", "");
+    renderAssign();
+  }
+
+  function setAssignMsg(kind, text) {
+    assignMsg.className = "msg" + (kind ? " " + kind : "");
+    assignMsg.textContent = text;
+  }
+
+  function aToggle(key) { aOpen.has(key) ? aOpen.delete(key) : aOpen.add(key); renderAssign(); }
+
+  function renderAssign() {
+    const q = assignSearch.value.trim().toLowerCase();
+    assignBody.innerHTML = "";
+    let shown = 0;
+    programs.forEach(function (p) {
+      const all = measuresByProg[p.id] || [];
+      const progHit = !q || matches(p.title, q) || matches(p.id, q);
+      const list = progHit ? all : all.filter(function (m) { return matches(m.description, q) || matches(Api.measureNo(m), q); });
+      if (!list.length) return;
+      shown++;
+      const key = "p:" + p.id;
+      const isOpen = !!q || aOpen.has(key);
+      const node = el("div", { class: "prog" }, [
+        el("button", { type: "button", class: "row-head", "aria-expanded": String(isOpen), onclick: function () { aToggle(key); } }, [
+          el("span", { class: "title" }, [el("span", { class: "code", text: p.id }), p.title]),
+          el("span"),
+        ]),
+      ]);
+      if (isOpen) {
+        const body = el("div", { class: "prog-body" });
+        const bySec = Api.groupBy(list, "section_id");
+        Object.keys(bySec).sort(Api.compareSections).forEach(function (sid) {
+          const sKey = "s:" + p.id + ":" + sid;
+          const sOpen = !!q || aOpen.has(sKey);
+          const sec = el("div", { class: "sec" }, [
+            el("button", { type: "button", class: "row-head", "aria-expanded": String(sOpen), onclick: function () { aToggle(sKey); } }, [
+              el("span", { class: "title", text: Api.sectionTitle(sections, sid) }),
+              el("span"),
+            ]),
+          ]);
+          if (sOpen) sec.appendChild(el("div", { class: "assign-rows" }, bySec[sid].map(function (m) { return assignRow(p, m); })));
+          body.appendChild(sec);
+        });
+        node.appendChild(body);
+      }
+      assignBody.appendChild(node);
+    });
+    if (!shown) assignBody.appendChild(el("p", { class: "muted", text: q ? "Нічого не знайдено." : "Заходів немає." }));
+  }
+
+  function assignRow(p, m) {
+    const chosen = draft[m.id] = draft[m.id] || [];
+    return el("div", { class: "assign-row" }, [
+      el("div", {}, [
+        el("div", {}, [el("span", { class: "num", text: Api.measureNo(m) + " " }), m.description]),
+        el("div", { class: "small muted", text: "Виконати до: " + deadlineText(m) }),
+      ]),
+      multiPick(pickGroups[p.id] || [], chosen, "Виконавці заходу " + Api.measureNo(m), "Оберіть виконавців із відділів"),
+    ]);
+  }
+
+  // Різниця між чернеткою й поточними призначеннями: нові — POST, зняті — DELETE.
+  async function saveAssign() {
+    const btn = document.getElementById("assign-save");
+    btn.disabled = true;
+    setAssignMsg("", "Збереження…");
+    const failed = [];
+    const all = [];
+    Object.keys(measuresByProg).forEach(function (k) { all.push.apply(all, measuresByProg[k]); });
+    for (const m of all) {
+      const before = (assignments[m.id] || []).map(function (a) { return a.user_id; });
+      const after = draft[m.id] || before;
+      const url = ROUTING + "/measures/" + encodeURIComponent(m.id);
+      for (const uid of after) {
+        if (before.indexOf(uid) !== -1) continue;
+        const u = people[uid];
+        try {
+          await Api.post(url + "/assign", { department_id: u.department_id, user_id: uid });
+        } catch (err) { failed.push(Api.measureNo(m) + " — " + personLabel(uid) + ": " + err.message); }
+      }
+      for (const uid of before) {
+        if (after.indexOf(uid) !== -1) continue;
+        try {
+          await Api.del(url + "/assign/" + encodeURIComponent(uid));
+        } catch (err) { failed.push(Api.measureNo(m) + " — зняти " + personLabel(uid) + ": " + err.message); }
+      }
+    }
+    await loadAssignments(all);
+    btn.disabled = false;
+    render();
+    if (failed.length) {
+      Object.keys(assignments).forEach(function (k) { draft[k] = assignments[k].map(function (a) { return a.user_id; }); });
+      renderAssign();
+      setAssignMsg("err", "Не все збережено: " + failed.join("; "));
+      return;
+    }
+    assignDialog.close();
+  }
+
+  if (document.getElementById("assign-open")) {
+    document.getElementById("assign-open").addEventListener("click", openAssign);
+    document.getElementById("assign-cancel").addEventListener("click", function () { assignDialog.close(); });
+    document.getElementById("assign-save").addEventListener("click", saveAssign);
+    assignSearch.addEventListener("input", renderAssign);
+  }
+
   // ---------- сповіщення ----------
 
   // Для координатора: звіти, що чекають розгляду; прострочені й термінові заходи без звіту.
@@ -581,63 +683,40 @@
     Notify.flash(document.getElementById("row-" + m.id));
   }
 
-  // ---------- підрозділи для координації (МАКЕТ) ----------
-  // ЗАГЛУШКА: бекенд поки зберігає в програмі лише один coordinator_department_id, а довідник
-  // /api/departments доступний тільки адміністратору. Тому список підрозділів вигаданий,
-  // а вибір живе лише в пам'яті сторінки й зникає після перезавантаження.
-  const UNITS = Object.keys(Api.REGIONAL_UNITS).map(function (id) { return { id: id, name: Api.REGIONAL_UNITS[id] }; });
-  const unitsByProgram = {}; // program_id -> [unit id]
-  const deptList = document.getElementById("dept-list");
-  const deptCount = document.getElementById("dept-count");
-
-  function unitName(id) {
-    const u = UNITS.find(function (x) { return x.id === id; });
-    return u ? u.name : id;
-  }
-
-  function deptSummary(p) {
-    const ids = unitsByProgram[p.id] || [];
-    if (!ids.length) return el("div", { class: "small muted", text: "Підрозділи для координації не обрано" });
-    return el("div", { class: "small", style: "margin-top:2px", text: "Надіслано на координацію: " + ids.map(unitName).join(", ") });
-  }
-
-  function checkedUnits() {
-    return Array.from(deptList.querySelectorAll("input:checked")).map(function (i) { return i.value; });
-  }
-
-  function updateDeptCount() {
-    const n = checkedUnits().length;
-    deptCount.textContent = n ? "Обрано: " + n + " з " + UNITS.length : "Не обрано";
-  }
-
-  function fillUnits(selected) {
-    deptList.innerHTML = "";
-    UNITS.forEach(function (u) {
-      const box = el("input", { type: "checkbox", value: u.id });
-      box.checked = selected.indexOf(u.id) !== -1;
-      box.addEventListener("change", updateDeptCount);
-      deptList.appendChild(el("label", { class: "dept-item" }, [box, u.name]));
-    });
-    updateDeptCount();
-  }
-
-  document.getElementById("dept-all").addEventListener("click", function () {
-    const boxes = Array.from(deptList.querySelectorAll("input"));
-    const all = boxes.every(function (b) { return b.checked; });
-    boxes.forEach(function (b) { b.checked = !all; });
-    updateDeptCount();
-  });
-
-  // ---------- створення й редагування програми ----------
+  // ---------- створення й редагування програми, розсилка підрозділам ----------
   // POST /api/programs — нова; PATCH /api/programs/{id} — зміна (код програми не змінюється).
+  // Розсилка: POST /api/program-routing/programs/{id}/departments — лише для існуючої програми.
   const APPROVAL = { draft: "Проєкт", approved: "Затверджено" };
   function approvalLabel(v) { return APPROVAL[v] || v; }
 
   const dialog = document.getElementById("program-dialog");
   const form = document.getElementById("program-form");
   const formErr = document.getElementById("program-error");
+  const pickBox = document.getElementById("dept-pick-box");
+  const pickNote = document.getElementById("dept-pick-note");
   const FIELDS = ["id", "title", "organization_name", "start_date", "end_date", "approval_reference", "approval_status", "goals"];
-  let editing = null; // програма, що редагується; null — створення
+  let editing = null;   // програма, що редагується; null — створення
+  let toSend = [];      // обрані підрозділи для розсилки
+
+  async function fillDeptPicker(p) {
+    toSend = [];
+    pickBox.innerHTML = "";
+    if (!p) {
+      pickNote.textContent = "Підрозділи можна обрати після створення програми: відкрийте її й натисніть «Редагувати програму».";
+      return;
+    }
+    pickNote.textContent = "Завантаження підрозділів…";
+    const depts = await loadDepartments(p.id);
+    if (editing !== p) return; // вікно вже перемкнули
+    if (!depts) {
+      pickNote.textContent = "Надсилати цю програму може лише її власник — координатор, який її створив.";
+      return;
+    }
+    pickNote.textContent = (sentTo[p.id] || []).length
+      ? "Уже надіслано в цій сесії: " + sentTo[p.id].map(Api.deptName).join(", ") + "."
+      : "У кожному обраному підрозділі має бути координатор.";
+    pickBox.appendChild(multiPick(deptGroups(depts), toSend, "Підрозділи для координації", "Оберіть підрозділи для координації"));
+  }
 
   function openDialog(p) {
     editing = p || null;
@@ -652,10 +731,17 @@
       FIELDS.forEach(function (f) { form.elements[f].value = p[f] == null ? "" : p[f]; });
     }
     form.elements.id.readOnly = !!p;
-    fillUnits(p ? unitsByProgram[p.id] || [] : []);
     document.getElementById("program-dialog-title").textContent = p ? "Редагування програми " + p.id : "Нова програма";
     document.getElementById("program-submit").textContent = p ? "Зберегти зміни" : "Створити програму";
     dialog.showModal();
+    fillDeptPicker(editing);
+  }
+
+  async function dispatch(programId) {
+    if (!toSend.length) return;
+    const res = await Api.post(ROUTING + "/programs/" + encodeURIComponent(programId) + "/departments", { department_ids: toSend.slice() });
+    const ids = res.departments.map(function (d) { return d.department_id; });
+    sentTo[programId] = Array.from(new Set((sentTo[programId] || []).concat(ids)));
   }
 
   document.getElementById("create-program").addEventListener("click", function () { openDialog(null); });
@@ -669,13 +755,13 @@
         delete data.id;
         const saved = await Api.patch("/api/programs/" + encodeURIComponent(editing.id), data);
         programs[programs.indexOf(editing)] = saved;
-        unitsByProgram[saved.id] = checkedUnits();
+        editing = saved;
         open.add("p:" + saved.id);
+        await dispatch(saved.id);
       } else {
         data.notes = "";
         const created = await Api.post("/api/programs", data);
         programs.push(created);
-        unitsByProgram[created.id] = checkedUnits();
         open.add("p:" + created.id);
       }
       dialog.close();
@@ -683,6 +769,7 @@
     } catch (err) {
       formErr.textContent = err.message;
       formErr.classList.remove("hidden");
+      render();
     }
   });
 

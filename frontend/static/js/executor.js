@@ -22,16 +22,23 @@
     if (!await Api.requireRole("VYK")) return;
     showIdent(Api.me);
     try {
-      const [progList, ms, secs, orders] = await Promise.all([
+      const [progList, ms, secs, orders, routed] = await Promise.all([
         Api.get("/api/programs"), Api.measures(), Api.sections(), Api.optional(Api.orders()),
+        Api.optional(Api.get("/api/program-routing/my/measures", { noRedirect: true })),
       ]);
       sections = secs;
       ordersOk = orders.ok;
       ordersByMeasure = Api.groupBy(orders.data, "measure_id");
 
       // Виконавець бачить тільки свої заходи (assigned_user_id), чужі не показуються.
+      // Свої заходи: закріплені за користувачем (assigned_user_id) або призначені координатором
+      // підрозділу через /api/program-routing (персональні призначення).
       const me = Api.userId();
-      const mine = ms.filter(function (m) { return me !== null && m.assigned_user_id === me; }).sort(Api.byMeasureOrder);
+      const routedIds = {};
+      routed.data.forEach(function (m) { routedIds[m.id] = true; });
+      const mine = ms.filter(function (m) {
+        return (me !== null && m.assigned_user_id === me) || routedIds[m.id];
+      }).sort(Api.byMeasureOrder);
       measuresByProg = Api.groupBy(mine, "program_id");
       programs = progList.filter(function (p) { return measuresByProg[p.id]; });
       if (programs.length === 1) open.add("p:" + programs[0].id);

@@ -56,12 +56,9 @@
     <label class="field" style="margin-bottom:12px">Назва<input name="title" required></label>
     <label class="field" style="margin-bottom:12px">Мета<textarea name="goals" rows="3" required></textarea></label>
     <fieldset class="dept-pick">
-      <legend>Підрозділи для координації</legend>
-      <div class="dept-tools">
-        <span class="small muted" id="dept-count">Не обрано</span>
-        <button type="button" class="btn btn-sm" id="dept-all">Обрати всі</button>
-      </div>
-      <div class="dept-list" id="dept-list"></div>
+      <legend>Надіслати на координацію підрозділам</legend>
+      <div id="dept-pick-box"></div>
+      <p class="small muted" id="dept-pick-note" style="margin:6px 0 0"></p>
     </fieldset>
     <div id="program-error" class="alert hidden" role="alert"></div>
     <div class="toolbar" style="margin:0">
