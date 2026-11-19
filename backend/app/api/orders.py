@@ -1,258 +1,101 @@
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
+"""CRUD API локального реєстру наказів (для ручного наповнення розробником).
+
+УВАГА: у цій версії маршрути без авторизації. Запускай локально;
+перед публічним розгортанням додай авторизацію для POST/PATCH/DELETE.
+"""
+from __future__ import annotations
+
+from fastapi import (APIRouter, Depends, HTTPException, Query, Response,
+                     UploadFile, File, Form, Request, status)
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_current_user
 from app.database.db_connection import get_db
-
-from app.models.measure import Measure
-from app.models.user import User
-
-from app.schemas.orders import OrderAnalysisRead, OrderCreate, OrderRead, OrderUpdate
+from app.schemas.orders import OrderCreate, OrderRead, OrderUpdate
 from app.services.order_services import OrderError, OrderService
+from app.services.order_version_services import OrderVersionService
+from app.schemas.order_versions import OrderVersionRead
 
-from app.services.order_analysis_services import (
-    MAX_DOCUMENT_BYTES,
-    OrderAnalysisError,
-    analyze_order_document,
-)
-
-from app.services.program_workflow_services import (
-    ProgramWorkflowService,
-    WorkflowError,
-)
-
-router = APIRouter(
-    prefix="/orders",
-    tags=["Orders"],
-    dependencies=[Depends(get_current_user)],
-)
+router = APIRouter(prefix="/orders", tags=["Orders"])
 
 
-# Перевірка можливості перегляду наказу
-def _read_allowed(user: User, measure: Measure) -> bool:
+def require_local_registry_write(request: Request) -> None:
+    """Тільки локальний Swagger. Не замінює повноцінну автентифікацію.
 
-    if user.role_id == "ADMIN":
-        return True
-
-    if user.role_id == "VYK":
-        return measure.assigned_user_id == user.id
-
-    return (
-        user.role_id in {"KOORD", "KER", "ANAL"}
-        and user.program_id is not None
-        and user.program_id == measure.program_id
-    )
+    У продакшні прибери CRUD або додай окрему роль редактора реєстру.
+    Не публікуй цей сервіс через reverse proxy, який підключається з loopback.
+    """
+    if request.client is None or request.client.host not in {
+        "127.0.0.1", "::1", "testclient",
+    }:
+        raise HTTPException(status_code=403, detail="Запис наказів дозволено лише локально")
 
 
-def _require_read_access(user: User, measure: Measure) -> None:
 
-    if not _read_allowed(user, measure):
-        raise HTTPException(
-            status_code=403, detail="Немає доступу до наказів цього заходу"
-        )
-
-
-# Перевірка прав на створення і зміну
-def _require_edit_access(user: User, measure: Measure) -> None:
-
-    if user.role_id == "ADMIN":
-        return
-
-    if (
-        user.role_id == "KOORD"
-        and user.program_id is not None
-        and user.program_id == measure.program_id
-    ):
-        return
-
-    raise HTTPException(status_code=403, detail="Недостатньо прав для зміни наказу")
-
-
-# Отримати пов'язаний захід
-def _get_measure(db: Session, measure_id: str) -> Measure:
-
-    measure = db.get(Measure, measure_id)
-
-    if measure is None:
-        raise HTTPException(status_code=422, detail="Захід не знайдено")
-
-    return measure
-
-
-# CREATE — створити наказ
-@router.post("/", response_model=OrderRead, status_code=status.HTTP_201_CREATED)
-def create_order(
-    data: OrderCreate,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
-
-    _require_edit_access(user, _get_measure(db, data.measure_id))
-
+@router.post("/", response_model=OrderRead, status_code=status.HTTP_201_CREATED,
+             summary="Створити наказ у реєстрі")
+def create_order(data: OrderCreate, db: Session = Depends(get_db),
+                 _local: None = Depends(require_local_registry_write)):
     try:
         return OrderService(db).create_order(data)
-
     except OrderError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
-# READ — список наказів
-@router.get("/", response_model=list[OrderRead])
-def list_orders(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
-    measure_id: str | None = None,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
-
-    if user.role_id == "ADMIN":
-        scope = {}
-
-    elif user.role_id == "VYK":
-        scope = {"assigned_user_id": user.id}
-
-    elif user.role_id == "KOORD":
-        workflow = ProgramWorkflowService(db)
-
-        try:
-            programs = workflow.my_programs(user)
-            allowed_measure_ids = set()
-
-            for program in programs:
-                measures = workflow.program_measures(program["id"], user)
-                allowed_measure_ids.update(item["id"] for item in measures)
-
-        except WorkflowError as exc:
-            raise HTTPException(
-                status_code=exc.status_code,
-                detail=exc.detail,
-            ) from exc
-
-        scope = {"measure_ids": sorted(allowed_measure_ids)}
-
-    elif user.role_id in {"KER", "ANAL"} and user.program_id is not None:
-        scope = {"program_id": user.program_id}
-
-    else:
-        raise HTTPException(status_code=403, detail="Немає доступу до наказів")
-
-    return OrderService(db).list_orders(
-        skip=skip, limit=limit, measure_id=measure_id, **scope
-    )
+@router.get("/", response_model=list[OrderRead], summary="Переглянути накази")
+def list_orders(skip: int = Query(default=0, ge=0),
+                limit: int = Query(default=20, ge=1, le=100),
+                db: Session = Depends(get_db)):
+    return OrderService(db).list_orders(skip=skip, limit=limit)
 
 
-# READ — отримати наказ за ID
-@router.get("/{order_id}", response_model=OrderRead)
-def get_order(
-    order_id: str,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
-
+@router.get("/{order_id}", response_model=OrderRead, summary="Переглянути наказ за ID")
+def get_order(order_id: str, db: Session = Depends(get_db)):
     try:
-        order = OrderService(db).get_order(order_id)
-
-    except OrderError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-
-    _require_read_access(user, _get_measure(db, order.measure_id))
-
-    return order
-
-@router.post("/{order_id}/analyze", response_model=OrderAnalysisRead)
-async def analyze_order(
-    order_id: str,
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
-    try:
-        order = OrderService(db).get_order(order_id)
-    except OrderError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-
-    measure = _get_measure(db, order.measure_id)
-
-    if user.role_id != "ADMIN":
-        if user.role_id != "KOORD":
-            raise HTTPException(
-                status_code=403,
-                detail="Аналіз доступний координатору або адміністратору",
-            )
-
-        try:
-            visible_measures = ProgramWorkflowService(db).program_measures(
-                measure.program_id, user
-            )
-        except WorkflowError as exc:
-            raise HTTPException(
-                status_code=exc.status_code,
-                detail=exc.detail,
-            ) from exc
-
-        if not any(item["id"] == measure.id for item in visible_measures):
-            raise HTTPException(
-                status_code=403,
-                detail="Немає доступу до цього заходу",
-            )
-
-    try:
-        file_bytes = await file.read(MAX_DOCUMENT_BYTES + 1)
-        return await analyze_order_document(
-            order=order,
-            measure=measure,
-            file_name=file.filename or "document",
-            file_bytes=file_bytes,
-        )
-    except OrderAnalysisError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-    finally:
-        await file.close()
-
-# UPDATE — редагувати наказ
-@router.patch("/{order_id}", response_model=OrderRead)
-def update_order(
-    order_id: str,
-    data: OrderUpdate,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
-
-    service = OrderService(db)
-
-    try:
-        order = service.get_order(order_id)
-
-        # Перевіряємо доступ до поточного заходу
-        _require_edit_access(user, _get_measure(db, order.measure_id))
-
-        # Якщо змінюється захід, перевіряємо
-        # доступ до нового заходу
-        if data.measure_id is not None:
-            _require_edit_access(user, _get_measure(db, data.measure_id))
-
-        return service.update_order(order_id, data)
-
+        return OrderService(db).get_order(order_id)
     except OrderError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
-# DELETE — видалити наказ
-@router.delete("/{order_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_order(
-    order_id: str,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
+@router.patch("/{order_id}", response_model=OrderRead, summary="Змінити наказ")
+def update_order(order_id: str, data: OrderUpdate, db: Session = Depends(get_db),
+                 _local: None = Depends(require_local_registry_write)):
+    try:
+        return OrderService(db).update_order(order_id, data)
+    except OrderError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
-    if user.role_id != "ADMIN":
-        raise HTTPException(status_code=403, detail="Видаляти накази може лише ADMIN")
 
+@router.delete("/{order_id}", status_code=status.HTTP_204_NO_CONTENT,
+               summary="Видалити наказ")
+def delete_order(order_id: str, db: Session = Depends(get_db),
+                 _local: None = Depends(require_local_registry_write)):
     try:
         OrderService(db).delete_order(order_id)
+    except OrderError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
+
+@router.post("/{order_id}/versions", response_model=OrderVersionRead,
+             status_code=201, summary="Додати незмінну версію файла наказу")
+def upload_order_version(
+    order_id: str,
+    file: UploadFile = File(...),
+    change_reason: str = Form(...),
+    db: Session = Depends(get_db),
+    _local: None = Depends(require_local_registry_write),
+):
+    try:
+        return OrderVersionService(db).upload(order_id, file, change_reason)
     except OrderError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+@router.get("/{order_id}/versions", response_model=list[OrderVersionRead],
+            summary="Історія версій наказу (без вмісту файлів)")
+def list_order_versions(order_id: str, db: Session = Depends(get_db),
+                        _local: None = Depends(require_local_registry_write)):
+    try:
+        return OrderVersionService(db).list_versions(order_id)
+    except OrderError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc

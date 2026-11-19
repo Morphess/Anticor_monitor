@@ -1,144 +1,175 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+"""API підтвердних матеріалів: VYK додає, KOORD/MAIN_KOORD переглядають.
 
+Метадані документа, не завантаження двійкового файлу.
+"""
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_current_user
 from app.database.db_connection import get_db
-
+from app.models.evidence import Evidence
+from app.models.execution import Execution
 from app.models.user import User
-from app.models.measure import Measure
-
 from app.schemas.evidences import EvidenceCreate, EvidenceRead, EvidenceUpdate
-
-from app.services.evidence_services import EvidenceError, EvidenceService
-
-
-router = APIRouter(
-    prefix="/evidences", tags=["Evidences"], dependencies=[Depends(get_current_user)]
+from app.services.evidence_services import (
+    EvidenceError, EvidenceService, OrderReferenceNotFound,
+)
+from app.services.measure_access import (
+    require_execution_actor,
+    require_executor,
+    require_visible_measure,
+    visible_measure_ids,
 )
 
-
-# Перевірка прав на редагування документів заходу
-def check_edit_access(user: User, measure: Measure) -> None:
-
-    # Адміністратор має повний доступ
-    if user.role_id == "ADMIN":
-        return
-
-    # Координатор працює лише зі своєю програмою
-    if user.role_id == "KOORD":
-        if user.program_id is not None and user.program_id == measure.program_id:
-            return
-
-    # Виконавець працює лише з призначеним заходом
-    if user.role_id == "VYK":
-        if measure.assigned_user_id == user.id:
-            return
-
-    raise HTTPException(status_code=403, detail="Недостатньо прав для цього заходу")
+router = APIRouter(prefix="/evidences", tags=["Evidences"])
 
 
-# Отримання заходу та перевірка прав
-def get_editable_measure(db: Session, user: User, measure_id: str) -> Measure:
+def _http_error(exc: EvidenceError) -> HTTPException:
+    if isinstance(exc, OrderReferenceNotFound):
+        return HTTPException(
+            status_code=404,
+            detail={
+                "order_check_status": "not_found",
+                "order_number": exc.order_number,
+                "message": "Наказ із таким номером відсутній у реєстрі orders",
+            },
+        )
+    return HTTPException(status_code=exc.status_code, detail=str(exc))
 
-    measure = db.get(Measure, measure_id)
 
-    if measure is None:
-        raise HTTPException(status_code=422, detail="Захід не існує")
+def _check_not_approved(db: Session, measure_id: str) -> None:
+    """Evidence не має period, тому блокуємо зміни, якщо є БУДЬ-ЯКЕ погодження."""
+    is_approved = db.scalar(
+        select(Execution.measure_id)
+        .where(
+            Execution.measure_id == measure_id,
+            Execution.approved_by_coordinator.is_(True),
+        )
+        .limit(1)
+    )
+    if is_approved is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Для заходу є погоджене виконання. Змінювати підтвердження заборонено",
+        )
 
-    check_edit_access(user, measure)
 
-    return measure
-
-
-# CREATE — створити документ
-@router.post("/", response_model=EvidenceRead, status_code=201)
+@router.post(
+    "/", response_model=EvidenceRead, status_code=status.HTTP_201_CREATED,
+    summary="Додати підтвердний документ до свого заходу",
+    description="Тільки VYK із чинним призначенням. Після погодження виконання "
+                "додавання документів блокується. Якщо номер наказу не існує у orders, повертається 404 not_found без збереження.",
+)
 def create_evidence(
     data: EvidenceCreate,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    actor: User = Depends(require_executor),
 ):
-
-    # Перевіряємо доступ до заходу
-    get_editable_measure(db, user, data.measure_id)
-
+    require_visible_measure(db, actor, data.measure_id)
+    _check_not_approved(db, data.measure_id)
     try:
-        return EvidenceService(db).create_evidence(data)
+        service = EvidenceService(db)
+        return service.as_read(service.create_evidence(data, actor_user_id=actor.id))
+    except EvidenceError as exc:
+        raise _http_error(exc) from exc
 
-    except EvidenceError as error:
-        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
-
-# READ — список документів
-@router.get("/", response_model=list[EvidenceRead])
+@router.get(
+    "/", response_model=list[EvidenceRead],
+    summary="Переглянути доступні підтвердні документи",
+    description="MAIN_KOORD — свої програми; KOORD — доступні заходи; VYK — "
+                "призначені заходи. Перевірка доступу відбувається до пагінації.",
+)
 def list_evidences(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100),
     measure_id: str | None = None,
     db: Session = Depends(get_db),
+    actor: User = Depends(require_execution_actor),
 ):
+    if measure_id is not None:
+        require_visible_measure(db, actor, measure_id)
+        ids = {measure_id}
+    else:
+        ids = visible_measure_ids(db, actor)
+    if not ids:
+        return []
+    items = list(db.scalars(
+        select(Evidence)
+        .where(Evidence.measure_id.in_(ids))
+        .order_by(Evidence.id)
+        .offset(skip).limit(limit)
+    ))
+    service = EvidenceService(db)
+    return [service.as_read(item) for item in items]
 
-    return EvidenceService(db).list_evidences(skip, limit, measure_id)
 
-
-# READ — один документ
-@router.get("/{evidence_id}", response_model=EvidenceRead)
-def get_evidence(evidence_id: str, db: Session = Depends(get_db)):
-
+@router.get(
+    "/{evidence_id}", response_model=EvidenceRead,
+    summary="Переглянути підтвердний документ",
+)
+def get_evidence(
+    evidence_id: str,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_execution_actor),
+):
     try:
-        return EvidenceService(db).get_evidence(evidence_id)
+        evidence = EvidenceService(db).get_evidence(evidence_id)
+    except EvidenceError as exc:
+        raise _http_error(exc) from exc
+    require_visible_measure(db, actor, evidence.measure_id)
+    return EvidenceService(db).as_read(evidence)
 
-    except EvidenceError as error:
-        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
-
-# UPDATE — редагувати документ
-@router.patch("/{evidence_id}", response_model=EvidenceRead)
+@router.patch(
+    "/{evidence_id}", response_model=EvidenceRead,
+    summary="Змінити підтвердження свого заходу до погодження",
+)
 def update_evidence(
     evidence_id: str,
     data: EvidenceUpdate,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    actor: User = Depends(require_executor),
 ):
-
     service = EvidenceService(db)
-
     try:
         evidence = service.get_evidence(evidence_id)
+    except EvidenceError as exc:
+        raise _http_error(exc) from exc
 
-        # Перевіряємо доступ до поточного заходу
-        get_editable_measure(db, user, evidence.measure_id)
+    require_visible_measure(db, actor, evidence.measure_id)
+    _check_not_approved(db, evidence.measure_id)
+    if data.measure_id is not None and data.measure_id != evidence.measure_id:
+        require_visible_measure(db, actor, data.measure_id)
+        _check_not_approved(db, data.measure_id)
+    try:
+        return service.as_read(service.update_evidence(
+            evidence_id, data, actor_user_id=actor.id
+        ))
+    except EvidenceError as exc:
+        raise _http_error(exc) from exc
 
-        # Якщо документ переноситься до іншого заходу,
-        # перевіряємо доступ і до нового заходу
-        if data.measure_id is not None:
-            get_editable_measure(db, user, data.measure_id)
 
-        return service.update_evidence(evidence_id, data)
-
-    except EvidenceError as error:
-        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
-
-
-# DELETE — видалити документ
-@router.delete("/{evidence_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{evidence_id}", status_code=status.HTTP_204_NO_CONTENT,
+    summary="Видалити підтвердження свого заходу до погодження",
+)
 def delete_evidence(
     evidence_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    actor: User = Depends(require_executor),
 ):
-
     service = EvidenceService(db)
-
     try:
         evidence = service.get_evidence(evidence_id)
-
-        # Перевіряємо права перед видаленням
-        get_editable_measure(db, user, evidence.measure_id)
-
+    except EvidenceError as exc:
+        raise _http_error(exc) from exc
+    require_visible_measure(db, actor, evidence.measure_id)
+    _check_not_approved(db, evidence.measure_id)
+    try:
         service.delete_evidence(evidence_id)
-
-    except EvidenceError as error:
-        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
-
+    except EvidenceError as exc:
+        raise _http_error(exc) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)

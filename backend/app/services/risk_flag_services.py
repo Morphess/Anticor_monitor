@@ -1,4 +1,4 @@
-"""Risk Flags RF1–RF7e із dictionary.md, без прив'язки до контрольного CSV.
+"""Risk Flags RF1–RF7e із dictionary.md та додатковий RF8 (невдалий наказ).
 
 На вхід надходять ORM-об'єкти SQLAlchemy або об'єкти з тими самими полями.
 Детектор нічого не змінює у БД. Усі правила відтворювані й пояснювані.
@@ -33,6 +33,7 @@ _MESSAGES = {
     "RF7c": "Захід не виконано, а пояснення причин відсутнє",
     "RF7d": "Ризик високого/критичного рівня без заходів",
     "RF7e": "Заповнений опис для заходу, строк якого не настав",
+    "RF8": "Спроба підтвердити захід наказом, якого немає в реєстрі",
 }
 
 
@@ -95,6 +96,34 @@ def _risk_progress(risk: Any, actual: Any) -> Decimal | None:
     return (Decimal(str(actual)) - baseline) / denominator
 
 
+def detect_rf8_flags(
+    *, period: str, as_of: date,
+    measures: Iterable[Any],
+    invalid_order_attempts: Iterable[Any] = (),
+) -> list[RiskFlagRead]:
+    """RF8 можна читати всередині поточного періоду (не чекаючи кінця H1/H2)."""
+    period_start, period_end = period_bounds(period)
+    if as_of < period_start:
+        raise ValueError("Дата зрізу не може бути раніше початку звітного періоду")
+
+    allowed_ids = {measure.id for measure in measures}
+    rejected = defaultdict(list)
+    for attempt in invalid_order_attempts:
+        day = attempt.attempted_at.date()
+        if attempt.measure_id in allowed_ids and period_start <= day <= min(as_of, period_end):
+            rejected[attempt.measure_id].append(attempt.order_number)
+
+    result = []
+    for measure_id, numbers in sorted(rejected.items()):
+        distinct_numbers = ", ".join(sorted(set(numbers)))
+        result.append(RiskFlagRead(
+            code="RF8", object_type="zakhid", object_id=str(measure_id),
+            period=period, message=_MESSAGES["RF8"],
+            explanation=f"невдалі спроби: {len(numbers)}; номери: {distinct_numbers}",
+        ))
+    return result
+
+
 def detect_risk_flags(
     *,
     period: str,
@@ -105,6 +134,7 @@ def detect_risk_flags(
     deadline_changes: Iterable[Any],
     risks: Iterable[Any],
     measurements: Iterable[Any],
+    invalid_order_attempts: Iterable[Any] = (),
 ) -> list[RiskFlagRead]:
     """Обчислити всі сигнали на конкретний період та дату зрізу.
 
@@ -236,4 +266,8 @@ def detect_risk_flags(
         if risk.level in _HIGH_RISK and risk.id not in measure_risk_ids:
             add("RF7d", "ryzyk", risk.id, f"рівень {risk.level}, заходів 0")
 
+    signals.extend(detect_rf8_flags(
+        period=period, as_of=as_of, measures=measures,
+        invalid_order_attempts=invalid_order_attempts,
+    ))
     return sorted(signals, key=lambda item: (item.code, item.object_type, item.object_id))

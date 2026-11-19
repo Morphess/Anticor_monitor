@@ -34,6 +34,10 @@ from app.api.orders import router as orders_router
 from app.api.risk_flags import router as risk_flags_router
 from app.api.program_import import router as program_import_router
 from app.api.program_workflow import router as program_workflow_router
+from app.api.dashboard import router as dashboard_router
+from app.api.deadline_reminders import router as deadline_reminders_router
+from app.api.order_change_alerts import router as order_change_alerts_router
+from app.api.management_dashboard import router as management_dashboard_router
 
 
 # Налаштування логування
@@ -104,6 +108,11 @@ app.include_router(risk_flags_router, prefix="/api")
 app.include_router(departments_router, prefix="/api")
 app.include_router(program_import_router, prefix="/api")
 app.include_router(program_workflow_router, prefix="/api")
+app.include_router(dashboard_router, prefix="/api")
+app.include_router(deadline_reminders_router, prefix="/api")
+app.include_router(order_change_alerts_router, prefix="/api")
+app.include_router(management_dashboard_router, prefix="/api")
+# HTML-сторінки кабінетів (фронтенд цієї гілки).
 app.include_router(pages_router)
 
 

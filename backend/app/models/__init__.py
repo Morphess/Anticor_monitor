@@ -17,6 +17,9 @@ from .report import Report
 from .management_decision import ManagementDecision
 from .analytics_report import AnalyticsReport, AnalyticsRequest
 from .program_workflow import ProgramDepartment, MeasureAssignment
+from .invalid_order_reference import InvalidOrderReference
+from .order_change_alert import OrderChangeAlert, OrderChangeAlertRead
+from .order_version import OrderVersion
 
 __all__ = [
     "Department",
@@ -39,4 +42,8 @@ __all__ = [
     "AnalyticsReport",
     "ProgramDepartment",
     "MeasureAssignment",
+    "InvalidOrderReference",
+    "OrderChangeAlert",
+    "OrderChangeAlertRead",
+    "OrderVersion",
 ]

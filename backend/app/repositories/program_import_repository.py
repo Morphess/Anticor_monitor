@@ -1,4 +1,4 @@
-"""Операції з БД, необхідні для одного атомарного імпорту."""
+"""Лише операції доступу до даних для атомарного імпорту програми."""
 from __future__ import annotations
 
 from typing import Any
@@ -33,6 +33,10 @@ class ProgramImportRepository:
     def department(self, department_id: str) -> Department | None:
         return self.db.get(Department, department_id)
 
+    def all_departments(self) -> list[Department]:
+        # Використовується DepartmentHierarchy: parent_id, без здогадок за префіксом ID.
+        return list(self.db.scalars(select(Department).order_by(Department.id)))
+
     def risk(self, risk_id: str) -> Risk | None:
         return self.db.get(Risk, risk_id)
 
@@ -41,6 +45,9 @@ class ProgramImportRepository:
 
     def add(self, instance: Any) -> None:
         self.db.add(instance)
+
+    def flush(self) -> None:
+        self.db.flush()
 
     def commit(self) -> None:
         self.db.commit()
