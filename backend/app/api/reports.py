@@ -25,6 +25,10 @@ from app.models.report import Report
 from app.models.user import User
 from app.schemas.reports import ReportCreate, ReportRead, ReportUpdate
 from app.services.report_services import ReportError, ReportService
+from app.schemas.report_portal import PortalHalfYearReport
+from app.services.report_generation_service import (
+    ReportGenerationService, csv_export, print_html,
+)
 
 
 ALLOWED_REPORT_ROLES = frozenset({"MAIN_KOORD", "KOORD"})
@@ -157,6 +161,118 @@ def list_reports(
 
     query = query.order_by(Report.id).offset(skip).limit(limit)
     return db.scalars(query).all()
+
+
+# NEW: попередній розрахунок із живих даних, НЕ створює версію у БД.
+@router.get(
+    "/preview",
+    response_model=PortalHalfYearReport,
+    summary="Попередній піврічний звіт (без збереження)",
+)
+def preview_report(
+    program_id: str,
+    period: str = Query(pattern=r"^\d{4}-H[12]$"),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_report_role),
+):
+    _ensure_program_access(db, user, program_id)
+    try:
+        return ReportGenerationService(db).build(program_id, period, user)
+    except ReportError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
+# NEW: одна дія створює наступну версію та незмінний снепшот.
+@router.post(
+    "/auto-generate",
+    response_model=ReportRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Автоматично сформувати нову версію звіту",
+)
+def auto_generate_report(
+    program_id: str,
+    period: str = Query(pattern=r"^\d{4}-H[12]$"),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_report_role),
+):
+    _ensure_program_access(db, user, program_id)
+    try:
+        return ReportGenerationService(db).auto_generate(program_id, period, user)
+    except ReportError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
+# NEW: сформувати вже створену чернетку.
+@router.post(
+    "/{report_id}/generate",
+    response_model=ReportRead,
+    summary="Згенерувати вміст чернетки",
+)
+def generate_report(
+    report_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_report_role),
+):
+    report = ReportService(db).get_report(report_id)
+    _ensure_report_access(db, user, report)
+    try:
+        return ReportGenerationService(db).generate_draft(report, user)
+    except ReportError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
+# NEW: версіонований JSON саме тієї версії, яку зберегли.
+@router.get(
+    "/{report_id}/content",
+    response_model=PortalHalfYearReport,
+    summary="Вміст збереженої версії звіту",
+)
+def get_report_content(
+    report_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_report_role),
+):
+    try:
+        report = ReportService(db).get_report(report_id)
+        _ensure_report_access(db, user, report)
+        return ReportGenerationService(db).read_snapshot(report)
+    except ReportError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
+@router.get("/{report_id}/download.csv", summary="Завантажити CSV звіту")
+def download_report_csv(
+    report_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_report_role),
+):
+    try:
+        report = ReportService(db).get_report(report_id)
+        _ensure_report_access(db, user, report)
+        snapshot = ReportGenerationService(db).read_snapshot(report)
+    except ReportError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    filename = f"report_{report.id}_{report.period}.csv"
+    return Response(
+        content=csv_export(snapshot),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/{report_id}/print", summary="Друкована форма звіту (HTML)")
+def print_report(
+    report_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_report_role),
+):
+    try:
+        report = ReportService(db).get_report(report_id)
+        _ensure_report_access(db, user, report)
+        snapshot = ReportGenerationService(db).read_snapshot(report)
+    except ReportError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    return Response(content=print_html(snapshot), media_type="text/html; charset=utf-8")
 
 
 @router.get(

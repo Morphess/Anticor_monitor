@@ -1,21 +1,10 @@
-"""Pydantic-схеми реєстру наказів."""
-
+"""Схеми для CRUD наказів і для внутрішнього статусу перевірки номера."""
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    Field,
-    field_validator,
-)
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-
-OrderCheckStatus = Literal[
-    "found",
-    "not_found",
-    "not_provided",
-]
+OrderCheckStatus = Literal["found", "not_found", "not_provided"]
 
 
 class OrderBase(BaseModel):
@@ -46,12 +35,7 @@ class OrderCreate(OrderBase):
 
 
 class OrderUpdate(BaseModel):
-    number: str | None = Field(
-        default=None,
-        min_length=1,
-        max_length=150,
-    )
-
+    number: str | None = Field(default=None, min_length=1, max_length=150)
     title: str | None = Field(default=None, min_length=1)
     issued_on: date | None = None
     document_url: str | None = None
