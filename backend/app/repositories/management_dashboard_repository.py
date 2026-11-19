@@ -12,7 +12,8 @@ from app.models.evidence import Evidence
 from app.models.execution import Execution
 from app.models.measure import Measure, MeasureCollaborator
 from app.models.program import Program
-from app.models.program_workflow import ProgramDepartment
+from app.models.program_workflow import MeasureAssignment, ProgramDepartment
+from app.models.section import Section
 from app.models.risk import Risk
 from app.models.risk_measurement import RiskMeasurement
 
@@ -20,6 +21,42 @@ from app.models.risk_measurement import RiskMeasurement
 class ManagementDashboardRepository:
     def __init__(self, db: Session):
         self.db = db
+
+    def all_program_ids(self) -> set[str]:
+        """Усі створені програми — лише для керівника відомства."""
+        return set(self.db.scalars(select(Program.id)))
+
+    def program_rows(self, ids: set[str]) -> list[Program]:
+        if not ids:
+            return []
+        return list(self.db.scalars(select(Program).where(Program.id.in_(ids)).order_by(Program.id)))
+
+    def program_dispatch_rows(self, program_ids: set[str]) -> list[tuple]:
+        if not program_ids:
+            return []
+        return list(self.db.execute(
+            select(ProgramDepartment.program_id, ProgramDepartment.department_id, ProgramDepartment.sent_at)
+            .where(ProgramDepartment.program_id.in_(program_ids))
+            .order_by(ProgramDepartment.sent_at)
+        ).all())
+
+    def sections(self, ids: set[str]) -> dict[str, Section]:
+        if not ids:
+            return {}
+        return {s.id: s for s in self.db.scalars(select(Section).where(Section.id.in_(ids)))}
+
+    def assigned_units(self, measure_ids: set[str]) -> dict[str, set[str]]:
+        """measure -> відділи, яким доручено захід (без користувачів)."""
+        if not measure_ids:
+            return {}
+        result: dict[str, set[str]] = {}
+        rows = self.db.execute(
+            select(MeasureAssignment.measure_id, MeasureAssignment.department_id)
+            .where(MeasureAssignment.measure_id.in_(measure_ids)).distinct()
+        )
+        for measure_id, department_id in rows:
+            result.setdefault(measure_id, set()).add(department_id)
+        return result
 
     def dispatches(self, department_ids: set[str]) -> dict[str, set[str]]:
         """program -> departments that explicitly received it (including ancestors)."""
@@ -54,7 +91,9 @@ class ManagementDashboardRepository:
             .where(
                 Measure.program_id.in_(program_ids),
                 or_(Measure.responsible_department_id.in_(branch),
-                    MeasureCollaborator.department_id.in_(branch)),
+                    MeasureCollaborator.department_id.in_(branch),
+                    Measure.id.in_(select(MeasureAssignment.measure_id)
+                                   .where(MeasureAssignment.department_id.in_(branch)))),
             )
             .distinct()
             .order_by(Measure.program_id, Measure.section_id,

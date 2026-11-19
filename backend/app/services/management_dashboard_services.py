@@ -15,8 +15,9 @@ from sqlalchemy.orm import Session
 
 from app.repositories.management_dashboard_repository import ManagementDashboardRepository
 from app.schemas.management_dashboard import (
-    DepartmentKPI, ManagementDeadline, ManagementRecommendation,
-    ManagementRecommendationsResponse, ManagementRisk, ManagementSummary,
+    DepartmentKPI, ManagementDeadline, ManagementDispatch, ManagementMeasure,
+    ManagementProgram, ManagementRecommendation, ManagementRecommendationsResponse,
+    ManagementRisk, ManagementSummary, ManagementUnit,
 )
 from app.services.program_workflow_services import ProgramWorkflowService, WorkflowError
 from app.services.risk_flag_services import detect_risk_flags, period_bounds
@@ -64,6 +65,8 @@ class Context:
     measurements: list
     covered_risks: set[str]
     department_names: dict[str, str]
+    agency: bool = False
+    visible_departments: set[str] = None  # кого керівник бачить серед адресатів
 
 
 RF_RULES = {
@@ -106,11 +109,20 @@ class ManagementDashboardService:
         if not tree.exists(actor.department_id):
             raise ManagementDashboardError("Підрозділ керівника не знайдено в ієрархії", 403)
 
-        branch = tree.descendants(actor.department_id)
-        ancestors = tree.ancestors(actor.department_id)
-        # A program may have been sent to the manager's department, an ancestor,
-        # or separately to a descendant. Never use all programs in the system.
-        dispatch = self.repo.dispatches(branch | ancestors)
+        # Керівник відомства — KER підрозділу без батька: бачить усі створені програми
+        # і всі підрозділи. Керівник підрозділу — лише програми, координовані на його
+        # підрозділ (або вищий / розіслані окремо нащадку), і свою гілку.
+        agency = tree.parents.get(actor.department_id) is None
+        if agency:
+            branch = set(tree.parents)
+            ancestors = branch
+            dispatch = {pid: branch for pid in self.repo.all_program_ids()}
+        else:
+            branch = tree.descendants(actor.department_id)
+            ancestors = tree.ancestors(actor.department_id)
+            # A program may have been sent to the manager's department, an ancestor,
+            # or separately to a descendant. Never use all programs in the system.
+            dispatch = self.repo.dispatches(branch | ancestors)
         if program_id is not None:
             if program_id not in dispatch:
                 raise ManagementDashboardError("Немає доступу до цієї програми", 403)
@@ -119,6 +131,9 @@ class ManagementDashboardService:
         programs = self.repo.programs(set(dispatch))
         candidates = self.repo.measures(set(programs), branch)
         collabs = self.repo.collaborators({m.id for m in candidates})
+        # Відділи, яким доручено захід, теж роблять його видимим керівнику їхньої гілки.
+        for mid, units in self.repo.assigned_units({m.id for m in candidates}).items():
+            collabs.setdefault(mid, set()).update(units)
         visible = []
         for measure in candidates:
             involved = ({measure.responsible_department_id} | collabs.get(measure.id, set())) & branch
@@ -149,6 +164,7 @@ class ManagementDashboardService:
             risks=risks, measurements=self.repo.measurements(risk_ids, as_of),
             covered_risks=self.repo.all_covered_risks(set(programs)),
             department_names=names,
+            agency=agency, visible_departments=branch | ancestors,
         )
 
     @staticmethod
@@ -214,14 +230,17 @@ class ManagementDashboardService:
         ctx = self._context(actor, program_id=program_id, period=period, as_of=as_of)
         states = defaultdict(int)
         department_groups = defaultdict(list)
+        assigned = self.repo.assigned_units({m.id for m in ctx.measures})
         for measure in ctx.measures:
             ex = ctx.executions.get(measure.id)
             state = ex.status if ex else "not_started"
             states[state] += 1
             dept = measure.responsible_department_id
-            # For a collaborator outside the branch, do not reveal the foreign department.
+            # Захід вищого рівня, доручений відділу гілки, рахуємо за цим відділом.
             if dept not in ctx.branch:
-                dept = None
+                units = sorted(assigned.get(measure.id, set()) & ctx.branch)
+                dept = units[0] if units else None
+            # For a collaborator outside the branch, do not reveal the foreign department.
             department_groups[dept].append(measure)
         deadlines = self._deadlines(ctx, upcoming_days)
         rows = []
@@ -252,7 +271,73 @@ class ManagementDashboardService:
             high_risks=sum(r.level == "high" for r in risk_items),
             critical_risks=sum(r.level == "critical" for r in risk_items),
             departments=rows,
+            scope="agency" if ctx.agency else "department",
         )
+
+    def programs(self, actor, *, period: str, as_of: date) -> list[ManagementProgram]:
+        ctx = self._context(actor, program_id=None, period=period, as_of=as_of)
+        sends = [row for row in self.repo.program_dispatch_rows(set(ctx.programs))
+                 if row[1] in ctx.visible_departments]
+        programs = self.repo.program_rows(set(ctx.programs))
+        names = self.repo.departments({row[1] for row in sends} | {
+            p.coordinator_department_id for p in programs if p.coordinator_department_id})
+        counts = defaultdict(int)
+        for measure in ctx.measures:
+            counts[measure.program_id] += 1
+        result = []
+        for program in programs:
+            seen, recipients = set(), []
+            for pid, dep, sent_at in sends:
+                if pid == program.id and dep not in seen:
+                    seen.add(dep)
+                    recipients.append(ManagementDispatch(
+                        department_id=dep, department_name=names.get(dep, dep), sent_at=sent_at))
+            coord = program.coordinator_department_id
+            result.append(ManagementProgram(
+                id=program.id, title=program.title,
+                start_date=program.start_date, end_date=program.end_date,
+                coordinator_department_id=coord,
+                coordinator_department_name=names.get(coord, coord) if coord else None,
+                dispatched_to=recipients, measures_total=counts[program.id],
+            ))
+        return result
+
+    def measures(self, actor, *, program_id: str | None, period: str,
+                 as_of: date) -> list[ManagementMeasure]:
+        ctx = self._context(actor, program_id=program_id, period=period, as_of=as_of)
+        sections = self.repo.sections({m.section_id for m in ctx.measures if m.section_id})
+        units = {} if ctx.agency else self.repo.assigned_units({m.id for m in ctx.measures})
+        names = self.repo.departments(ctx.visible_departments)
+        result = []
+        for measure in ctx.measures:
+            ex = ctx.executions.get(measure.id)
+            section = sections.get(measure.section_id)
+            dept = measure.responsible_department_id
+            if dept not in ctx.visible_departments:
+                dept = None  # співвиконання поза гілкою: чужий підрозділ не розкриваємо
+            unit_ids = sorted(u for u in units.get(measure.id, set()) if u in ctx.branch)
+            result.append(ManagementMeasure(
+                program_id=measure.program_id,
+                program_title=ctx.programs.get(measure.program_id, measure.program_id),
+                section_id=measure.section_id,
+                section_number=section.number if section else None,
+                section_title=section.title if section else None,
+                measure_id=measure.id, sequence_number=measure.sequence_number,
+                description=measure.description,
+                responsible_department_id=dept,
+                responsible_department_name=names.get(dept, dept) if dept else None,
+                assigned_units=[ManagementUnit(department_id=u, department_name=names.get(u, u))
+                                for u in unit_ids],
+                deadline_type=measure.deadline_type, deadline_on=measure.deadline_on,
+                deadline_description=measure.deadline_description,
+                status=ex.status if ex else "not_started",
+                approved=bool(ex and ex.approved_by_coordinator),
+                submitted_at=ex.submitted_at if ex else None,
+                completed_on=ex.completed_on if ex else None,
+                indicator_target=measure.indicator_target,
+                indicator_actual=ex.indicator_actual if ex else None,
+            ))
+        return result
 
     def deadlines(self, actor, *, program_id: str | None, period: str,
                   as_of: date, horizon_days: int = 14) -> list[ManagementDeadline]:

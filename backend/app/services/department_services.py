@@ -30,6 +30,7 @@ class DepartmentService:
             )
         return cleaned
 
+<<<<<<< HEAD
     def _hierarchy(self) -> DepartmentHierarchy:
         try:
             return DepartmentHierarchy(self.repository)
@@ -42,16 +43,42 @@ class DepartmentService:
     def _validated_parent(
         self, parent_id: str | None, *, department_id: str, hierarchy: DepartmentHierarchy
     ) -> str | None:
+=======
+    def _check_parent(self, department_id: str, parent_id: str | None) -> str | None:
+        """Вищий підрозділ має існувати й не може бути самим підрозділом чи його нащадком."""
+>>>>>>> f5ebfe2abbde2cbf98b13f619b74ebb1fa49b2c7
         if parent_id is None:
             return None
         parent_id = self._required_text(parent_id, "parent_id")
         if parent_id == department_id:
+<<<<<<< HEAD
             raise HTTPException(status_code=409, detail="Підрозділ не може бути власним батьком")
         if not hierarchy.exists(parent_id):
             raise HTTPException(status_code=422, detail=f"Батьківський підрозділ '{parent_id}' не існує")
         # Під час редагування забороняємо перенесення підрозділу всередину своєї гілки.
         if department_id in hierarchy.by_id and parent_id in hierarchy.descendants(department_id):
             raise HTTPException(status_code=409, detail="Зміна parent_id створює цикл підпорядкування")
+=======
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Підрозділ не може підпорядковуватися сам собі",
+            )
+        current = self.repository.get_by_id(parent_id)
+        if current is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Вищий підрозділ не знайдено",
+            )
+        seen = set()
+        while current is not None and current.id not in seen:
+            if current.id == department_id:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Не можна підпорядкувати підрозділ його ж підлеглому",
+                )
+            seen.add(current.id)
+            current = self.repository.get_by_id(current.parent_id) if current.parent_id else None
+>>>>>>> f5ebfe2abbde2cbf98b13f619b74ebb1fa49b2c7
         return parent_id
 
     def get_all(self) -> list[Department]:
@@ -86,9 +113,14 @@ class DepartmentService:
         if self.repository.get_by_id(department_id) is not None:
             raise HTTPException(status_code=409, detail="Підрозділ із таким кодом уже існує")
 
+<<<<<<< HEAD
         parent_id = self._validated_parent(
             data.parent_id, department_id=department_id, hierarchy=hierarchy
         )
+=======
+        parent_id = self._check_parent(department_id, data.parent_id)
+
+>>>>>>> f5ebfe2abbde2cbf98b13f619b74ebb1fa49b2c7
         department = Department(
             id=department_id,
             name=name,
@@ -112,6 +144,7 @@ class DepartmentService:
         department = self._get_or_404(department_id)
         changes = data.model_dump(exclude_unset=True)
 
+<<<<<<< HEAD
         # Повністю перевіряємо зміну ієрархії ДО зміни ORM-об'єкта.
         if "parent_id" in changes:
             changes["parent_id"] = self._validated_parent(
@@ -119,6 +152,10 @@ class DepartmentService:
                 department_id=department_id,
                 hierarchy=self._hierarchy(),
             )
+=======
+        if "parent_id" in changes:
+            department.parent_id = self._check_parent(department_id, changes.pop("parent_id"))
+>>>>>>> f5ebfe2abbde2cbf98b13f619b74ebb1fa49b2c7
 
         for field, value in changes.items():
             if field == "parent_id":

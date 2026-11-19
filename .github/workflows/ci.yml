@@ -52,11 +52,6 @@ jobs:
           python -m pip install httpx2==2.16.2
           python -m pip check
 
-      - name: Run Python tests
-        env:
-          PYTHONPATH: backend
-        run: python -m unittest discover -s tests -v
-
       - name: Check Alembic migration
         env:
           DATABASE_URL: "postgresql+psycopg://ci_user:ci_test_only@127.0.0.1:5432/bordergroup_ci"
@@ -90,3 +85,10 @@ jobs:
           engine.dispose()
           print("Migration OK")
           PY
+
+      - name: Run Python tests
+        env:
+          PYTHONPATH: backend
+          DEPARTMENT_TEST_DATABASE_URL: "postgresql+psycopg://ci_user:ci_test_only@127.0.0.1:5432/bordergroup_ci"
+          ORDER_TEST_DATABASE_URL: "postgresql+psycopg://ci_user:ci_test_only@127.0.0.1:5432/bordergroup_ci"
+        run: python -m unittest discover -s tests -v

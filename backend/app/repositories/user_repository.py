@@ -26,6 +26,17 @@ class UserRepository:
 
         return list(self.db.scalars(stmt).all())
 
+    def list_program_assignment_candidates(self) -> list[User]:
+        stmt = (
+            select(User)
+            .where(
+                User.role_id.notin_(("ADMIN", "KOORD")),
+                User.program_id.is_(None),
+            )
+            .order_by(User.id)
+        )
+        return list(self.db.scalars(stmt).all())
+
     # Створити користувача
     def add(self, user: User) -> User:
         self.db.add(user)

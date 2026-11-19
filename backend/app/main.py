@@ -15,9 +15,13 @@ from app.database.db_connection import get_db, engine
 
 from app.core.audit import enable_audit
 
+from app.web.pages import router as pages_router
+
 from app.api.auth import router as auth_router
 from app.api.users import router as users_router
+from app.api.coordinator_users import router as coordinator_users_router
 from app.api.programs import router as programs_router
+from app.api.departments import router as departments_router
 from app.api.sections import router as sections_router
 from app.api.measures import router as measures_router
 from app.api.risks import router as risks_router
@@ -89,6 +93,7 @@ app.add_middleware(
 # Підключення API
 app.include_router(auth_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
+app.include_router(coordinator_users_router, prefix="/api")
 app.include_router(programs_router, prefix="/api")
 app.include_router(sections_router, prefix="/api")
 app.include_router(measures_router, prefix="/api")
@@ -100,13 +105,19 @@ app.include_router(reports_router, prefix="/api")
 app.include_router(action_logs_router, prefix="/api")
 app.include_router(orders_router, prefix="/api")
 app.include_router(risk_flags_router, prefix="/api")
+app.include_router(departments_router, prefix="/api")
 app.include_router(program_import_router, prefix="/api")
 app.include_router(program_workflow_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
 app.include_router(deadline_reminders_router, prefix="/api")
 app.include_router(order_change_alerts_router, prefix="/api")
 app.include_router(management_dashboard_router, prefix="/api")
+<<<<<<< HEAD
 app.include_router(departments_router, prefix="/api")
+=======
+# HTML-сторінки кабінетів (фронтенд цієї гілки).
+app.include_router(pages_router)
+>>>>>>> f5ebfe2abbde2cbf98b13f619b74ebb1fa49b2c7
 
 
 # HTML-шаблони

@@ -40,7 +40,10 @@ class User(Base):
         back_populates="users",
         foreign_keys=[program_id],
     )
+<<<<<<< HEAD
 
+=======
+>>>>>>> f5ebfe2abbde2cbf98b13f619b74ebb1fa49b2c7
     # ORM-доступ до підрозділу користувача (об’єкт Department).
     department: Mapped["Department | None"] = relationship(
         "Department", back_populates="users"

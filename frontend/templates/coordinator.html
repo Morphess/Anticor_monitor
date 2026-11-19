@@ -1,28 +1,33 @@
 {% extends "base.html" %}
 {% block title %}Програми — координатор{% endblock %}
 {% block role_name %}Координатор програми{% endblock %}
+{% block topbar_tools %}{% include "_bell.html" %}{% endblock %}
 {% block content %}
 <section class="unit">
   <div>
-    <p class="label">Назва підрозділу</p>
+    <p class="label" id="coord-kind">Координатор програми</p>
     <h1 id="unit-name">—</h1>
   </div>
-  <button class="btn btn-dark" type="button" id="create-program">Створити програму</button>
+  <div class="unit-actions">
+    <button class="btn btn-dark" type="button" id="create-program">Створити програму</button>
+    <button class="btn btn-dark hidden" type="button" id="assign-open">Призначити виконавця</button>
+  </div>
 </section>
 <div class="toolbar">
-  <label class="field" style="flex:1">Пошук
+  <label class="field grow">Пошук
     <input id="search" type="search" placeholder="Програма, розділ, захід або підрозділ">
   </label>
   <label class="field">Звітний період
     <select id="period"></select>
   </label>
 </div>
+<div class="section-head"><h2>Програми</h2></div>
 <div id="flags-note"></div>
 <div id="programs"><p class="muted">Завантаження…</p></div>
 
 <dialog id="program-dialog">
   <form method="dialog" id="program-form">
-    <h2 style="margin-top:0">Нова програма</h2>
+    <h2 style="margin-top:0" id="program-dialog-title">Нова програма</h2>
     <div class="form-grid">
       <label class="field">Код програми<input name="id" required maxlength="50" placeholder="AKP-2026-2027"></label>
       <label class="field">Організація<input name="organization_name" required></label>
@@ -35,12 +40,31 @@
     </div>
     <label class="field" style="margin-bottom:12px">Назва<input name="title" required></label>
     <label class="field" style="margin-bottom:12px">Мета<textarea name="goals" rows="3" required></textarea></label>
+    <fieldset class="dept-pick">
+      <legend>Надіслати на координацію підрозділам</legend>
+      <div id="dept-pick-box"></div>
+      <p class="small muted" id="dept-pick-note" style="margin:6px 0 0"></p>
+    </fieldset>
     <div id="program-error" class="alert hidden" role="alert"></div>
-    <div class="toolbar" style="margin:0">
-      <button class="btn btn-dark" type="submit" value="save">Створити програму</button>
+    <div class="dialog-actions">
+      <button class="btn btn-dark" type="submit" value="save" id="program-submit">Створити програму</button>
       <button class="btn" type="button" id="program-cancel">Скасувати</button>
     </div>
   </form>
 </dialog>
+
+<dialog id="assign-dialog" class="wide" aria-labelledby="assign-title">
+  <h2 id="assign-title">Призначення виконавців</h2>
+  <p class="small muted" style="margin-top:-6px">Програми координатора відомства. Для кожного заходу оберіть один або кілька відділів чи підрозділів-виконавців.</p>
+  <label class="field" style="margin-bottom:12px">Пошук
+    <input id="assign-search" type="search" placeholder="Програма або захід">
+  </label>
+  <div id="assign-body" class="assign-body"></div>
+  <div id="assign-msg" class="msg" role="status"></div>
+  <div class="dialog-actions">
+    <button class="btn btn-dark" type="button" id="assign-save">Зберегти призначення</button>
+    <button class="btn" type="button" id="assign-cancel">Скасувати</button>
+  </div>
+</dialog>
 {% endblock %}
-{% block scripts %}<script src="/static/js/coordinator.js"></script>{% endblock %}
+{% block scripts %}<script src="/static/js/notify.js"></script><script src="/static/js/coordinator.js"></script>{% endblock %}

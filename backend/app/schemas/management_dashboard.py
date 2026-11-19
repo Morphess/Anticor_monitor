@@ -1,7 +1,7 @@
 """Read-only data contracts for the KER (department head) dashboard."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
@@ -38,6 +38,9 @@ class ManagementSummary(BaseModel):
     high_risks: int
     critical_risks: int
     departments: list[DepartmentKPI] = Field(default_factory=list)
+    # agency — керівник відомства (підрозділ без батька): усі створені програми;
+    # department — керівник підрозділу: лише програми, координовані на його підрозділ.
+    scope: Literal["agency", "department"] = "department"
 
 
 class ManagementDeadline(BaseModel):
@@ -89,3 +92,49 @@ class ManagementRecommendationsResponse(BaseModel):
     as_of: date
     total: int
     recommendations: list[ManagementRecommendation] = Field(default_factory=list)
+
+
+class ManagementUnit(BaseModel):
+    department_id: str
+    department_name: str
+
+
+class ManagementDispatch(ManagementUnit):
+    sent_at: datetime | None = None
+
+
+class ManagementProgram(BaseModel):
+    id: str
+    title: str
+    start_date: date | None
+    end_date: date | None
+    coordinator_department_id: str | None
+    coordinator_department_name: str | None
+    # Кому координовано програму (program_departments) у межах видимості керівника.
+    dispatched_to: list[ManagementDispatch] = Field(default_factory=list)
+    measures_total: int
+
+
+class ManagementMeasure(BaseModel):
+    program_id: str
+    program_title: str
+    section_id: str | None
+    section_number: int | None
+    section_title: str | None
+    measure_id: str
+    sequence_number: int | None
+    description: str
+    responsible_department_id: str | None
+    responsible_department_name: str | None
+    # Відділи гілки керівника підрозділу, яким доручено захід; без користувачів.
+    # Керівнику відомства не віддається (лише підрозділ-адресат програми).
+    assigned_units: list[ManagementUnit] = Field(default_factory=list)
+    deadline_type: str | None
+    deadline_on: date | None
+    deadline_description: str | None
+    status: str
+    approved: bool
+    submitted_at: datetime | None
+    completed_on: date | None
+    indicator_target: Decimal | None
+    indicator_actual: Decimal | None

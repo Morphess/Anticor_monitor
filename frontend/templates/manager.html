@@ -1,33 +1,111 @@
 {% extends "base.html" %}
-{% block title %}Зведення — керівник{% endblock %}
+{% block title %}Програми — керівник{% endblock %}
 {% block role_name %}Керівник{% endblock %}
 {% block content %}
 <section class="unit">
   <div>
-    <p class="label">Стан виконання</p>
-    <h1 id="program-title">—</h1>
+    <p class="label" id="ker-kind">Керівник</p>
+    <h1 id="dept-title">—</h1>
+    <p class="sub" id="dept-scope"></p>
   </div>
-  <label class="field">Звітний період <select id="period"></select></label>
+  <div class="unit-actions">
+    <label class="field">Звітний період <select id="period"></select></label>
+  </div>
 </section>
-<div class="cards" id="cards"></div>
-<h2>Потребують уваги</h2>
-<p class="muted small">Строк минув і виконання не погоджено, або система виявила сигнали Risk Flags.</p>
-<div class="table-wrap">
-  <table class="grid">
-    <thead><tr><th>№</th><th>Захід</th><th>Підрозділ</th><th>Строк</th><th>Статус</th><th>Сигнали</th></tr></thead>
-    <tbody id="attention"></tbody>
-  </table>
+<div class="tabs" role="tablist">
+  <button type="button" role="tab" aria-selected="true" data-tab="overview">Огляд</button>
+  <button type="button" role="tab" aria-selected="false" data-tab="programs">Програми <span class="muted" id="tab-programs-n"></span></button>
+  <button type="button" role="tab" aria-selected="false" data-tab="recs">Рекомендації <span class="muted" id="tab-recs-n"></span></button>
+  <button type="button" role="tab" aria-selected="false" data-tab="risks">Ризики <span class="muted" id="tab-risks-n"></span></button>
+  <button type="button" role="tab" aria-selected="false" data-tab="depts">За підрозділами <span class="muted" id="tab-depts-n"></span></button>
 </div>
-<h2>Сигнали Risk Flags</h2>
-<div id="flags-summary"></div>
-<h2>За розділами</h2>
-<div class="table-wrap">
-  <table class="grid">
-    <thead><tr><th>Розділ</th><th>Виконано</th><th style="width:40%">Прогрес</th></tr></thead>
-    <tbody id="by-section"></tbody>
-  </table>
-</div>
-<h2>Рішення керівника</h2>
-<p class="stub">Тимчасово недоступно: на сервері поки немає API для доручень і рішень керівника.</p>
+
+<section data-panel="overview">
+  <div class="cards" id="cards"></div>
+  <div id="stack"></div>
+</section>
+
+<section data-panel="programs" class="hidden">
+  <div class="toolbar">
+    <label class="field grow">Пошук
+      <input id="programs-search" type="search" autocomplete="off" placeholder="Програма, розділ, захід або підрозділ">
+    </label>
+    <label class="field">Увага
+      <select id="programs-filter">
+        <option value="">Усі заходи</option>
+        <option value="flagged">Із зауваженнями</option>
+        <option value="overdue">Прострочені</option>
+        <option value="pending">Очікують погодження</option>
+      </select>
+    </label>
+  </div>
+  <div class="pager pager-top" id="programs-pager-top"></div>
+  <div id="programs"><p class="muted">Завантаження…</p></div>
+  <div class="pager" id="programs-pager"></div>
+</section>
+
+<section data-panel="recs" class="hidden">
+  <div class="toolbar">
+    <label class="field grow">Пошук
+      <input id="recs-search" type="search" autocomplete="off" placeholder="Назва, причина, захід, ризик або програма">
+    </label>
+    <label class="field">Пріоритет
+      <select id="recs-filter">
+        <option value="">Усі пріоритети</option>
+        <option value="critical">Критичний</option><option value="high">Високий</option>
+        <option value="medium">Середній</option><option value="low">Низький</option>
+      </select>
+    </label>
+  </div>
+  <div class="pager pager-top" id="recs-pager-top"></div>
+  <div id="recs"></div>
+  <div class="pager" id="recs-pager"></div>
+</section>
+
+<section data-panel="risks" class="hidden">
+  <div class="toolbar">
+    <label class="field grow">Пошук
+      <input id="risks-search" type="search" autocomplete="off" placeholder="Ризик, код, індикатор або програма">
+    </label>
+    <label class="field">Рівень
+      <select id="risks-filter">
+        <option value="">Усі рівні</option>
+        <option value="critical">Критичний</option><option value="high">Високий</option>
+        <option value="medium">Середній</option><option value="low">Низький</option>
+      </select>
+    </label>
+  </div>
+  <div class="pager pager-top" id="risks-pager-top"></div>
+  <div class="table-wrap">
+    <table class="grid">
+      <thead><tr><th>Ризик</th><th>Рівень</th><th>Індикатор</th><th>Базове → ціль</th><th>Факт</th><th>Динаміка</th><th>Заходи реагування</th></tr></thead>
+      <tbody id="risks"></tbody>
+    </table>
+  </div>
+  <div class="pager" id="risks-pager"></div>
+</section>
+
+<section data-panel="depts" class="hidden">
+  <div class="toolbar">
+    <label class="field grow">Пошук
+      <input id="depts-search" type="search" autocomplete="off" placeholder="Назва підрозділу">
+    </label>
+    <label class="field">Стан
+      <select id="depts-filter">
+        <option value="">Усі підрозділи</option>
+        <option value="overdue">Є прострочені</option>
+        <option value="pending">Є неперевірені звіти</option>
+      </select>
+    </label>
+  </div>
+  <div class="pager pager-top" id="depts-pager-top"></div>
+  <div class="table-wrap">
+    <table class="grid">
+      <thead><tr><th>Підрозділ</th><th>Заходів</th><th style="width:30%">Виконано й погоджено</th><th>Прострочено</th><th>Очікують погодження</th></tr></thead>
+      <tbody id="by-dept"></tbody>
+    </table>
+  </div>
+  <div class="pager" id="depts-pager"></div>
+</section>
 {% endblock %}
-{% block scripts %}<script src="/static/js/summary.js"></script><script src="/static/js/manager.js"></script>{% endblock %}
+{% block scripts %}<script src="/static/js/manager.js?v=6"></script>{% endblock %}

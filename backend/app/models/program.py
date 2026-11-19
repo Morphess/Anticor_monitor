@@ -62,7 +62,10 @@ class Program(Base):
         index=True,
     )
     # Користувачі програми.
+<<<<<<< HEAD
 
+=======
+>>>>>>> f5ebfe2abbde2cbf98b13f619b74ebb1fa49b2c7
     users: Mapped[list["User"]] = relationship(
         "User",
         back_populates="program",
