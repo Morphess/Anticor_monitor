@@ -1,0 +1,102 @@
+name: Manual deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "Повний SHA коміту з main"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  check-commit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Завантажити історію main
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Перевірити обраний коміт
+        env:
+          DEPLOY_COMMIT: ${{ inputs.commit }}
+          RUN_REF: ${{ github.ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "$RUN_REF" != "refs/heads/main" ]]; then
+            echo "Workflow потрібно запускати з гілки main."
+            exit 1
+          fi
+
+          if [[ ! "$DEPLOY_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Вкажіть повний SHA коміту з 40 малих шістнадцяткових символів."
+            exit 1
+          fi
+
+          if ! git cat-file -e "${DEPLOY_COMMIT}^{commit}"; then
+            echo "Коміт не знайдено."
+            exit 1
+          fi
+
+          if ! git merge-base --is-ancestor "$DEPLOY_COMMIT" HEAD; then
+            echo "Коміт не належить до історії main на момент запуску."
+            exit 1
+          fi
+
+          echo "Обраний коміт входить до історії main: $DEPLOY_COMMIT"
+
+      - name: Перевірити CI обраного коміту
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_COMMIT: ${{ inputs.commit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          runs="$(
+            gh api --method GET \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs" \
+              -f branch=main \
+              -f event=push \
+              -f "head_sha=$DEPLOY_COMMIT" \
+              -F per_page=100
+          )"
+
+          if ! printf '%s' "$runs" | jq -e '
+            (.workflow_runs | max_by(.id)) as $run
+            | $run != null
+              and $run.status == "completed"
+              and $run.conclusion == "success"
+          ' > /dev/null; then
+            echo "Останній CI для цього коміту відсутній, не завершений або неуспішний."
+            exit 1
+          fi
+
+          echo "Останній CI для обраного коміту завершився успішно."
+
+  check-tailscale:
+    needs: check-commit
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Підключитися до Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          audience: ${{ secrets.TS_AUDIENCE }}
+          tags: tag:github-deploy
+          ping: 100.87.173.115
+
+      - name: Підтвердити доступ до сервера
+        run: echo "Основний сервер доступний через Tailscale."
