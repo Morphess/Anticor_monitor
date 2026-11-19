@@ -5,9 +5,11 @@
 <section class="unit">
   <div>
     <p class="label">Інформаційна панель керівника</p>
-    <h1 id="program-title">—</h1>
+    <h1 id="dept-title">—</h1>
+    <p class="sub" id="dept-scope"></p>
   </div>
   <div class="unit-actions">
+    <label class="field">Програма <select id="program"><option value="">Усі програми</option></select></label>
     <label class="field">Звітний період <select id="period"></select></label>
   </div>
 </section>
@@ -15,31 +17,31 @@
 <div class="cards" id="cards"></div>
 <div id="stack"></div>
 
-<div class="section-head"><h2>Прогноз</h2><p class="sub">Оцінка на основі статусів, строків, підтверджень і перенесень</p></div>
-<div class="forecast" id="forecast"></div>
-
-<div class="section-head"><h2>Рекомендовані доручення</h2><p class="sub">Сформовано автоматично; рішення ухвалює керівник</p></div>
+<div class="section-head"><h2>На що звернути увагу</h2><p class="sub" id="recs-sub">Рекомендації сформовано автоматично; рішення ухвалює керівник</p></div>
 <div id="recs"><p class="muted">Завантаження…</p></div>
 
-<div class="section-head"><h2>Потребують уваги</h2><p class="sub">Відсортовано за ризиком невиконання, 0–100</p></div>
+<div class="section-head"><h2>Контрольні строки</h2><p class="sub">Прострочені та ті, що настають протягом 14 днів</p></div>
 <div class="table-wrap">
   <table class="grid">
-    <thead><tr><th>Пункт</th><th>Захід</th><th>Підрозділ</th><th>Строк</th><th>Статус</th><th>Ризик</th><th>Причини</th></tr></thead>
-    <tbody id="attention"></tbody>
+    <thead><tr><th>Захід</th><th>Опис</th><th>Підрозділ</th><th>Строк</th><th>Статус</th></tr></thead>
+    <tbody id="deadlines"></tbody>
   </table>
 </div>
 
-<div class="section-head"><h2>За розділами</h2></div>
+<div class="section-head"><h2>За підрозділами</h2></div>
 <div class="table-wrap">
   <table class="grid">
-    <thead><tr><th>Розділ</th><th>Виконано</th><th style="width:40%">Прогрес</th></tr></thead>
-    <tbody id="by-section"></tbody>
+    <thead><tr><th>Підрозділ</th><th>Заходів</th><th style="width:30%">Виконано й погоджено</th><th>Прострочено</th><th>Очікують погодження</th></tr></thead>
+    <tbody id="by-dept"></tbody>
   </table>
 </div>
 
-<div id="flags-block" class="hidden">
-  <div class="section-head"><h2>Сигнали Risk Flags</h2></div>
-  <div id="flags-summary"></div>
+<div class="section-head"><h2>Ризики</h2><p class="sub">Остання зміна індикатора відносно базового значення</p></div>
+<div class="table-wrap">
+  <table class="grid">
+    <thead><tr><th>Ризик</th><th>Рівень</th><th>Індикатор</th><th>Базове → ціль</th><th>Факт</th><th>Динаміка</th><th>Заходи реагування</th></tr></thead>
+    <tbody id="risks"></tbody>
+  </table>
 </div>
 {% endblock %}
-{% block scripts %}<script src="/static/js/insights.js"></script><script src="/static/js/summary.js"></script><script src="/static/js/manager.js"></script>{% endblock %}
+{% block scripts %}<script src="/static/js/manager.js?v=2"></script>{% endblock %}
