@@ -8,18 +8,18 @@
     <p class="label" id="coord-kind">Координатор програми</p>
     <h1 id="unit-name">—</h1>
   </div>
-  <button class="btn btn-dark" type="button" id="create-program">Створити програму</button>
-</section>
-<div class="toolbar">
-  <label class="field" style="flex:1">Пошук
-    <input id="search" type="search" placeholder="Програма, розділ, захід або підрозділ">
-  </label>
-  <div class="period-col">
-    <label class="field">Звітний період
-      <select id="period"></select>
-    </label>
+  <div class="unit-actions">
+    <button class="btn btn-dark" type="button" id="create-program">Створити програму</button>
     <button class="btn btn-dark hidden" type="button" id="assign-open">Призначити виконавця</button>
   </div>
+</section>
+<div class="toolbar">
+  <label class="field grow">Пошук
+    <input id="search" type="search" placeholder="Програма, розділ, захід або підрозділ">
+  </label>
+  <label class="field">Звітний період
+    <select id="period"></select>
+  </label>
 </div>
 <div class="section-head"><h2>Програми</h2></div>
 <div id="flags-note"></div>
@@ -46,7 +46,7 @@
       <p class="small muted" id="dept-pick-note" style="margin:6px 0 0"></p>
     </fieldset>
     <div id="program-error" class="alert hidden" role="alert"></div>
-    <div class="toolbar" style="margin:0">
+    <div class="dialog-actions">
       <button class="btn btn-dark" type="submit" value="save" id="program-submit">Створити програму</button>
       <button class="btn" type="button" id="program-cancel">Скасувати</button>
     </div>
@@ -61,7 +61,7 @@
   </label>
   <div id="assign-body" class="assign-body"></div>
   <div id="assign-msg" class="msg" role="status"></div>
-  <div class="toolbar" style="margin:14px 0 0">
+  <div class="dialog-actions">
     <button class="btn btn-dark" type="button" id="assign-save">Зберегти призначення</button>
     <button class="btn" type="button" id="assign-cancel">Скасувати</button>
   </div>

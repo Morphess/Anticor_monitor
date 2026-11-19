@@ -16,7 +16,7 @@
         ]);
         measures.sort(Api.byMeasureOrder);
         document.getElementById("program-title").textContent =
-          programs.length === 1 ? programs[0].title : "Програм: " + programs.length;
+          programs.length === 1 ? programs[0].title : "Усі програми (" + programs.length + ")";
         Api.fillPeriods(periodSel, programs);
         const evidenceByMeasure = Api.groupBy(evid.data, "measure_id");
         const changesByMeasure = Api.groupBy(changes.data, "measure_id");

@@ -12,13 +12,13 @@
   const flagsNote = document.getElementById("flags-note");
   const periodSel = document.getElementById("period");
   const search = document.getElementById("search");
-  const STATUSES = ["done", "review", "rework", "not"];
 
   let programs = [];
   let measuresByProg = {};
   let sections = {};
   let executions = {};
   let ordersByMeasure = {};
+  let allOrders = [];       // реєстр наказів (у новому бекенді не прив'язаний до заходу)
   let changesByMeasure = {};
   let flagsByMeasure = {};
   let access = {};          // program_id -> owner | department_coordinator | admin
@@ -37,6 +37,8 @@
       regional = types.indexOf("department_coordinator") !== -1 && types.indexOf("owner") === -1;
       if (regional) {
         document.getElementById("coord-kind").textContent = "Координатор підрозділу";
+        const roleName = document.querySelector("[data-role-name]");
+        if (roleName) roleName.textContent = "Координатор підрозділу";
         document.getElementById("create-program").classList.add("hidden");
         document.getElementById("assign-open").classList.remove("hidden");
       }
@@ -47,6 +49,7 @@
       ]);
       sections = secs;
       ordersByMeasure = Api.groupBy(orders.data, "measure_id");
+      allOrders = orders.data;
       changesByMeasure = Api.groupBy(changes.data, "measure_id");
 
       if (regional) {
@@ -278,19 +281,23 @@
 
   function unitsTable(m) {
     const ex = executions[m.id];
-    const key = Api.statusOf(ex);
-    const select = el("select", { "aria-label": "Статус виконання заходу " + Api.measureNo(m) });
-    if (STATUSES.indexOf(key) === -1) select.appendChild(el("option", { value: "", text: Api.STATUS[key].label }));
-    STATUSES.forEach(function (k) { select.appendChild(el("option", { value: k, text: Api.STATUS[k].label })); });
-    select.value = STATUSES.indexOf(key) !== -1 ? key : "";
     const msg = el("div", { class: "msg", role: "status" });
-    select.addEventListener("change", function () { changeStatus(m, select.value, select, msg); });
+    const approved = !!(ex && ex.approved_by_coordinator);
+    // Координатор лише погоджує поданий звіт або відкликає погодження; статус ставить виконавець.
+    const action = !ex
+      ? el("span", { class: "small muted", text: "Звіт ще не подано" })
+      : el("button", {
+          type: "button", class: approved ? "btn" : "btn btn-dark",
+          text: approved ? "Відкликати погодження" : "Погодити",
+          "aria-label": (approved ? "Відкликати погодження заходу " : "Погодити захід ") + Api.measureNo(m),
+        });
+    if (ex) action.addEventListener("click", function () { setApproval(m, !approved, action, msg); });
 
     const number = Api.orderNumber(ex);
-    const order = Api.findOrder(ordersByMeasure[m.id], number);
+    const order = Api.findOrder(ordersByMeasure[m.id], number) || Api.findOrder(allOrders, number);
     let orderCell;
     if (!number) orderCell = el("td", { text: "—" });
-    else if (order) orderCell = el("td", {}, [Api.docLink(order.document_url, "№ " + order.number)]);
+    else if (order) orderCell = el("td", { class: "nowrap" }, [Api.docLink(order.document_url, "№ " + order.number)]);
     else orderCell = el("td", {}, ["№ " + number, el("div", { class: "msg err", text: "немає в реєстрі" })]);
 
     return el("div", { class: "units table-wrap" }, [
@@ -298,16 +305,17 @@
         el("thead", {}, [el("tr", {}, [
           el("th", { text: "Підрозділ" }), regional ? el("th", { text: "Виконавці" }) : null,
           el("th", { text: "Виконати до" }), el("th", { text: "Фактично виконано" }),
-          el("th", { text: "№ наказу" }), el("th", { text: "Примітка" }), el("th", { text: "Статус" }),
+          el("th", { text: "Наказ" }), el("th", { text: "Примітка" }), el("th", { text: "Статус" }), el("th", { text: "Погодження" }),
         ])]),
         el("tbody", {}, [el("tr", {}, [
           el("td", { text: Api.deptName(m.responsible_department_id) }),
           regional ? el("td", { text: assigneeText(m) }) : null,
           el("td", { class: "nowrap", text: deadlineText(m) }),
-          el("td", { class: "nowrap", text: ex && ex.completed_on ? Api.fmtDate(ex.completed_on) : "—" }),
+          el("td", { class: "nowrap", text: actualDate(ex) }),
           orderCell,
           el("td", { class: "muted", text: Api.noteOf(ex) || "—" }),
-          el("td", {}, [select, msg]),
+          el("td", {}, [Api.statusBadge(Api.statusOf(ex))]),
+          el("td", {}, [action, msg]),
         ])]),
       ]),
     ]);
@@ -335,26 +343,22 @@
     ]);
   }
 
-  async function changeStatus(m, key, select, msg) {
-    if (!key) return;
-    const period = periodSel.value;
-    select.disabled = true;
+  // «Фактично виконано» показуємо лише для погодженого звіту: дата виконання з поданого звіту.
+  function actualDate(ex) {
+    if (!ex || !ex.approved_by_coordinator) return "—";
+    const d = ex.completed_on || (ex.submitted_at || "").slice(0, 10);
+    return d ? Api.fmtDate(d) : "—";
+  }
+
+  async function setApproval(m, approve, button, msg) {
+    button.disabled = true;
     msg.className = "msg";
     msg.textContent = "Збереження…";
     try {
-      let ex = executions[m.id];
-      const fields = Object.assign({}, Api.STATUS_PATCH[key]);
-      ex = ex
-        ? await Api.patch(Api.executionUrl(m.id, period), fields)
-        : await Api.post("/api/executions/", Object.assign({ measure_id: m.id, period: period, result_description: "" }, fields));
-      const approve = key === "done";
-      if (ex.approved_by_coordinator !== approve) {
-        ex = await Api.patch(Api.executionUrl(m.id, period) + "/approval", { approved_by_coordinator: approve });
-      }
-      executions[m.id] = ex;
+      executions[m.id] = await Api.patch(Api.executionUrl(m.id, periodSel.value) + "/approval", { approved_by_coordinator: approve });
       render();
     } catch (err) {
-      select.disabled = false;
+      button.disabled = false;
       msg.className = "msg err";
       msg.textContent = "Помилка: " + err.message;
     }

@@ -1,6 +1,7 @@
 // Кабінет виконавця: програма → розділ → заходи, лише заходи, закріплені за користувачем.
-// У рядку заходу — номер наказу: перевірка за реєстром /api/orders,
-// після успіху звіт іде координатору через /api/executions.
+// У рядку заходу — номер наказу. Новий бекенд (є /api/order-change-alerts): номер подається
+// підтвердним документом /api/evidences, сервер звіряє його з реєстром наказів.
+// Старий бекенд: перевірка за реєстром /api/orders на сторінці. Далі звіт іде координатору через /api/executions.
 (function () {
   "use strict";
   const el = Api.el;
@@ -15,6 +16,11 @@
   let executions = {};     // measure_id -> звіт за обраний період
   let ordersByMeasure = {};
   let ordersOk = true;
+  let allOrders = [];
+  let registryMode = false; // true — новий бекенд: наказ подається через /api/evidences
+  let alerts = [];          // сповіщення про зміну наказів
+  let orderEvidence = {};   // measure_id -> підтвердний документ «Наказ»
+  let measureById = {};
   const open = new Set();  // розгорнуті вузли: p:ID, s:ID:R
   const msgs = {};         // measure_id -> {ok, text} останньої спроби подання
 
@@ -22,13 +28,18 @@
     if (!await Api.requireRole("VYK")) return;
     showIdent(Api.me);
     try {
-      const [progList, ms, secs, orders, routed] = await Promise.all([
+      const [progList, ms, secs, orders, routed, alertBox] = await Promise.all([
         Api.get("/api/programs"), Api.measures(), Api.sections(), Api.optional(Api.orders()),
         Api.optional(Api.get("/api/program-routing/my/measures", { noRedirect: true })),
+        Api.optional(Api.orderAlerts()),
       ]);
       sections = secs;
       ordersOk = orders.ok;
+      allOrders = orders.data;
       ordersByMeasure = Api.groupBy(orders.data, "measure_id");
+      registryMode = alertBox.ok && alertBox.data !== null;
+      alerts = registryMode ? alertBox.data.alerts || [] : [];
+      ms.forEach(function (m) { measureById[m.id] = m; });
 
       // Виконавець бачить тільки свої заходи (assigned_user_id), чужі не показуються.
       // Свої заходи: закріплені за користувачем (assigned_user_id) або призначені координатором
@@ -66,9 +77,14 @@
   async function load() {
     Api.showError(null);
     try {
-      const list = await Api.executions(periodSel.value);
+      const [list, evid] = await Promise.all([
+        Api.executions(periodSel.value),
+        registryMode ? Api.optional(Api.evidences()) : Promise.resolve({ data: [] }),
+      ]);
       executions = {};
       list.forEach(function (x) { executions[x.measure_id] = x; });
+      orderEvidence = {};
+      evid.data.forEach(function (e) { if (e.order_number) orderEvidence[e.measure_id] = e; });
       render();
     } catch (err) {
       Api.showError(err);
@@ -197,7 +213,7 @@
   function measureRow(m) {
     return el("div", { class: "mrow", id: "row-" + m.id }, [
       el("div", {}, [el("span", { class: "num", text: Api.measureNo(m) }), m.description]),
-      el("div", { class: "nowrap" }, [el("div", { text: endDate(m) }), deadlineChip(m)]),
+      el("div", { class: "nowrap" }, [el("div", {}, [el("span", { class: "m-label", text: "Виконати до: " }), endDate(m)]), deadlineChip(m)]),
       orderField(m),
       el("div", {}, [Api.statusBadge(Api.statusOf(executions[m.id]))]),
     ]);
@@ -226,7 +242,8 @@
       e.preventDefault();
       submit(m, input);
     });
-    const order = Api.findOrder(ordersByMeasure[m.id], Api.orderNumber(ex));
+    const order = Api.findOrder(ordersByMeasure[m.id], Api.orderNumber(ex)) ||
+      (registryMode ? Api.findOrder(allOrders, Api.orderNumber(ex)) : null);
     return el("div", {}, [
       input,
       msg,
@@ -253,6 +270,21 @@
         else if (d <= 30) out.push({ lvl: "soon", rank: 2, days: d, what: d === 0 ? "Строк спливає сьогодні" : "Строк спливає через " + d + " дн.", which: which, go: go });
       });
     });
+    alerts.filter(function (a) { return !a.is_read; }).forEach(function (a) {
+      const m = measureById[a.measure_id];
+      const p = m && programs.find(function (x) { return x.id === m.program_id; });
+      out.push({
+        lvl: "review", rank: 1,
+        what: "Змінено наказ № " + a.order_number + " (версія " + a.previous_version_number + " → " + a.new_version_number + ")",
+        which: (m ? (p ? p.id + " · " : "") + Api.measureNo(m) + " " + m.description : a.measure_id) +
+          (a.has_approved_execution ? " · звіт уже погоджено" : ""),
+        go: function () {
+          a.is_read = true;
+          Api.post("/api/order-change-alerts/" + a.id + "/read", {}).catch(function () { /* позначка не критична */ });
+          if (m && p) goTo(p, m); else render();
+        },
+      });
+    });
     out.sort(function (a, b) { return a.rank - b.rank || (a.days || 0) - (b.days || 0); });
     Notify.render(out, "Усе гаразд — термінових справ немає.");
   }
@@ -273,6 +305,12 @@
   // Перевірка: наказ є в реєстрі саме для цього заходу і не поданий для іншого.
   function check(m, number) {
     if (!number) return "Введіть номер наказу";
+    if (registryMode) {
+      const usedElsewhere = Object.keys(executions).some(function (id) {
+        return id !== m.id && Api.normNumber(Api.orderNumber(executions[id])) === Api.normNumber(number);
+      });
+      return usedElsewhere ? "Помилка: наказ № " + number + " уже використано для іншого заходу" : null;
+    }
     if (!ordersOk) return "Помилка: реєстр наказів недоступний, спробуйте пізніше";
     const own = Api.findOrder(ordersByMeasure[m.id], number);
     if (!own) {
@@ -300,9 +338,13 @@
     const problem = check(m, number);
     if (problem) return fail(m, problem);
 
-    const order = Api.findOrder(ordersByMeasure[m.id], number);
+    const order = registryMode ? { number: number } : Api.findOrder(ordersByMeasure[m.id], number);
     input.disabled = true;
     try {
+      if (registryMode) {
+        const problem = await submitOrderEvidence(m, number);
+        if (problem) { input.disabled = false; return fail(m, problem); }
+      }
       const fields = {
         status: "completed",
         status_label: "На розгляді",
@@ -317,6 +359,33 @@
     } catch (err) {
       input.disabled = false;
       fail(m, "Помилка: " + err.message);
+    }
+  }
+
+  // Новий бекенд: номер наказу — у підтвердному документі; сервер звіряє його з реєстром.
+  // Повертає текст помилки або null.
+  async function submitOrderEvidence(m, number) {
+    const existing = orderEvidence[m.id];
+    const body = {
+      document_type: "Наказ",
+      title: "Наказ № " + number,
+      order_number: number,
+      reference_sha256: await Api.sha256Hex(m.id + "|" + number),
+    };
+    try {
+      orderEvidence[m.id] = existing
+        ? await Api.patch("/api/evidences/" + encodeURIComponent(existing.id), body)
+        : await Api.post("/api/evidences/", Object.assign({
+            id: ("E" + Date.now().toString(36) + Math.random().toString(36).slice(2)).slice(0, 12),
+            measure_id: m.id,
+          }, body));
+      return null;
+    } catch (err) {
+      const d = err.body && err.body.detail;
+      if (err.status === 404 && d && d.order_check_status === "not_found") {
+        return "Помилка: наказу № " + number + " немає в реєстрі";
+      }
+      return "Помилка: " + err.message;
     }
   }
 

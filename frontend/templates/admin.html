@@ -14,8 +14,35 @@
 </div>
 
 <section data-panel="users">
-  <form id="user-form" class="card" style="margin-bottom:20px">
-    <h2 style="margin-top:0">Новий користувач</h2>
+  <div class="toolbar">
+    <label class="field grow">Пошук
+      <input id="user-search" type="search" autocomplete="off" placeholder="Логін, ID, роль, підрозділ, посада або програма">
+    </label>
+    <label class="field">Роль
+      <select id="user-role-filter">
+        <option value="">Усі ролі</option>
+        <option value="VYK">Виконавець</option><option value="KOORD">Координатор програми</option>
+          <option value="KER">Керівник</option><option value="ANAL">Аналітик</option><option value="ADMIN">Адміністратор</option>
+      </select>
+    </label>
+    <label class="field">Підрозділ
+      <select id="user-dept-filter"><option value="">Усі підрозділи</option><option value="-">Без підрозділу</option></select>
+    </label>
+    <button class="btn btn-dark" type="button" id="user-create-open">Новий користувач</button>
+  </div>
+  <div class="pager pager-top" id="user-pager-top"></div>
+  <div id="user-edit-msg" class="msg" role="status"></div>
+  <div class="table-wrap">
+    <table class="grid">
+      <thead><tr><th>ID</th><th>Логін</th><th>Роль</th><th>Підрозділ</th><th>Посада</th><th>Програма</th><th><span class="sr-only">Дія</span></th></tr></thead>
+      <tbody id="users"></tbody>
+    </table>
+  </div>
+  <div class="pager" id="user-pager"></div>
+
+  <dialog id="user-create-dialog" aria-labelledby="user-create-title">
+  <form id="user-form">
+    <h2 id="user-create-title">Новий користувач</h2>
     <div class="form-grid">
       <label class="field">Логін<input name="login" required minlength="3" pattern="[A-Za-z0-9_.\-]+"></label>
       <label class="field">Пароль (від 12 символів)<input name="password" type="password" required minlength="12" autocomplete="new-password"></label>
@@ -29,18 +56,12 @@
       <label class="field">Посада<input name="position"></label>
     </div>
     <div id="user-msg" class="msg" role="status"></div>
-    <button class="btn btn-dark" type="submit">Створити користувача</button>
+    <div class="dialog-actions">
+      <button class="btn btn-dark" type="submit">Створити користувача</button>
+      <button class="btn" type="button" data-close>Скасувати</button>
+    </div>
   </form>
-  <label class="field" style="max-width:360px;margin:0 0 14px">Пошук за ID або логіном
-    <input id="user-search" type="search" autocomplete="off" placeholder="Наприклад, 12 або coordinator">
-  </label>
-  <div id="user-edit-msg" class="msg" role="status"></div>
-  <div class="table-wrap">
-    <table class="grid">
-      <thead><tr><th>ID</th><th>Логін</th><th>Роль</th><th>Підрозділ</th><th>Посада</th><th>Програма</th><th>Дія</th></tr></thead>
-      <tbody id="users"></tbody>
-    </table>
-  </div>
+  </dialog>
   <dialog id="user-edit-dialog" aria-labelledby="user-edit-title">
     <form id="user-edit-form">
       <h2 id="user-edit-title">Редагувати користувача</h2>
@@ -59,7 +80,7 @@
       </div>
       <p id="user-edit-hint" class="muted small hidden"></p>
       <div id="user-edit-error" class="msg err hidden" role="alert"></div>
-      <div class="toolbar" style="margin:12px 0 0">
+      <div class="dialog-actions">
         <button class="btn btn-dark" type="submit">Зберегти зміни</button>
         <button class="btn" type="button" id="user-edit-cancel">Скасувати</button>
       </div>
@@ -68,27 +89,45 @@
 </section>
 
 <section data-panel="departments" class="hidden">
-  <form id="department-form" class="card" style="margin-bottom:20px">
-    <h2 style="margin-top:0">Новий підрозділ</h2>
+  <div class="toolbar">
+    <label class="field grow">Пошук
+      <input id="department-search" type="search" autocomplete="off" placeholder="Код, назва, тип або примітки">
+    </label>
+    <label class="field">Тип
+      <select id="department-type-filter"><option value="">Усі типи</option></select>
+    </label>
+    <button class="btn btn-dark" type="button" id="department-create-open">Новий підрозділ</button>
+  </div>
+  <div class="pager pager-top" id="department-pager-top"></div>
+  <div id="department-edit-msg" class="msg" role="status"></div>
+  <div class="table-wrap">
+    <table class="grid">
+      <thead><tr><th>Код</th><th>Назва</th><th>Тип</th><th>Підпорядкованість</th><th>Примітки</th><th><span class="sr-only">Дія</span></th></tr></thead>
+      <tbody id="departments"></tbody>
+    </table>
+  </div>
+  <div class="pager" id="department-pager"></div>
+
+  <dialog id="department-create-dialog" aria-labelledby="department-create-title">
+  <form id="department-form">
+    <h2 id="department-create-title">Новий підрозділ</h2>
     <div class="form-grid">
       <label class="field">Код<input name="id" required maxlength="10" pattern="[A-Za-z0-9_\-]+" placeholder="P15"></label>
       <label class="field">Назва<input name="name" required maxlength="200"></label>
       <label class="field">Тип підрозділу<input name="department_type" required maxlength="50" placeholder="Департамент"></label>
+      <label class="field">Підпорядкованість
+        <select name="parent_id"><option value="">— Верхній рівень (не підпорядкований) —</option></select>
+        <span class="hint">Вищий відділ чи управління, якому підпорядковується підрозділ</span>
+      </label>
       <label class="field">Примітки<input name="notes" maxlength="1000"></label>
     </div>
     <div id="department-msg" class="msg" role="status"></div>
-    <button class="btn btn-dark" type="submit">Створити підрозділ</button>
+    <div class="dialog-actions">
+      <button class="btn btn-dark" type="submit">Створити підрозділ</button>
+      <button class="btn" type="button" data-close>Скасувати</button>
+    </div>
   </form>
-  <label class="field" style="max-width:360px;margin:0 0 14px">Пошук за кодом або назвою
-    <input id="department-search" type="search" autocomplete="off" placeholder="Наприклад, P01 або фінансовий">
-  </label>
-  <div id="department-edit-msg" class="msg" role="status"></div>
-  <div class="table-wrap">
-    <table class="grid">
-      <thead><tr><th>Код</th><th>Назва</th><th>Тип</th><th>Примітки</th><th>Дія</th></tr></thead>
-      <tbody id="departments"></tbody>
-    </table>
-  </div>
+  </dialog>
   <dialog id="department-edit-dialog" aria-labelledby="department-edit-title">
     <form id="department-edit-form">
       <h2 id="department-edit-title">Редагувати підрозділ</h2>
@@ -96,10 +135,14 @@
       <div class="form-grid">
         <label class="field">Назва<input name="name" required maxlength="200"></label>
         <label class="field">Тип підрозділу<input name="department_type" required maxlength="50"></label>
+        <label class="field">Підпорядкованість
+        <select name="parent_id"><option value="">— Верхній рівень (не підпорядкований) —</option></select>
+        <span class="hint">Вищий відділ чи управління, якому підпорядковується підрозділ</span>
+      </label>
         <label class="field">Примітки<input name="notes" maxlength="1000"></label>
       </div>
       <div id="department-edit-error" class="msg err hidden" role="alert"></div>
-      <div class="toolbar" style="margin:12px 0 0">
+      <div class="dialog-actions">
         <button class="btn btn-dark" type="submit">Зберегти зміни</button>
         <button class="btn" type="button" id="department-edit-cancel">Скасувати</button>
       </div>
@@ -107,4 +150,4 @@
   </dialog>
 </section>
 {% endblock %}
-{% block scripts %}<script src="/static/js/admin.js?v=6"></script>{% endblock %}
+{% block scripts %}<script src="/static/js/admin.js?v=8"></script>{% endblock %}

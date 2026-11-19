@@ -7,27 +7,29 @@
     <p class="label">Інформаційна панель керівника</p>
     <h1 id="program-title">—</h1>
   </div>
-  <label class="field">Звітний період <select id="period"></select></label>
+  <div class="unit-actions">
+    <label class="field">Звітний період <select id="period"></select></label>
+  </div>
 </section>
 
 <div class="cards" id="cards"></div>
 <div id="stack"></div>
 
-<div class="section-head"><h2>Прогноз</h2><span class="muted small">Оцінка на основі статусів, строків, підтверджень і перенесень</span></div>
+<div class="section-head"><h2>Прогноз</h2><p class="sub">Оцінка на основі статусів, строків, підтверджень і перенесень</p></div>
 <div class="forecast" id="forecast"></div>
 
-<div class="section-head"><h2>Рекомендовані доручення</h2><span class="muted small">Сформовано автоматично; рішення ухвалює керівник</span></div>
+<div class="section-head"><h2>Рекомендовані доручення</h2><p class="sub">Сформовано автоматично; рішення ухвалює керівник</p></div>
 <div id="recs"><p class="muted">Завантаження…</p></div>
 
-<div class="section-head"><h2>Потребують уваги</h2><span class="muted small">Відсортовано за ризиком невиконання, 0–100</span></div>
+<div class="section-head"><h2>Потребують уваги</h2><p class="sub">Відсортовано за ризиком невиконання, 0–100</p></div>
 <div class="table-wrap">
   <table class="grid">
-    <thead><tr><th>№</th><th>Захід</th><th>Підрозділ</th><th>Строк</th><th>Статус</th><th>Ризик</th><th>Причини</th></tr></thead>
+    <thead><tr><th>Пункт</th><th>Захід</th><th>Підрозділ</th><th>Строк</th><th>Статус</th><th>Ризик</th><th>Причини</th></tr></thead>
     <tbody id="attention"></tbody>
   </table>
 </div>
 
-<h2>За розділами</h2>
+<div class="section-head"><h2>За розділами</h2></div>
 <div class="table-wrap">
   <table class="grid">
     <thead><tr><th>Розділ</th><th>Виконано</th><th style="width:40%">Прогрес</th></tr></thead>
@@ -36,7 +38,7 @@
 </div>
 
 <div id="flags-block" class="hidden">
-  <h2>Сигнали Risk Flags</h2>
+  <div class="section-head"><h2>Сигнали Risk Flags</h2></div>
   <div id="flags-summary"></div>
 </div>
 {% endblock %}

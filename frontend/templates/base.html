@@ -3,11 +3,25 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Моніторинг антикорупційної програми{% endblock %}</title>
+  <title>{% block title %}Моніторинг антикорупційної програми{% endblock %} · Border Group</title>
   <script>try { var t = localStorage.getItem("anticor_theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
   <link rel="stylesheet" href="/static/css/monitor.css">
 </head>
 <body>
+  {% macro brand_logo() %}
+  <svg class="brand-logo" viewBox="0 0 266 266" aria-hidden="true" focusable="false">
+    <g fill="currentColor">
+      <rect x="0" y="0" width="61" height="9"/><rect x="0" y="0" width="9" height="61"/>
+      <rect x="205" y="0" width="61" height="9"/><rect x="257" y="0" width="9" height="61"/>
+      <rect x="0" y="257" width="61" height="9"/><rect x="0" y="205" width="9" height="61"/>
+      <rect x="205" y="257" width="61" height="9"/><rect x="257" y="205" width="9" height="61"/>
+      <rect x="47" y="110" width="45" height="45"/><rect x="173" y="110" width="45" height="45"/>
+      <rect x="47" y="173" width="45" height="45"/><rect x="173" y="173" width="45" height="45"/>
+    </g>
+    <rect class="dot" x="110" y="47" width="45" height="45"/>
+  </svg>
+  {% endmacro %}
+  {% macro brand_text() %}<span class="brand-text"><span class="brand-word"><b>BORDER</b> <span>GROUP</span></span><span class="brand-sub">Антикорупційна програма</span></span>{% endmacro %}
   {% macro theme_toggle() %}
   <button type="button" class="icon-btn theme-toggle" data-theme-toggle aria-label="Перемкнути світлу або темну тему" title="Світла / темна тема">
     <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
@@ -16,7 +30,7 @@
   {% endmacro %}
   {% block header %}
   <header class="topbar">
-    <a class="brand" href="/login"><span class="brand-mark" aria-hidden="true">А</span>Антикорупційна програма</a>
+    <a class="brand" href="/login" aria-label="Border Group — антикорупційна програма">{{ brand_logo() }}{{ brand_text() }}</a>
     <div class="who">
       {% block who_label %}<span data-role-name>{% block role_name %}{% endblock %}</span>{% endblock %}
       {% block topbar_tools %}{% endblock %}

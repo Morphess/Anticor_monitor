@@ -1,4 +1,4 @@
-// Кабінет адміністратора: створення користувачів і підрозділів.
+// Кабінет адміністратора: користувачі й підрозділи — пошук, фільтри, пагінація, створення та редагування.
 (function () {
   "use strict";
   const el = Api.el;
@@ -18,13 +18,105 @@
     });
   });
 
+  // ---------- пошук, фільтри, пагінація ----------
+  const PAGE_SIZES = [10, 25, 50, 100];
+  const userPage = { page: 1, size: readSize("users", 25) };
+  const departmentPage = { page: 1, size: readSize("departments", 25) };
+
+  function readSize(key, def) {
+    try {
+      const v = Number(localStorage.getItem("anticor_admin_size_" + key));
+      return PAGE_SIZES.indexOf(v) !== -1 ? v : def;
+    } catch (e) { return def; }
+  }
+  function saveSize(key, v) {
+    try { localStorage.setItem("anticor_admin_size_" + key, String(v)); } catch (e) { /* без збереження */ }
+  }
+
+  function norm(v) { return String(v == null ? "" : v).toLocaleLowerCase("uk"); }
+
+  // Збіг усіх слів запиту з будь-якими полями запису (у довільному порядку).
+  function matchesQuery(fields, query) {
+    if (!query) return true;
+    const hay = fields.map(norm).join(" ");
+    return query.split(/\s+/).every(function (word) { return hay.indexOf(word) !== -1; });
+  }
+
+  // Номери сторінок: 1 … 4 5 6 … 20.
+  function pageList(page, pages) {
+    const out = [];
+    for (let i = 1; i <= pages; i++) {
+      if (i === 1 || i === pages || Math.abs(i - page) <= 1) out.push(i);
+      else if (out[out.length - 1] !== "…") out.push("…");
+    }
+    return out;
+  }
+
+  // Нижня панель таблиці: «Показано 1–25 з 1126», розмір сторінки, перемикач сторінок.
+  function renderPager(box, state, total, key, rerender) {
+    const pages = Math.max(1, Math.ceil(total / state.size));
+    if (state.page > pages) state.page = pages;
+    const from = total ? (state.page - 1) * state.size + 1 : 0;
+    const to = Math.min(total, state.page * state.size);
+    const size = el("select", { "aria-label": "Записів на сторінці" });
+    PAGE_SIZES.forEach(function (n) { size.appendChild(el("option", { value: String(n), text: String(n) })); });
+    size.value = String(state.size);
+    size.addEventListener("change", function () {
+      state.size = Number(size.value);
+      state.page = 1;
+      saveSize(key, state.size);
+      rerender();
+    });
+    function pageBtn(label, target, aria, current) {
+      const b = el("button", { type: "button", class: "icon-btn" + (current ? " current" : ""), text: label, "aria-label": aria });
+      if (current) b.setAttribute("aria-current", "page");
+      if (target < 1 || target > pages) b.disabled = true;
+      else b.addEventListener("click", function () { state.page = target; rerender(); });
+      return b;
+    }
+    const nav = el("nav", { class: "pages", "aria-label": "Сторінки" });
+    nav.appendChild(pageBtn("‹", state.page - 1, "Попередня сторінка", false));
+    pageList(state.page, pages).forEach(function (p) {
+      nav.appendChild(p === "…" ? el("span", { class: "gap", text: "…" }) : pageBtn(String(p), p, "Сторінка " + p, p === state.page));
+    });
+    nav.appendChild(pageBtn("›", state.page + 1, "Наступна сторінка", false));
+    box.replaceChildren(
+      el("span", { class: "pager-info", text: total ? "Показано " + from + "–" + to + " з " + total : "Нічого не знайдено" }),
+      el("label", { class: "pager-size" }, ["На сторінці", size]),
+      pages > 1 ? nav : el("span")
+    );
+  }
+
+  function departmentNameOf(id) {
+    const d = departments.find(function (x) { return x.id === id; });
+    return d ? d.name : id;
+  }
+
+  function filteredUsers() {
+    const query = norm(document.getElementById("user-search").value.trim());
+    const role = document.getElementById("user-role-filter").value;
+    const dept = document.getElementById("user-dept-filter").value;
+    return users.filter(function (user) {
+      if (role && user.role_id !== role) return false;
+      if (dept === "-" && user.department_id) return false;
+      if (dept && dept !== "-" && user.department_id !== dept) return false;
+      return matchesQuery([
+        user.id, user.login, user.role_id, (Api.ROLES[user.role_id] || {}).name,
+        user.department_id, user.department_id ? departmentNameOf(user.department_id) : "",
+        user.position, user.program_id,
+      ], query);
+    });
+  }
+
   function renderUsers() {
     const tbody = document.getElementById("users");
     tbody.innerHTML = "";
-    const query = document.getElementById("user-search").value.trim().toLocaleLowerCase("uk");
-    const matches = users.filter(function (user) {
-      return String(user.id).includes(query) || user.login.toLocaleLowerCase("uk").includes(query);
+    const all = filteredUsers();
+    ["user-pager-top", "user-pager"].forEach(function (id) {
+      renderPager(document.getElementById(id), userPage, all.length, "users", renderUsers);
     });
+    const start = (userPage.page - 1) * userPage.size;
+    const matches = all.slice(start, start + userPage.size);
     if (!matches.length) {
       tbody.appendChild(el("tr", {}, [el("td", {
         colspan: "7",
@@ -59,6 +151,21 @@
 
   async function loadDepartments() {
     departments = await Api.get("/api/departments/");
+    const deptFilter = document.getElementById("user-dept-filter");
+    const keepDept = deptFilter.value;
+    deptFilter.replaceChildren(el("option", { value: "", text: "Усі підрозділи" }), el("option", { value: "-", text: "Без підрозділу" }));
+    departments.slice().sort(function (a, b) { return a.name.localeCompare(b.name, "uk"); }).forEach(function (d) {
+      deptFilter.appendChild(el("option", { value: d.id, text: d.name }));
+    });
+    deptFilter.value = keepDept;
+    const typeFilter = document.getElementById("department-type-filter");
+    const keepType = typeFilter.value;
+    typeFilter.replaceChildren(el("option", { value: "", text: "Усі типи" }));
+    Array.from(new Set(departments.map(function (d) { return d.department_type; }).filter(Boolean))).sort().forEach(function (t) {
+      typeFilter.appendChild(el("option", { value: t, text: t }));
+    });
+    typeFilter.value = keepType;
+    fillParentSelect(document.querySelector("#department-form [name=parent_id]"), null);
     ["#user-form", "#user-edit-form"].forEach(function (formSelector) {
       const select = document.querySelector(formSelector + " [name=department_id]");
       select.replaceChildren(el("option", { value: "", text: "— Не призначено —" }));
@@ -72,20 +179,54 @@
     renderDepartments();
   }
 
+  // Список «Підпорядкованість»: деревом, з відступами; без самого підрозділу та його підлеглих.
+  function fillParentSelect(select, selfId) {
+    const keep = select.value;
+    const children = {};
+    departments.forEach(function (d) { (children[d.parent_id || ""] = children[d.parent_id || ""] || []).push(d); });
+    Object.keys(children).forEach(function (k) {
+      children[k].sort(function (a, b) { return a.name.localeCompare(b.name, "uk"); });
+    });
+    const known = {};
+    departments.forEach(function (d) { known[d.id] = true; });
+    select.replaceChildren(el("option", { value: "", text: "— Верхній рівень (не підпорядкований) —" }));
+    function walk(parentKey, depth) {
+      (children[parentKey] || []).forEach(function (d) {
+        if (d.id === selfId) return; // підрозділ і вся його гілка недоступні як вищий рівень
+        select.appendChild(el("option", { value: d.id, text: "\u00a0\u00a0".repeat(depth) + (depth ? "└ " : "") + d.name + " (" + d.id + ")" }));
+        walk(d.id, depth + 1);
+      });
+    }
+    walk("", 0);
+    // Підрозділи з неіснуючим батьком теж показуємо, щоб їх можна було обрати.
+    departments.forEach(function (d) {
+      if (d.parent_id && !known[d.parent_id] && d.id !== selfId) select.appendChild(el("option", { value: d.id, text: d.name + " (" + d.id + ")" }));
+    });
+    select.value = keep;
+  }
+
   function renderDepartments() {
     const tbody = document.getElementById("departments");
     tbody.innerHTML = "";
-    const query = document.getElementById("department-search").value.trim().toLocaleLowerCase("uk");
-    const matches = departments.filter(function (department) {
-      return department.id.toLocaleLowerCase("uk").includes(query) ||
-        department.name.toLocaleLowerCase("uk").includes(query);
+    const query = norm(document.getElementById("department-search").value.trim());
+    const type = document.getElementById("department-type-filter").value;
+    const all = departments.filter(function (d) {
+      if (type && d.department_type !== type) return false;
+      const parent = d.parent_id ? departmentNameOf(d.parent_id) : "";
+      return matchesQuery([d.id, d.name, d.department_type, d.notes, d.parent_id, parent, d.parent_id ? "" : "верхній рівень"], query);
     });
+    ["department-pager-top", "department-pager"].forEach(function (id) {
+      renderPager(document.getElementById(id), departmentPage, all.length, "departments", renderDepartments);
+    });
+    const start = (departmentPage.page - 1) * departmentPage.size;
+    const matches = all.slice(start, start + departmentPage.size);
 
     matches.forEach(function (department) {
       tbody.appendChild(el("tr", {}, [
         el("td", { class: "nowrap", text: department.id }),
         el("td", { text: department.name }),
         el("td", { text: department.department_type }),
+        el("td", { text: department.parent_id ? departmentNameOf(department.parent_id) : "Верхній рівень", class: department.parent_id ? "" : "muted" }),
         el("td", { text: department.notes || "—" }),
         el("td", {}, [el("button", {
           type: "button",
@@ -98,7 +239,7 @@
 
     if (!matches.length) {
       tbody.appendChild(el("tr", {}, [el("td", {
-        colspan: "5",
+        colspan: "6",
         class: "muted",
         text: departments.length ? "Підрозділів за цим запитом не знайдено." : "Підрозділів немає.",
       })]));
@@ -133,8 +274,30 @@
     editDialog.showModal();
   }
 
-  document.getElementById("user-search").addEventListener("input", renderUsers);
-  document.getElementById("department-search").addEventListener("input", renderDepartments);
+  // Будь-яка зміна запиту чи фільтра повертає на першу сторінку.
+  function resetTo(state, render) { return function () { state.page = 1; render(); }; }
+  ["user-search", "user-role-filter", "user-dept-filter"].forEach(function (id) {
+    document.getElementById(id).addEventListener(id === "user-search" ? "input" : "change", resetTo(userPage, renderUsers));
+  });
+  ["department-search", "department-type-filter"].forEach(function (id) {
+    document.getElementById(id).addEventListener(id === "department-search" ? "input" : "change", resetTo(departmentPage, renderDepartments));
+  });
+
+  // Вікна створення.
+  const userCreateDialog = document.getElementById("user-create-dialog");
+  const departmentCreateDialog = document.getElementById("department-create-dialog");
+  document.getElementById("user-create-open").addEventListener("click", function () {
+    document.getElementById("user-msg").textContent = "";
+    userCreateDialog.showModal();
+  });
+  document.getElementById("department-create-open").addEventListener("click", function () {
+    document.getElementById("department-msg").textContent = "";
+    fillParentSelect(document.querySelector("#department-form [name=parent_id]"), null);
+    departmentCreateDialog.showModal();
+  });
+  document.querySelectorAll("dialog [data-close]").forEach(function (b) {
+    b.addEventListener("click", function () { b.closest("dialog").close(); });
+  });
   document.getElementById("user-edit-cancel").addEventListener("click", function () {
     editDialog.close();
     editingUserId = null;
@@ -183,6 +346,8 @@
     departmentEditForm.elements.name.value = department.name;
     departmentEditForm.elements.department_type.value = department.department_type;
     departmentEditForm.elements.notes.value = department.notes || "";
+    fillParentSelect(departmentEditForm.elements.parent_id, department.id);
+    departmentEditForm.elements.parent_id.value = department.parent_id || "";
     document.getElementById("department-edit-id").textContent = "Код " + department.id;
     departmentEditError.textContent = "";
     departmentEditError.classList.add("hidden");
@@ -206,6 +371,7 @@
       name: departmentEditForm.elements.name.value.trim(),
       department_type: departmentEditForm.elements.department_type.value.trim(),
       notes: departmentEditForm.elements.notes.value.trim(),
+      parent_id: departmentEditForm.elements.parent_id.value || null,
     };
     const saveButton = departmentEditForm.querySelector("button[type=submit]");
     saveButton.disabled = true;
@@ -238,10 +404,10 @@
     });
     try {
       const user = await Api.post("/api/users/", data);
-      userMsg.className = "msg ok";
-      userMsg.textContent = "Створено користувача " + user.login;
       userForm.reset();
-      editMessage.textContent = "";
+      userCreateDialog.close();
+      editMessage.className = "msg ok";
+      editMessage.textContent = "Створено користувача " + user.login + ".";
       await loadUsers();
     } catch (error) {
       userMsg.className = "msg err";
@@ -258,12 +424,13 @@
 
     const data = Object.fromEntries(new FormData(departmentForm).entries());
     if (!data.notes) data.notes = "";
+    if (!data.parent_id) data.parent_id = null;
     try {
       const department = await Api.post("/api/departments/", data);
-      departmentMsg.className = "msg ok";
-      departmentMsg.textContent = "Створено підрозділ " + department.id;
       departmentForm.reset();
-      departmentEditMessage.textContent = "";
+      departmentCreateDialog.close();
+      departmentEditMessage.className = "msg ok";
+      departmentEditMessage.textContent = "Створено підрозділ " + department.id + ".";
       await loadDepartments();
       await loadUsers();
     } catch (error) {

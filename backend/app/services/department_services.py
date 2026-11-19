@@ -31,6 +31,33 @@ class DepartmentService:
             )
         return cleaned
 
+    def _check_parent(self, department_id: str, parent_id: str | None) -> str | None:
+        """Вищий підрозділ має існувати й не може бути самим підрозділом чи його нащадком."""
+        if parent_id is None:
+            return None
+        parent_id = self._required_text(parent_id, "parent_id")
+        if parent_id == department_id:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Підрозділ не може підпорядковуватися сам собі",
+            )
+        current = self.repository.get_by_id(parent_id)
+        if current is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Вищий підрозділ не знайдено",
+            )
+        seen = set()
+        while current is not None and current.id not in seen:
+            if current.id == department_id:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Не можна підпорядкувати підрозділ його ж підлеглому",
+                )
+            seen.add(current.id)
+            current = self.repository.get_by_id(current.parent_id) if current.parent_id else None
+        return parent_id
+
     def get_all(self) -> list[Department]:
         return self.repository.get_all()
 
@@ -50,11 +77,14 @@ class DepartmentService:
                 detail="Підрозділ із таким кодом уже існує",
             )
 
+        parent_id = self._check_parent(department_id, data.parent_id)
+
         department = Department(
             id=department_id,
             name=name,
             department_type=department_type,
             notes=data.notes,
+            parent_id=parent_id,
         )
         try:
             self.repository.add(department)
@@ -76,6 +106,9 @@ class DepartmentService:
     ) -> Department:
         department = self._get_or_404(department_id)
         changes = data.model_dump(exclude_unset=True)
+
+        if "parent_id" in changes:
+            department.parent_id = self._check_parent(department_id, changes.pop("parent_id"))
 
         for field, value in changes.items():
             if value is None:
