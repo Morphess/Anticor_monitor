@@ -1,66 +1,124 @@
+"""API звітів програм: доступ лише MAIN_KOORD та KOORD.
+
+MAIN_KOORD: створює, переглядає, оновлює й видаляє звіти власних програм.
+KOORD: створює звіти направлених його підрозділу програм та працює
+       лише зі звітами, створеними ним самим.
+ADMIN, VYK, KER, ANAL: жодних операцій із цими маршрутами.
+
+Звіт прив'язаний до програми. У поточній моделі Report немає department_id,
+тому власність звіту KOORD перевіряється через generated_by_user_id.
+"""
+
+from __future__ import annotations
+
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user
 from app.database.db_connection import get_db
+from app.models.program import Program
+from app.models.program_workflow import ProgramDepartment
+from app.models.report import Report
 from app.models.user import User
-
 from app.schemas.reports import ReportCreate, ReportRead, ReportUpdate
 from app.services.report_services import ReportError, ReportService
 
 
-router = APIRouter(prefix="/reports", tags=["Reports"])
+ALLOWED_REPORT_ROLES = frozenset({"MAIN_KOORD", "KOORD"})
 
 
-# Перевірка права перегляду звіту
-def check_read_access(user: User, program_id: str) -> None:
-
-    if user.role_id == "ADMIN":
-        return
-
-    if user.program_id is not None and user.program_id == program_id:
-        return
-
-    raise HTTPException(status_code=403, detail="Немає доступу до звітів цієї програми")
+def require_report_role(user: User = Depends(get_current_user)) -> User:
+    """Забороняє будь-які операції зі звітами для ADMIN та інших ролей."""
+    if user.role_id not in ALLOWED_REPORT_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Звіти доступні лише MAIN_KOORD та KOORD",
+        )
+    return user
 
 
-# Перевірка права редагування звіту
-def check_edit_access(user: User, program_id: str) -> None:
+router = APIRouter(
+    prefix="/reports",
+    tags=["Reports"],
+    dependencies=[Depends(require_report_role)],
+)
 
-    if user.role_id == "ADMIN":
-        return
 
-    if (
+def _main_owns_program(db: Session, user: User, program_id: str) -> bool:
+    """MAIN_KOORD може працювати лише з програмами, які сам створив."""
+    if user.role_id != "MAIN_KOORD":
+        return False
+    program = db.get(Program, program_id)
+    return program is not None and program.created_by_user_id == user.id
+
+
+def _koord_received_program(db: Session, user: User, program_id: str) -> bool:
+    """KOORD має отримати програму напряму на свій підрозділ."""
+    return bool(
         user.role_id == "KOORD"
-        and user.program_id is not None
-        and user.program_id == program_id
+        and user.department_id
+        and db.get(ProgramDepartment, (program_id, user.department_id)) is not None
+    )
+
+
+def _ensure_program_access(db: Session, user: User, program_id: str) -> None:
+    """Перевіряє доступ до програми відповідно до нової моделі маршрутизації."""
+    if _main_owns_program(db, user, program_id) or _koord_received_program(
+        db, user, program_id
     ):
         return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Немає доступу до звітів цієї програми",
+    )
 
-    raise HTTPException(status_code=403, detail="Недостатньо прав для зміни звіту")
+
+def _ensure_report_access(db: Session, user: User, report: Report) -> None:
+    """MAIN_KOORD бачить звіти власних програм; KOORD — лише свої."""
+    _ensure_program_access(db, user, report.program_id)
+    if user.role_id == "KOORD" and report.generated_by_user_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="KOORD може працювати лише зі звітами, створеними ним",
+        )
 
 
-# CREATE — створити звіт
-@router.post("/", response_model=ReportRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=ReportRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Створити звіт програми",
+    description=(
+        "Тільки MAIN_KOORD для своєї програми або KOORD для програми, "
+        "направленої його підрозділу. ADMIN не має доступу. "
+        "Автор визначається за JWT."
+    ),
+)
 def create_report(
     data: ReportCreate,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_report_role),
 ):
-
-    check_edit_access(user, data.program_id)
-
+    _ensure_program_access(db, user, data.program_id)
     try:
         return ReportService(db).create_report(data, user.id)
-
     except ReportError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
 
-# READ — список звітів
-@router.get("/", response_model=list[ReportRead])
+@router.get(
+    "/",
+    response_model=list[ReportRead],
+    summary="Переглянути доступні звіти",
+    description=(
+        "MAIN_KOORD бачить звіти власних програм. KOORD бачить лише "
+        "свої звіти програм, прямо направлених його підрозділу. "
+        "ADMIN та інші ролі отримують 403."
+    ),
+)
 def list_reports(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
@@ -70,92 +128,119 @@ def list_reports(
         default=None, alias="status"
     ),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_report_role),
 ):
+    if program_id is not None:
+        _ensure_program_access(db, user, program_id)
 
-    # Неадміністратор бачить тільки свою програму
-    if user.role_id != "ADMIN":
+    query = select(Report)
+    if user.role_id == "MAIN_KOORD":
+        query = query.join(Program, Report.program_id == Program.id).where(
+            Program.created_by_user_id == user.id
+        )
+    else:  # KOORD; жодна інша роль сюди не потрапляє
+        if not user.department_id:
+            return []
+        query = query.join(
+            ProgramDepartment, ProgramDepartment.program_id == Report.program_id
+        ).where(
+            ProgramDepartment.department_id == user.department_id,
+            Report.generated_by_user_id == user.id,
+        )
 
-        if user.program_id is None:
-            raise HTTPException(
-                status_code=403, detail="Користувач не прив'язаний до програми"
-            )
+    if program_id is not None:
+        query = query.where(Report.program_id == program_id)
+    if period is not None:
+        query = query.where(Report.period == period)
+    if status_filter is not None:
+        query = query.where(Report.status == status_filter)
 
-        if program_id is not None and program_id != user.program_id:
-            raise HTTPException(
-                status_code=403, detail="Немає доступу до цієї програми"
-            )
-
-        program_id = user.program_id
-
-    return ReportService(db).list_reports(
-        skip=skip,
-        limit=limit,
-        program_id=program_id,
-        period=period,
-        status=status_filter,
-    )
+    query = query.order_by(Report.id).offset(skip).limit(limit)
+    return db.scalars(query).all()
 
 
-# READ — отримати один звіт
-@router.get("/{report_id}", response_model=ReportRead)
+@router.get(
+    "/{report_id}",
+    response_model=ReportRead,
+    summary="Отримати звіт за ID",
+    description="Звіт доступний лише уповноваженим MAIN_KOORD або його автору KOORD.",
+)
 def get_report(
     report_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_report_role),
 ):
-
     try:
         report = ReportService(db).get_report(report_id)
-
-        check_read_access(user, report.program_id)
-
-        return report
-
     except ReportError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+    _ensure_report_access(db, user, report)
+    return report
 
 
-# UPDATE — редагувати звіт
-@router.patch("/{report_id}", response_model=ReportRead)
+@router.patch(
+    "/{report_id}",
+    response_model=ReportRead,
+    summary="Оновити звіт",
+    description=(
+        "MAIN_KOORD оновлює звіти власних програм; KOORD — лише свої звіти "
+        "програм, направлених його підрозділу. "
+        "Змінювати автора та програму звіту заборонено."
+    ),
+)
 def update_report(
     report_id: int,
     data: ReportUpdate,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_report_role),
 ):
-
     service = ReportService(db)
-
     try:
         report = service.get_report(report_id)
+    except ReportError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
-        check_edit_access(user, report.program_id)
+    _ensure_report_access(db, user, report)
 
+    updates = data.model_dump(exclude_unset=True)
+    if "program_id" in updates and updates["program_id"] != report.program_id:
+        raise HTTPException(status_code=422, detail="Не можна змінювати програму звіту")
+    if (
+        "generated_by_user_id" in updates
+        and updates["generated_by_user_id"] != report.generated_by_user_id
+    ):
+        raise HTTPException(status_code=422, detail="Не можна змінювати автора звіту")
+
+    try:
         return service.update_report(report_id, data)
-
     except ReportError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
 
-# DELETE — видалити чернетку
-@router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{report_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Видалити звіт",
+    description=(
+        "Тільки MAIN_KOORD для звітів власних програм або KOORD для "
+        "власних звітів направленої програми. ADMIN не має доступу."
+    ),
+)
 def delete_report(
     report_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_report_role),
 ):
-
-    # Видалення доступне тільки адміністратору
-    if user.role_id != "ADMIN":
-        raise HTTPException(
-            status_code=403, detail="Видаляти звіти може лише адміністратор"
-        )
-
+    service = ReportService(db)
     try:
-        ReportService(db).delete_report(report_id)
-
+        report = service.get_report(report_id)
     except ReportError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
+    _ensure_report_access(db, user, report)
+
+    try:
+        service.delete_report(report_id)
+    except ReportError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
     return Response(status_code=status.HTTP_204_NO_CONTENT)

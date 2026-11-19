@@ -1,4 +1,4 @@
-"""Головний KOORD -> підрозділ -> підлеглі підрозділи -> особисті призначення."""
+"""MAIN_KOORD -> підрозділ KOORD -> підлеглі підрозділи -> виконавці VYK."""
 
 from __future__ import annotations
 
@@ -21,6 +21,9 @@ class WorkflowError(Exception):
 
 def deny(detail: str = "Недостатньо прав"):
     raise WorkflowError(403, detail)
+
+
+WORKFLOW_ROLES = frozenset({"MAIN_KOORD", "KOORD", "VYK"})
 
 
 class ProgramWorkflowService:
@@ -51,8 +54,14 @@ class ProgramWorkflowService:
         return measure
 
     @staticmethod
+    def _require_role(actor) -> None:
+        """Навіть прямий виклик сервісу не повинен обходити заборону для ADMIN."""
+        if actor.role_id not in WORKFLOW_ROLES:
+            deny("Ця роль не має доступу до маршрутизації програм")
+
+    @staticmethod
     def _owner(user, program) -> bool:
-        return user.role_id == "KOORD" and program.created_by_user_id == user.id
+        return user.role_id == "MAIN_KOORD" and program.created_by_user_id == user.id
 
     def _direct_recipient(self, actor, program_id: str) -> bool:
         return (
@@ -69,12 +78,11 @@ class ProgramWorkflowService:
         )
 
     def _can_manage_target(self, actor, program_id: str, target_department_id: str):
+        # Призначати виконавців і змінювати призначення може тільки KOORD.
+        if actor.role_id != "KOORD":
+            deny("Керувати призначеннями може тільки координатор підрозділу")
         if not self.tree.exists(target_department_id):
             raise WorkflowError(404, "Підрозділ не знайдено")
-        if actor.role_id == "ADMIN":
-            if not self._is_delivered_to(program_id, target_department_id):
-                deny("Програму не направлено до цієї гілки підрозділів")
-            return
         if not self._direct_recipient(actor, program_id):
             deny("Координатор не отримав цю програму у своєму підрозділі")
         if not self.tree.is_within(target_department_id, actor.department_id):
@@ -115,8 +123,9 @@ class ProgramWorkflowService:
 
     def available_departments(self, program_id: str, actor):
         """Для селектора підрозділів у кабінеті. Сервер не довіряє цьому списку при POST."""
+        self._require_role(actor)
         program = self._program(program_id)
-        if actor.role_id == "ADMIN" or self._owner(actor, program):
+        if self._owner(actor, program):
             departments = list(self.tree.by_id.values())
         elif self._direct_recipient(actor, program_id):
             departments = [
@@ -131,8 +140,9 @@ class ProgramWorkflowService:
         ]
 
     def send_to_departments(self, program_id: str, department_ids: list[str], actor):
+        self._require_role(actor)
         program = self._program(program_id)
-        is_central = actor.role_id == "ADMIN" or self._owner(actor, program)
+        is_central = self._owner(actor, program)
         if not is_central and not self._direct_recipient(actor, program_id):
             deny(
                 "Направляти програму може її головний координатор або координатор-одержувач"
@@ -186,21 +196,16 @@ class ProgramWorkflowService:
         return {"program_id": program_id, "departments": results}
 
     def my_programs(self, actor):
+        self._require_role(actor)
         by_id = {}
-        if actor.role_id == "ADMIN":
-            for program in self.repo.all_programs():
-                by_id[program.id] = {
-                    "id": program.id,
-                    "title": program.title,
-                    "access_type": "admin",
-                }
-        elif actor.role_id == "KOORD":
+        if actor.role_id == "MAIN_KOORD":
             for program in self.repo.owned_programs(actor.id):
                 by_id[program.id] = {
                     "id": program.id,
                     "title": program.title,
                     "access_type": "owner",
                 }
+        elif actor.role_id == "KOORD":
             if actor.department_id:
                 for program in self.repo.sent_programs(actor.department_id):
                     by_id.setdefault(
@@ -223,32 +228,27 @@ class ProgramWorkflowService:
         return sorted(by_id.values(), key=lambda row: row["id"])
 
     def visible_program(self, program_id: str, actor):
+        self._require_role(actor)
         program = self._program(program_id)
         if not any(row["id"] == program_id for row in self.my_programs(actor)):
             deny("Немає доступу до програми")
         return program
 
     def program_sections(self, program_id: str, actor):
-        # Отримуємо лише доступні користувачу заходи програми
+        """Лише розділи з доступними цьому користувачу заходами програми."""
+        self._require_role(actor)
         visible_measures = self.program_measures(program_id, actor)
-
-        # Збираємо ID розділів цих заходів
         section_ids = {m["section_id"] for m in visible_measures}
-
-        # Повертаємо лише відповідні розділи
         return [
-            {
-                "id": sec.id,
-                "number": sec.number,
-                "title": sec.title,
-            }
+            {"id": sec.id, "number": sec.number, "title": sec.title}
             for sec in self.repo.sections()
             if sec.id in section_ids
         ]
 
     def program_measures(self, program_id: str, actor):
+        self._require_role(actor)
         program = self._program(program_id)
-        if actor.role_id == "ADMIN" or self._owner(actor, program):
+        if self._owner(actor, program):
             measures = self.repo.all_measures(program_id)
         elif self._direct_recipient(actor, program_id):
             all_measures = self.repo.all_measures(program_id)
@@ -282,19 +282,22 @@ class ProgramWorkflowService:
         return [self._brief(m) for m in self._accessible_assigned_measures(actor)]
 
     def department_coordinators(self, program_id: str, department_id: str, actor):
+        self._require_role(actor)
         program = self._program(program_id)
-        if not (actor.role_id == "ADMIN" or self._owner(actor, program)):
+        if not self._owner(actor, program):
             self._can_manage_target(actor, program_id, department_id)
         if not self.tree.exists(department_id):
             raise WorkflowError(404, "Підрозділ не знайдено")
         return self.repo.coordinators(department_id)
 
     def department_executors(self, program_id: str, department_id: str, actor):
+        self._require_role(actor)
         self._program(program_id)
         self._can_manage_target(actor, program_id, department_id)
         return self.repo.executors(department_id)
 
     def assign(self, measure_id: str, department_id: str, user_id: int, actor):
+        self._require_role(actor)
         measure = self._measure(measure_id)
         self._can_manage_target(actor, measure.program_id, department_id)
         if not self._measure_allows_target(measure, department_id):
@@ -323,9 +326,10 @@ class ProgramWorkflowService:
         return {"assignment": record, "already_assigned": False}
 
     def list_assignments(self, measure_id: str, actor):
+        self._require_role(actor)
         measure = self._measure(measure_id)
         program = self._program(measure.program_id)
-        if actor.role_id == "ADMIN" or self._owner(actor, program):
+        if self._owner(actor, program):
             return self.repo.assignments(measure_id)
         if not self._direct_recipient(actor, measure.program_id):
             deny()
@@ -340,6 +344,7 @@ class ProgramWorkflowService:
         ]
 
     def revoke(self, measure_id: str, user_id: int, actor):
+        self._require_role(actor)
         measure = self._measure(measure_id)
         record = self.repo.assignment(measure_id, user_id)
         if record is None:

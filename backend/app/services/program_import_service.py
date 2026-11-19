@@ -36,8 +36,8 @@ class ProgramImportService:
         """Одна транзакція. Не змінює наявні програми, розсилки чи призначення."""
         repo = self.repository
         try:
-            if actor.role_id not in {"ADMIN", "KOORD"}:
-                raise ProgramImportForbidden("Імпортувати програму можуть лише ADMIN або KOORD")
+            if actor.role_id != "MAIN_KOORD":
+                raise ProgramImportForbidden("Імпортувати програму може тільки MAIN_KOORD")
 
             owner_user_id, coordinator_department_id = self._resolve_owner(payload, actor)
             self._validate_database_references(payload, coordinator_department_id)
@@ -99,38 +99,17 @@ class ProgramImportService:
             repo.rollback()
             raise
 
-    def _resolve_owner(self, payload: ProgramImportPayload, actor) -> tuple[int | None, str | None]:
-        """KOORD завжди є власником своєї програми; ADMIN може обрати KOORD-власника."""
-        program_data = payload.program
-        repo = self.repository
+    def _resolve_owner(self, payload: ProgramImportPayload, actor) -> tuple[int, str | None]:
+        """Власник визначається виключно з JWT користувача MAIN_KOORD.
 
-        if actor.role_id == "KOORD":
-            if actor.department_id is None:
-                raise ProgramImportInvalidReference("Координатор повинен належати до підрозділу")
-            if (program_data.owner_coordinator_user_id is not None
-                    and program_data.owner_coordinator_user_id != actor.id):
-                raise ProgramImportForbidden("KOORD не може призначати іншого головного координатора")
-            if (program_data.coordinator_department_id is not None
-                    and program_data.coordinator_department_id != actor.department_id):
-                raise ProgramImportForbidden("KOORD може створити програму лише для власного підрозділу")
-            return actor.id, actor.department_id
-
-        # ADMIN може імпортувати від імені існуючого KOORD або без призначення власника.
-        owner_user_id = program_data.owner_coordinator_user_id
-        if owner_user_id is not None:
-            owner = repo.user(owner_user_id)
-            if owner is None or owner.role_id != "KOORD" or owner.department_id is None:
-                raise ProgramImportInvalidReference(
-                    "owner_coordinator_user_id має вказувати на існуючого KOORD із підрозділом"
-                )
-            if (program_data.coordinator_department_id is not None
-                    and program_data.coordinator_department_id != owner.department_id):
-                raise ProgramImportInvalidReference(
-                    "coordinator_department_id має збігатися з підрозділом KOORD-власника"
-                )
-            return owner.id, owner.department_id
-
-        return None, program_data.coordinator_department_id
+        Зміна ролі не залежить від department_id. Координуючий підрозділ
+        можна явно вказати в JSON або взяти з профілю користувача.
+        """
+        owner_user_id = payload.program.owner_coordinator_user_id
+        if owner_user_id is not None and owner_user_id != actor.id:
+            raise ProgramImportForbidden("Заборонено вказувати іншого власника програми")
+        department_id = payload.program.coordinator_department_id or actor.department_id
+        return actor.id, department_id
 
     def _validate_database_references(
         self, payload: ProgramImportPayload, coordinator_department_id: str | None

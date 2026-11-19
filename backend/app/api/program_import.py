@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_current_user
+from app.core.main_coordinator import require_main_coordinator
 from app.database.db_connection import get_db
 from app.models.user import User
 from app.schemas.program_import import ProgramImportPayload, ProgramImportResult
@@ -48,11 +48,9 @@ MAX_JSON_SIZE = 5 * 1024 * 1024
 async def upload_program_json(
     file: UploadFile = File(..., description="JSON із ключами `program` і `sections`"),
     db: Session = Depends(get_db),
-    actor: User = Depends(get_current_user),
+    actor: User = Depends(require_main_coordinator),
 ) -> ProgramImportResult:
     """Валідує розмір і структуру, потім передає у сервіс атомарного імпорту."""
-    if actor.role_id not in {"ADMIN", "KOORD"}:
-        raise HTTPException(status_code=403, detail="Імпортувати програму можуть лише ADMIN або KOORD")
     if not file.filename or not file.filename.lower().endswith(".json"):
         raise HTTPException(status_code=400, detail="Потрібен файл із розширенням .json")
     try:

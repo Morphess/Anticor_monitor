@@ -1,123 +1,165 @@
-"""HTTP API звітності: /api/executions/."""
+"""API підтвердних матеріалів: VYK додає, KOORD/MAIN_KOORD переглядають.
+
+Метадані документа, не завантаження двійкового файлу.
+"""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database.db_connection import get_db
-from app.schemas.execution import (
-    ExecutionCreate,
-    ExecutionRead,
-    ExecutionStatus,
-    ExecutionUpdate,
+from app.models.evidence import Evidence
+from app.models.execution import Execution
+from app.models.user import User
+from app.schemas.evidences import EvidenceCreate, EvidenceRead, EvidenceUpdate
+from app.services.evidence_services import EvidenceError, EvidenceService
+from app.services.measure_access import (
+    require_execution_actor,
+    require_executor,
+    require_visible_measure,
+    visible_measure_ids,
 )
-from app.services.execution_services import (
-    ExecutionAlreadyExistsError,
-    ExecutionNotFoundError,
-    ExecutionService,
-    MeasureNotFoundError,
+
+router = APIRouter(prefix="/evidences", tags=["Evidences"])
+
+
+def _check_not_approved(db: Session, measure_id: str) -> None:
+    """Evidence не має period, тому блокуємо зміни, якщо є БУДЬ-ЯКЕ погодження."""
+    is_approved = db.scalar(
+        select(Execution.measure_id)
+        .where(
+            Execution.measure_id == measure_id,
+            Execution.approved_by_coordinator.is_(True),
+        )
+        .limit(1)
+    )
+    if is_approved is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Для заходу є погоджене виконання. Змінювати підтвердження заборонено",
+        )
+
+
+@router.post(
+    "/",
+    response_model=EvidenceRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Додати підтвердний документ до свого заходу",
+    description="Тільки VYK із чинним призначенням. Після погодження виконання "
+    "додавання документів блокується.",
 )
-
-from app.schemas.execution import ExecutionApprovalUpdate
-
-router = APIRouter(prefix="/executions", tags=["Executions"])
-
-
-def get_service(db: Session = Depends(get_db)) -> ExecutionService:
-    return ExecutionService(db)
-
-
-@router.post("/", response_model=ExecutionRead, status_code=status.HTTP_201_CREATED)
-def create_execution(
-    data: ExecutionCreate,
-    service: ExecutionService = Depends(get_service),
+def create_evidence(
+    data: EvidenceCreate,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_executor),
 ):
+    require_visible_measure(db, actor, data.measure_id)
+    _check_not_approved(db, data.measure_id)
     try:
-        return service.create(data)
-    except MeasureNotFoundError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
-    except ExecutionAlreadyExistsError as error:
-        raise HTTPException(status_code=409, detail=str(error)) from error
+        return EvidenceService(db).create_evidence(data)
+    except EvidenceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
-@router.get("/", response_model=list[ExecutionRead])
-def list_executions(
+@router.get(
+    "/",
+    response_model=list[EvidenceRead],
+    summary="Переглянути доступні підтвердні документи",
+    description="MAIN_KOORD — свої програми; KOORD — доступні заходи; VYK — "
+    "призначені заходи. Перевірка доступу відбувається до пагінації.",
+)
+def list_evidences(
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100),
     measure_id: str | None = None,
-    period: str | None = None,
-    status_filter: ExecutionStatus | None = Query(default=None, alias="status"),
-    offset: int = Query(default=0, ge=0),
-    limit: int = Query(default=100, ge=1, le=500),
-    service: ExecutionService = Depends(get_service),
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_execution_actor),
 ):
-    return service.list(
-        measure_id=measure_id,
-        period=period,
-        status=status_filter,
-        offset=offset,
-        limit=limit,
+    if measure_id is not None:
+        require_visible_measure(db, actor, measure_id)
+        ids = {measure_id}
+    else:
+        ids = visible_measure_ids(db, actor)
+    if not ids:
+        return []
+    return list(
+        db.scalars(
+            select(Evidence)
+            .where(Evidence.measure_id.in_(ids))
+            .order_by(Evidence.id)
+            .offset(skip)
+            .limit(limit)
+        )
     )
 
 
-@router.get("/{measure_id}/{period}", response_model=ExecutionRead)
-def get_execution(
-    measure_id: str,
-    period: str,
-    service: ExecutionService = Depends(get_service),
+@router.get(
+    "/{evidence_id}",
+    response_model=EvidenceRead,
+    summary="Переглянути підтвердний документ",
+)
+def get_evidence(
+    evidence_id: str,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_execution_actor),
 ):
     try:
-        return service.get(measure_id, period)
-    except ExecutionNotFoundError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
-
-
-@router.patch("/{measure_id}/{period}", response_model=ExecutionRead)
-def update_execution(
-    measure_id: str,
-    period: str,
-    data: ExecutionUpdate,
-    service: ExecutionService = Depends(get_service),
-):
-    try:
-        return service.update(measure_id, period, data)
-    except ExecutionNotFoundError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
+        evidence = EvidenceService(db).get_evidence(evidence_id)
+    except EvidenceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    require_visible_measure(db, actor, evidence.measure_id)
+    return evidence
 
 
 @router.patch(
-    "/{measure_id}/{period}/approval",
-    response_model=ExecutionRead,
-    summary="Погодження звіту координатором",
+    "/{evidence_id}",
+    response_model=EvidenceRead,
+    summary="Змінити підтвердження свого заходу до погодження",
 )
-def update_execution_approval(
-    measure_id: str,
-    period: str,
-    data: ExecutionApprovalUpdate,
-    service: ExecutionService = Depends(get_service),
+def update_evidence(
+    evidence_id: str,
+    data: EvidenceUpdate,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_executor),
 ):
-    """Змінює стан погодження звіту."""
-
+    service = EvidenceService(db)
     try:
-        return service.update_approval(
-            measure_id=measure_id,
-            period=period,
-            approved=data.approved_by_coordinator,
-        )
+        evidence = service.get_evidence(evidence_id)
+    except EvidenceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
-    except ExecutionNotFoundError as error:
-        raise HTTPException(
-            status_code=404,
-            detail=str(error),
-        ) from error
-
-
-@router.delete("/{measure_id}/{period}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_execution(
-    measure_id: str,
-    period: str,
-    service: ExecutionService = Depends(get_service),
-) -> None:
+    require_visible_measure(db, actor, evidence.measure_id)
+    _check_not_approved(db, evidence.measure_id)
+    if data.measure_id is not None and data.measure_id != evidence.measure_id:
+        require_visible_measure(db, actor, data.measure_id)
+        _check_not_approved(db, data.measure_id)
     try:
-        service.delete(measure_id, period)
-    except ExecutionNotFoundError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
+        return service.update_evidence(evidence_id, data)
+    except EvidenceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
+@router.delete(
+    "/{evidence_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Видалити підтвердження свого заходу до погодження",
+)
+def delete_evidence(
+    evidence_id: str,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_executor),
+):
+    service = EvidenceService(db)
+    try:
+        evidence = service.get_evidence(evidence_id)
+    except EvidenceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    require_visible_measure(db, actor, evidence.measure_id)
+    _check_not_approved(db, evidence.measure_id)
+    try:
+        service.delete_evidence(evidence_id)
+    except EvidenceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
