@@ -128,14 +128,16 @@
     }));
   }
 
-  function personLabel(id) {
-    const u = people[id];
-    return u ? u.login + " · " + Api.deptName(u.department_id) : "Користувач №" + id;
+  // Призначені заходу підрозділи (без повторів).
+  function assignedDepts(m) {
+    const out = [];
+    (assignments[m.id] || []).forEach(function (a) { if (out.indexOf(a.department_id) === -1) out.push(a.department_id); });
+    return out;
   }
 
   function assigneeText(m) {
-    const list = assignments[m.id] || [];
-    return list.length ? list.map(function (a) { return personLabel(a.user_id); }).join(", ") : "Не призначено";
+    const list = assignedDepts(m);
+    return list.length ? list.map(Api.deptName).join(", ") : "Не призначено";
   }
 
   // ---------- дерево програм ----------
@@ -439,9 +441,10 @@
   document.addEventListener("click", function (e) { if (!e.target.closest(".mpick")) closeAllPicks(null); });
 
   // Групування підрозділів за батьківським: «Назва батька» → дочірні.
-  function deptGroups(depts) {
+  // all — повний перелік для пошуку назв батьків (за замовчуванням — самі depts).
+  function deptGroups(depts, all) {
     const byId = {};
-    depts.forEach(function (d) { byId[d.id] = d; });
+    (all || depts).forEach(function (d) { byId[d.id] = d; });
     const groups = {};
     depts.forEach(function (d) {
       const parent = d.parent_id && byId[d.parent_id] ? byId[d.parent_id].name : "Верхній рівень";
@@ -456,7 +459,8 @@
   const assignSearch = document.getElementById("assign-search");
   const assignMsg = document.getElementById("assign-msg");
   const aOpen = new Set();  // розгорнуті у вікні: p:ID, s:ID:R
-  let draft = {};           // measure_id -> [user_id]
+  let draft = {};           // measure_id -> [department_id]
+  const deptUsers = {};     // department_id -> [user_id] виконавців підрозділу
   let pickGroups = {};      // program_id -> групи для multiPick
 
   async function openAssign() {
@@ -465,15 +469,17 @@
     assignBody.innerHTML = "";
     assignDialog.showModal();
     pickGroups = {};
+    // Для вибору — лише підрозділи гілки, у яких є виконавці; сам координатор свій підрозділ не обирає.
+    const own = Api.me && Api.me.department_id;
     await Promise.all(programs.map(async function (p) {
       const groups = await loadExecutors(p.id);
-      pickGroups[p.id] = groups.map(function (g) {
-        return { name: g.dept.name, items: g.users.map(function (u) { return { id: u.id, label: u.login }; }) };
-      });
+      groups.forEach(function (g) { deptUsers[g.dept.id] = g.users.map(function (u) { return u.id; }); });
+      const depts = groups.map(function (g) { return g.dept; }).filter(function (d) { return d.id !== own; });
+      pickGroups[p.id] = deptGroups(depts, deptCache[p.id] || depts);
     }));
     draft = {};
     Object.keys(assignments).forEach(function (k) {
-      draft[k] = assignments[k].map(function (a) { return a.user_id; });
+      draft[k] = assignedDepts({ id: k });
     });
     setAssignMsg("", "");
     renderAssign();
@@ -533,7 +539,7 @@
         el("div", {}, [el("span", { class: "num", text: Api.measureNo(m) + " " }), m.description]),
         el("div", { class: "small muted", text: "Виконати до: " + deadlineText(m) }),
       ]),
-      multiPick(pickGroups[p.id] || [], chosen, "Виконавці заходу " + Api.measureNo(m), "Оберіть виконавців із відділів"),
+      multiPick(pickGroups[p.id] || [], chosen, "Виконавці заходу " + Api.measureNo(m), "Оберіть відділи та підрозділи"),
     ]);
   }
 
@@ -545,29 +551,31 @@
     const failed = [];
     const all = [];
     Object.keys(measuresByProg).forEach(function (k) { all.push.apply(all, measuresByProg[k]); });
+    // Бекенд призначає людей, тож підрозділ = усі його виконавці (VYK).
     for (const m of all) {
-      const before = (assignments[m.id] || []).map(function (a) { return a.user_id; });
+      const before = assignedDepts(m);
       const after = draft[m.id] || before;
       const url = ROUTING + "/measures/" + encodeURIComponent(m.id);
-      for (const uid of after) {
-        if (before.indexOf(uid) !== -1) continue;
-        const u = people[uid];
-        try {
-          await Api.post(url + "/assign", { department_id: u.department_id, user_id: uid });
-        } catch (err) { failed.push(Api.measureNo(m) + " — " + personLabel(uid) + ": " + err.message); }
+      for (const dep of after) {
+        if (before.indexOf(dep) !== -1) continue;
+        for (const uid of deptUsers[dep] || []) {
+          try {
+            await Api.post(url + "/assign", { department_id: dep, user_id: uid });
+          } catch (err) { failed.push(Api.measureNo(m) + " — " + Api.deptName(dep) + ": " + err.message); }
+        }
       }
-      for (const uid of before) {
-        if (after.indexOf(uid) !== -1) continue;
+      for (const a of assignments[m.id] || []) {
+        if (after.indexOf(a.department_id) !== -1) continue;
         try {
-          await Api.del(url + "/assign/" + encodeURIComponent(uid));
-        } catch (err) { failed.push(Api.measureNo(m) + " — зняти " + personLabel(uid) + ": " + err.message); }
+          await Api.del(url + "/assign/" + encodeURIComponent(a.user_id));
+        } catch (err) { failed.push(Api.measureNo(m) + " — зняти " + Api.deptName(a.department_id) + ": " + err.message); }
       }
     }
     await loadAssignments(all);
     btn.disabled = false;
     render();
     if (failed.length) {
-      Object.keys(assignments).forEach(function (k) { draft[k] = assignments[k].map(function (a) { return a.user_id; }); });
+      Object.keys(assignments).forEach(function (k) { draft[k] = assignedDepts({ id: k }); });
       renderAssign();
       setAssignMsg("err", "Не все збережено: " + failed.join("; "));
       return;
@@ -631,21 +639,24 @@
   async function fillDeptPicker(p) {
     toSend = [];
     pickBox.innerHTML = "";
-    if (!p) {
-      pickNote.textContent = "Підрозділи можна обрати після створення програми: відкрийте її й натисніть «Редагувати програму».";
-      return;
-    }
     pickNote.textContent = "Завантаження підрозділів…";
-    const depts = await loadDepartments(p.id);
+    // Для нової програми довідник підрозділів беремо з будь-якої власної програми:
+    // власнику бекенд віддає всі підрозділи відомства.
+    const source = p ? p.id : Object.keys(access).filter(function (id) { return access[id] === "owner"; })[0];
+    const depts = source ? await loadDepartments(source) : null;
     if (editing !== p) return; // вікно вже перемкнули
     if (!depts) {
-      pickNote.textContent = "Надсилати цю програму може лише її власник — координатор, який її створив.";
+      pickNote.textContent = p
+        ? "Надсилати цю програму може лише її власник — координатор, який її створив."
+        : "Не вдалося отримати перелік підрозділів.";
       return;
     }
-    pickNote.textContent = (sentTo[p.id] || []).length
+    const own = Api.me && Api.me.department_id;
+    const choices = depts.filter(function (d) { return d.id !== own; });
+    pickNote.textContent = p && (sentTo[p.id] || []).length
       ? "Уже надіслано в цій сесії: " + sentTo[p.id].map(Api.deptName).join(", ") + "."
       : "У кожному обраному підрозділі має бути координатор.";
-    pickBox.appendChild(multiPick(deptGroups(depts), toSend, "Підрозділи для координації", "Оберіть підрозділи для координації"));
+    pickBox.appendChild(multiPick(deptGroups(choices, depts), toSend, "Підрозділи для координації", "Оберіть підрозділи для координації"));
   }
 
   function openDialog(p) {
@@ -692,7 +703,18 @@
         data.notes = "";
         const created = await Api.post("/api/programs", data);
         programs.push(created);
+        access[created.id] = "owner";
         open.add("p:" + created.id);
+        editing = created;
+        form.elements.id.readOnly = true;
+        document.getElementById("program-dialog-title").textContent = "Редагування програми " + created.id;
+        document.getElementById("program-submit").textContent = "Зберегти зміни";
+        try {
+          await dispatch(created.id);
+        } catch (err) {
+          render();
+          throw new Error("Програму створено, але не надіслано підрозділам: " + err.message);
+        }
       }
       dialog.close();
       render();
