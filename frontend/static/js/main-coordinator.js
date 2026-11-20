@@ -6,6 +6,9 @@
   let programs=[], measures={}, sections=[], departments={}, dispatch={}, staged=[], currentProgram='', currentSection='';
   let flagPanel=null, reportPanel=null, editingMeasureId=null, editingRiskId=null, riskReturnToMeasure=false;
   const riskCache=new Map();
+  // Рішення про перенесення строків: measure_id → [..] за датою рішення.
+  const deadlineChanges=new Map();
+  let postponeMeasure=null;
   let activeView="programs";
   // Статистика за призначеними виконавцями: тільки дані із захищеного API.
   const progressCache = new Map();
@@ -146,6 +149,68 @@
     const n=make('div',{class:'role-message '+(err?'error':'success'),text:msg});stack.prepend(n);setTimeout(()=>n.remove(),7000);
   };
   const types={date:'Дата',ongoing:'Постійний',recurring:'Періодичний'};
+
+  // ---------- Перенесення строку заходу ----------
+  async function loadDeadlineChanges(){
+    deadlineChanges.clear();
+    const res=await Api.optional(Api.getAll('/api/deadline-changes/',100,'skip'));
+    (res.data||[]).forEach(c=>{(deadlineChanges.get(c.measure_id)||deadlineChanges.set(c.measure_id,[]).get(c.measure_id)).push(c);});
+    deadlineChanges.forEach(list=>list.sort((a,b)=>String(a.decision_date).localeCompare(String(b.decision_date))||(a.id-b.id)));
+  }
+  // Чинний строк = новий строк з останнього рішення, інакше первинний.
+  function currentDeadline(m){
+    const list=deadlineChanges.get(m.id)||[];
+    return list.length?list[list.length-1].new_deadline:m.deadline_on;
+  }
+  function deadlineMeta(m){
+    if(m.deadline_type!=='date')return m.deadline_description||types[m.deadline_type]||'—';
+    const list=deadlineChanges.get(m.id)||[];
+    const cur=Api.fmtDate(currentDeadline(m))||'—';
+    return list.length?cur+' · перенесено':cur;
+  }
+  function todayIso(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+  function addDays(iso,n){const d=new Date(iso+'T00:00:00');d.setDate(d.getDate()+n);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+  function openPostpone(m){
+    postponeMeasure=m;
+    const form=$('mc-postpone-form'), cur=currentDeadline(m), list=deadlineChanges.get(m.id)||[];
+    form.reset();error('mc-postpone-error','');
+    $('mc-postpone-measure').textContent=Api.measureNo(m)+' · '+m.description;
+    $('mc-postpone-original').textContent=Api.fmtDate(list.length?list[0].previous_deadline:m.deadline_on)||'—';
+    $('mc-postpone-current').textContent=Api.fmtDate(cur)||'—';
+    form.elements.previous_deadline.value=cur||'';
+    form.elements.new_deadline.min=cur?addDays(cur,1):'';
+    form.elements.new_deadline.value='';
+    const last=list.length?list[list.length-1].decision_date:'';
+    form.elements.decision_date.max=todayIso();
+    if(last)form.elements.decision_date.min=last;
+    form.elements.decision_date.value=todayIso();
+    const hist=$('mc-postpone-history');hist.replaceChildren();
+    if(!list.length){hist.appendChild(make('li',{class:'muted',text:'Строк ще не переносився.'}));}
+    list.slice().reverse().forEach(c=>hist.appendChild(make('li',{},[
+      make('strong',{text:Api.fmtDate(c.previous_deadline)+' → '+Api.fmtDate(c.new_deadline)}),
+      make('span',{class:'muted',text:' · рішення від '+Api.fmtDate(c.decision_date)}),
+      make('div',{class:'mc-postpone-reason',text:c.reason}),
+    ])));
+    $('mc-postpone-warning').classList.toggle('hidden',list.length<1);
+    show('mc-postpone-dialog');
+  }
+  async function submitPostpone(ev){
+    ev.preventDefault();
+    const form=ev.target, m=postponeMeasure;
+    if(!m||!form.reportValidity())return;
+    const f=readForm(form);
+    if(f.new_deadline<=f.previous_deadline){error('mc-postpone-error','Новий строк має бути пізніше чинного.');return;}
+    const btn=$('mc-postpone-submit');btn.disabled=true;error('mc-postpone-error','');
+    try{
+      await Api.post('/api/deadline-changes/',{measure_id:m.id,decision_date:f.decision_date,
+        previous_deadline:f.previous_deadline,new_deadline:f.new_deadline,reason:String(f.reason||'').trim()});
+      await loadDeadlineChanges();
+      close('mc-postpone-dialog');
+      toast('Строк заходу '+Api.measureNo(m)+' перенесено на '+Api.fmtDate(f.new_deadline)+'.');
+      render();
+    }catch(err){error('mc-postpone-error',err.message||'Не вдалося перенести строк');}
+    finally{btn.disabled=false;}
+  }
   function setSelect(sel,items,current){
     sel.replaceChildren();items.forEach(x=>sel.appendChild(make('option',{value:x.id,text:x.name})));
     if(current)sel.value=current;
@@ -171,6 +236,7 @@
       return program;
     }));
     programs = data;
+    await loadDeadlineChanges();
     Object.values(departments).flat().forEach(d => {
       if (d.id && d.name) Api.DEPARTMENTS[d.id] = d.name;
     });
@@ -295,7 +361,7 @@
                 const mheader=button([
                   make('span',{class:'num',text:Api.measureNo(m)}),
                   make('span',{text:m.description}),
-                  make('span',{class:'meta',text:Api.fmtDate(m.deadline_on)||m.deadline_description||'—'}),
+                  make('span',{class:'meta',text:deadlineMeta(m)}),
                   make('span',{class:'chip',text:'План'}),
                 ],mopen);
                 mheader.addEventListener('click',()=>toggle(mk));node.appendChild(mheader);
@@ -304,6 +370,7 @@
                   renderMeasureProgress(details, p.id, m.id);
                   const tools=make('div',{class:'mc-legacy-actions mc-measure-actions'});
                   action(tools,'Редагувати захід',()=>openEditMeasure(m));
+                  if(m.deadline_type==='date'&&m.deadline_on)action(tools,'Перенести строк',()=>openPostpone(m));
                   action(tools,'Видалити захід',()=>deleteMeasure(m));
                   details.appendChild(tools);node.appendChild(details);
                 }
@@ -642,6 +709,7 @@
     }));
     $('mc-program-form').addEventListener('submit',submitProgram);
     $('mc-measure-form').addEventListener('submit',submitMeasure);
+    $('mc-postpone-form').addEventListener('submit',submitPostpone);
     $('mc-edit-program-form').addEventListener('submit',saveEdit);
     $('mc-dispatch-form').addEventListener('submit',submitDispatch);
     $('mc-import-form').addEventListener('submit',importFile);

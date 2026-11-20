@@ -55,31 +55,32 @@ class DeadlineReminderService:
         candidates = self.repo.candidates(
             visible_ids, as_of=as_of, program_id=program_id
         )
-        approved = self.repo.approved_completed_ids({m.id for m in candidates})
+        approved = self.repo.approved_completed_ids({m.id for m, _ in candidates})
         reminders: list[DeadlineReminderItem] = []
 
-        for measure in candidates:
+        # deadline — чинний строк з урахуванням рішень про перенесення.
+        for measure, deadline in candidates:
             if measure.id in approved:
                 continue
-            days = (measure.deadline_on - as_of).days
+            days = (deadline - as_of).days
             if not 1 <= days <= 7:
                 continue
             urgent = days <= 3
             code = "D3" if urgent else "D7"
             reminders.append(
                 DeadlineReminderItem(
-                    id=f"{code}:{measure.id}:{measure.deadline_on.isoformat()}",
+                    id=f"{code}:{measure.id}:{deadline.isoformat()}",
                     code=code,
                     level="urgent" if urgent else "warning",
                     program_id=measure.program_id,
                     measure_id=measure.id,
                     description=measure.description,
                     responsible_department_id=measure.responsible_department_id,
-                    deadline_on=measure.deadline_on,
+                    deadline_on=deadline,
                     days_left=days,
                     message=(
                         f"До строку виконання заходу {measure.id} залишилося "
-                        f"{days} дн. (до {measure.deadline_on.isoformat()})."
+                        f"{days} дн. (до {deadline.isoformat()})."
                     ),
                 )
             )

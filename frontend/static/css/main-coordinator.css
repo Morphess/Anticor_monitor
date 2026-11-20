@@ -170,3 +170,13 @@
 @media (max-width: 490px) {
   #mc-view-reports .report-toolbar .report-toolbar-actions > .btn { width: 100%; }
 }
+
+/* ---------- Перенесення строку заходу ---------- */
+.mc-postpone-dates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.mc-postpone-dates > div { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--sunken); }
+.mc-postpone-dates strong { font-size: 18px; font-variant-numeric: tabular-nums; }
+.mc-postpone-subtitle { font-size: 14px; margin: 4px 0 6px; }
+.mc-postpone-history { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 14px; }
+.mc-postpone-reason { color: var(--muted); font-size: 13px; }
+.mc-postpone-warning { margin: 0; padding: 8px 12px; border-radius: var(--radius); background: var(--warn-bg); color: var(--warn); font-size: 13px; }
+@media (max-width: 560px) { .mc-postpone-dates { grid-template-columns: 1fr; } }

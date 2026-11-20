@@ -3,7 +3,7 @@
 {% block role_name %}Головний координатор{% endblock %}
 {% block topbar_tools %}{% include "_bell.html" %}{% endblock %}
 {% block content %}
-<link rel="stylesheet" href="/static/css/main-coordinator.css?v=report-pdf1">
+<link rel="stylesheet" href="/static/css/main-coordinator.css?v=postpone1">
 <div class="mc-shell">
   <h1 class="mc-sr-only">Кабінет головного координатора</h1>
   <nav class="mc-view-navigation" role="tablist" aria-label="Розділи головного координатора">
@@ -187,6 +187,39 @@
   </form>
 </dialog>
 
+<dialog id="mc-postpone-dialog" class="mc-dialog mc-medium" aria-labelledby="mc-postpone-title">
+  <form id="mc-postpone-form" novalidate>
+    <header class="mc-dialog-header">
+      <div><h2 id="mc-postpone-title">Перенести строк заходу</h2><p class="small muted" id="mc-postpone-measure"></p></div>
+      <button type="button" class="mc-icon-close" data-dialog-close="mc-postpone-dialog" aria-label="Закрити">×</button>
+    </header>
+    <div class="mc-dialog-content mc-grid">
+      <div class="mc-postpone-dates mc-full">
+        <div><span class="small muted">Первинний строк</span><strong id="mc-postpone-original">—</strong></div>
+        <div><span class="small muted">Чинний строк</span><strong id="mc-postpone-current">—</strong></div>
+      </div>
+      <input type="hidden" name="previous_deadline">
+      <label class="field">Новий строк <input name="new_deadline" type="date" required></label>
+      <label class="field">Дата рішення <input name="decision_date" type="date" required></label>
+      <label class="field mc-full">Підстава перенесення
+        <textarea name="reason" rows="3" required minlength="10" maxlength="2000"
+                  placeholder="Реквізити рішення та обґрунтування: наприклад, наказ № 12 від 10.06.2026, зміна законодавства"></textarea>
+      </label>
+      <p class="mc-full mc-postpone-warning hidden" id="mc-postpone-warning">Строк цього заходу вже переносили. Повторне перенесення система позначить сигналом RF6 для керівника.</p>
+      <div class="mc-full">
+        <h3 class="mc-postpone-subtitle">Історія перенесень</h3>
+        <ul class="mc-postpone-history" id="mc-postpone-history"></ul>
+      </div>
+      <p class="mc-full small muted">Первинний строк лишається в програмі: Risk Flags і звіт для НАЗК враховують його, а нагадування виконавцям — чинний строк.</p>
+    </div>
+    <div id="mc-postpone-error" class="mc-error hidden" role="alert"></div>
+    <footer class="mc-dialog-footer">
+      <button type="button" class="btn" data-dialog-close="mc-postpone-dialog">Скасувати</button>
+      <button type="submit" class="btn btn-dark" id="mc-postpone-submit">Перенести строк</button>
+    </footer>
+  </form>
+</dialog>
+
 <dialog id="mc-risk-dialog" class="mc-dialog mc-large" aria-labelledby="mc-risk-dialog-title">
   <form id="mc-risk-form">
     <header class="mc-dialog-header">
@@ -247,5 +280,5 @@
 <script src="/static/js/notify.js"></script>
 <script src="/static/js/risk-flags.js?v=1"></script>
 <script src="/static/js/reports-ui.js?v=pdf1"></script>
-<script src="/static/js/main-coordinator.js?v=measure-ui3"></script>
+<script src="/static/js/main-coordinator.js?v=postpone1"></script>
 {% endblock %}
