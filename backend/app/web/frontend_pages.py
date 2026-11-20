@@ -53,8 +53,3 @@ def executor(request: Request):
 @router.get("/manager", response_class=HTMLResponse, include_in_schema=False)
 def manager(request: Request):
     return page(request, "manager.html")
-
-
-@router.get("/analyst", response_class=HTMLResponse, include_in_schema=False)
-def analyst(request: Request):
-    return page(request, "analyst.html")

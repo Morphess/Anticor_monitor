@@ -1,6 +1,7 @@
 """One independent submission, document and review decision per executor."""
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select
 from app.models.action_log import ActionLog
 from app.models.execution import Execution
@@ -15,6 +16,10 @@ from app.services.measure_access import (
     require_visible_measure, visible_measure_ids,
 )
 from app.services.program_workflow_services import ProgramWorkflowService, WorkflowError
+
+from app.schemas.execution import ExecutionAnalysisRead
+from app.services.execution_analysis_services import analysis_input
+from app.services.order_analysis_services import OrderAnalysisError, analyze_order_document
 
 router = APIRouter(prefix='/executions', tags=['Executions'])
 
@@ -170,3 +175,22 @@ def reject(execution_id: int, data: ExecutionReject,
         ))
     except ExecutionError as exc:
         raise _http(exc) from exc
+
+
+@router.post('/{execution_id}/analyze', response_model=ExecutionAnalysisRead,
+             summary='Координатор: порівняти наказ подання зі змістом заходу')
+async def analyze_execution(execution_id: int, db: Session = Depends(get_db),
+                            actor: User = Depends(require_execution_actor)):
+    if actor.role_id not in {'MAIN_KOORD', 'KOORD'}:
+        raise HTTPException(status_code=403, detail='Аналіз доступний лише координатору')
+    try:
+        order, measure, name, content, version_id, digest = await run_in_threadpool(
+            analysis_input, db, actor, execution_id
+        )
+        result = await analyze_order_document(order, measure, name, content)
+        return ExecutionAnalysisRead(**result.model_dump(), execution_id=execution_id,
+                                     order_version_id=version_id, submitted_sha256=digest)
+    except (ExecutionError, OrderAnalysisError) as exc:
+        raise _http(exc) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=503, detail='Сховище документів недоступне') from exc

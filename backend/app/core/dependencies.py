@@ -43,6 +43,9 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    if user.role_id == "ANAL":
+        raise HTTPException(status_code=403, detail="Роль аналітика більше не використовується")
+
     db.info["audit_actor_id"] = user.id
 
     return user

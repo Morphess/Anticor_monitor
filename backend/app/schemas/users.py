@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 # Дані для створення користувача
@@ -8,6 +8,13 @@ class UserCreate(BaseModel):
     login: str = Field(min_length=3, max_length=100, pattern=r"^[A-Za-z0-9_.-]+$")
 
     password: str = Field(min_length=12, max_length=128)
+
+    @field_validator("role_id")
+    @classmethod
+    def active_role(cls, value):
+        if value == "ANAL":
+            raise ValueError("Роль аналітика більше не використовується")
+        return value
 
     role_id: str = Field(min_length=1, max_length=10)
 
@@ -24,6 +31,13 @@ class UserUpdate(BaseModel):
     )
 
     password: str | None = Field(default=None, min_length=12, max_length=128)
+
+    @field_validator("role_id")
+    @classmethod
+    def active_role(cls, value):
+        if value == "ANAL":
+            raise ValueError("Роль аналітика більше не використовується")
+        return value
 
     role_id: str | None = None
     department_id: str | None = None

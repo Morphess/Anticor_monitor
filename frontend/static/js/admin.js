@@ -12,7 +12,7 @@
   const $ = (id) => document.getElementById(id);
   const ROLE_NAMES = {
     ADMIN: "Адміністратор", MAIN_KOORD: "Головний координатор", KOORD: "Координатор підрозділу",
-    VYK: "Виконавець", KER: "Керівник", ANAL: "Аналітик",
+    VYK: "Виконавець", KER: "Керівник",
   };
   const ROLES_NEED_DEPARTMENT = new Set(["KOORD", "VYK", "KER"]);
   const PAGE_SIZES = [10, 25, 50, 100];

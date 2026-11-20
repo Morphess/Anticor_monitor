@@ -132,7 +132,6 @@
     MAIN_KOORD: { name: "Головний координатор", home: "/main-coordinator" },
     KOORD: { name: "Координатор підрозділу", home: "/coordinator" },
     KER: { name: "Керівник", home: "/manager" },
-    ANAL: { name: "Аналітик", home: "/analyst" },
     ADMIN: { name: "Адміністратор", home: "/admin" },
   };
 

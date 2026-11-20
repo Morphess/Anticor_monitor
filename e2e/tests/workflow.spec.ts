@@ -53,6 +53,8 @@ test('executor submits a pinned order, coordinator views and approves it', async
   const { access_token } = await tokenResponse.json();
   const forbidden = await request.post(`/api/executions/${execution.id}/approve`, { headers: { Authorization: `Bearer ${access_token}` }, data: {} });
   expect(forbidden.status()).toBe(403);
+  const forbiddenAnalysis = await request.post(`/api/executions/${execution.id}/analyze`, { headers: { Authorization: `Bearer ${access_token}` } });
+  expect(forbiddenAnalysis.status()).toBe(403);
 
   const coordinatorContext = await browser.newContext({ baseURL: 'http://api:8000', timezoneId: 'UTC' });
   try {
@@ -64,6 +66,7 @@ test('executor submits a pinned order, coordinator views and approves it', async
     await coord.getByRole('button', { name: /Playwright synthetic program/ }).click();
     await coord.getByRole('button', { name: /Synthetic training/ }).click();
     await coord.getByRole('button', { name: /Conduct one synthetic integrity training/ }).click();
+    await expect(coord.getByRole('button', { name: 'Проаналізувати наказ', exact: true })).toBeVisible();
     const documentResponse = coord.waitForResponse(r => new URL(r.url()).pathname === `/api/executions/${execution.id}/document`);
     const popup = coord.waitForEvent('popup');
     await coord.getByRole('button', { name: 'Переглянути наказ', exact: true }).click();

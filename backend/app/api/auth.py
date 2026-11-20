@@ -25,6 +25,9 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
     if not user or not verify_password(form.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Невірний логін або пароль")
 
+    if user.role_id == "ANAL":
+        raise HTTPException(status_code=403, detail="Роль аналітика більше не використовується")
+
     # Повертаємо JWT-токен
     return {"access_token": create_access_token(user.id), "token_type": "bearer"}
 

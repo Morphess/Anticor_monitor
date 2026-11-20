@@ -234,6 +234,20 @@
                     };
                     if(ex&&ex.document_api_path){
                       action('Переглянути наказ',()=>Api.openProtected(ex.document_api_path).catch(fail),'btn-outline-secondary');
+                      const result=make('pre',{class:'analysis-result',role:'status'});
+                      result.style.whiteSpace='pre-wrap';result.style.overflowWrap='anywhere';
+                      line.appendChild(result);
+                      const analyze=make('button',{type:'button',class:'btn',text:'Проаналізувати наказ'});
+                      analyze.addEventListener('click',async()=>{
+                        analyze.disabled=true;result.textContent='Порівнюємо наказ зі змістом заходу…';
+                        try{
+                          const data=await Api.post('/api/executions/'+encodeURIComponent(ex.id)+'/analyze');
+                          result.textContent=data.analysis+(data.text_truncated?'\nПроаналізовано частину документа.':'')+
+                            '\nВерсія наказу: '+data.order_version_id+'. Рішення про погодження приймає координатор.';
+                        }catch(err){result.textContent='Помилка аналізу: '+err.message;}
+                        finally{analyze.disabled=false;}
+                      });
+                      rowActions.appendChild(analyze);
                     }
                     if(ex&&ex.status==='pending'&&!ex.document_changed){
                       action('Погодити',()=>review(m,ex,true),'btn-success');

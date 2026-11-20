@@ -52,3 +52,12 @@ class ExecutionRead(BaseModel):
     rejection_reason: str | None
     # Client fetches with JWT; a plain <a href> would not carry Bearer token.
     document_api_path: str | None = None
+
+
+from app.schemas.orders import OrderAnalysisRead
+
+
+class ExecutionAnalysisRead(OrderAnalysisRead):
+    execution_id: int
+    order_version_id: int
+    submitted_sha256: str
