@@ -84,3 +84,12 @@ docker ps --filter label=com.docker.compose.project=bordergroup
 - Архів orders/reports та команда перенесення CD на локальному demo — OK.
 
 Справжній Ubuntu й Ollama під час підготовки релізу не змінювалися.
+
+## Виправлення початкових ролей
+
+Міграція d2511200abcd після c2501120abcd створює відсутні активні ролі
+ADMIN, MAIN_KOORD, KOORD, VYK, KER. Наявні назви, користувачі та паролі
+не змінюються; історична ANAL не видаляється і не активується.
+Для існуючого локального demo після оновлення коду й rebuild api
+достатньо повторити команду upgrade head з кроку 4 README. Повторний
+bootstrap не потрібен. Дані й volumes не видаляти.
