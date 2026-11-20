@@ -107,7 +107,8 @@
       const sep = url.indexOf("?") === -1 ? "?" : "&";
       for (let skip = 0; skip < 20000; skip += pageSize) {
         const page = await request("GET", url + sep + skipParam + "=" + skip + "&limit=" + pageSize);
-        out.push.apply(out, page || []);
+        if (!Array.isArray(page)) throw new Error("API повернув не список: " + url);
+        out.push.apply(out, page);
         if (!page || page.length < pageSize) break;
       }
       return out;
@@ -120,15 +121,16 @@
     executions: function (period) {
       return Api.getAll("/api/executions/?period=" + encodeURIComponent(period), 500, "offset");
     },
-    executionUrl: function (measureId, period) {
-      return "/api/executions/" + encodeURIComponent(measureId) + "/" + encodeURIComponent(period);
+    executionUrl: function (executionId) {
+      return "/api/executions/" + encodeURIComponent(executionId);
     },
   };
 
   // ---------- Ролі ----------
   Api.ROLES = {
     VYK: { name: "Виконавець", home: "/executor" },
-    KOORD: { name: "Координатор програми", home: "/coordinator" },
+    MAIN_KOORD: { name: "Головний координатор", home: "/main-coordinator" },
+    KOORD: { name: "Координатор підрозділу", home: "/coordinator" },
     KER: { name: "Керівник", home: "/manager" },
     ANAL: { name: "Аналітик", home: "/analyst" },
     ADMIN: { name: "Адміністратор", home: "/admin" },
@@ -171,7 +173,10 @@
       select.appendChild(o);
     });
     select.value = list.indexOf(saved) !== -1 ? saved : Api.currentPeriod();
-    select.addEventListener("change", function () { Api.pref("period", select.value); });
+    if (!select.dataset.periodPreferenceBound) {
+      select.addEventListener("change", function () { Api.pref("period", select.value); });
+      select.dataset.periodPreferenceBound = "true";
+    }
     return select.value;
   };
 
@@ -190,7 +195,11 @@
 
       Api.setRole(role);
       Api.me = me;
-      if (role !== expectedRole) {
+      document.querySelectorAll('[data-nav-role]').forEach(function (a) {
+        a.hidden = a.dataset.navRole !== role;
+        a.setAttribute('aria-current', a.pathname === location.pathname ? 'page' : 'false');
+      });
+      if (!(Array.isArray(expectedRole) ? expectedRole.includes(role) : role === expectedRole)) {
         location.replace(cabinet.home);
         return false;
       }
@@ -205,90 +214,64 @@
     }
   };
 
-  // ---------- Статуси ----------
-  // Чотири статуси координатора + службові стани з поля status.
+  // Статус перевірки, а не старий прогрес виконання.
   Api.STATUS = {
-    done: { label: "Виконано", cls: "st-done" },
-    review: { label: "На розгляді", cls: "st-review" },
-    rework: { label: "На доопрацюванні", cls: "st-rework" },
-    not: { label: "Не виконано", cls: "st-not" },
-    work: { label: "У роботі", cls: "st-work" },
-    none: { label: "Не розпочато", cls: "" },
+    done: { label: "Погоджено", cls: "st-done" },
+    review: { label: "Очікує рішення", cls: "st-review" },
+    rework: { label: "Повернуто", cls: "st-rework" },
+    not: { label: "Не подано", cls: "st-not" },
+    work: { label: "Очікує рішення", cls: "st-review" },
+    none: { label: "Не подано", cls: "" },
   };
   Api.statusOf = function (ex) {
-    if (!ex) return "not";
-    if (ex.approved_by_coordinator) return "done";
-    const label = (ex.status_label || "").toLowerCase();
-    if (label.indexOf("доопрац") !== -1) return "rework";
-    if (label.indexOf("розгляд") !== -1) return "review";
-    switch (ex.status) {
-      case "completed":
-      case "partial": return "review";
-      case "in_progress": return "work";
-      case "not_started": return "none";
-      default: return "not";
-    }
+    if (!ex) return "none";
+    if (ex.document_changed) return "rework";
+    if (ex.status === "approved") return "done";
+    if (ex.status === "pending") return "review";
+    if (ex.status === "rejected") return "rework";
+    return "none";
   };
-
-  // ---------- Номер наказу ----------
-  // Поки немає API наказів, номер зберігається першим рядком result_description.
-  const ORDER_RE = /^Наказ №\s*(\S+)\s*\n?/;
-  Api.orderNumber = function (ex) {
-    const m = ex && ORDER_RE.exec(ex.result_description || "");
-    return m ? m[1] : "";
-  };
-  Api.withOrder = function (description, number) {
-    const rest = (description || "").replace(ORDER_RE, "");
-    return "Наказ № " + number + (rest ? "\n" + rest : "");
-  };
-  Api.noteOf = function (ex) {
-    return ex ? (ex.result_description || "").replace(ORDER_RE, "").trim() : "";
-  };
+  Api.orderNumber = function (ex) { return ex && ex.order_number || ""; };
+  Api.noteOf = function (ex) { return ex && ex.rejection_reason || ""; };
+  Api.withOrder = function (description, number) { return String(description || "") + String(number || ""); };
 
   // ---------- Підрозділи ----------
-  // ЗАГЛУШКА: API довідника підрозділів ще немає, назви з синтетичного набору.
-  Api.DEPARTMENTS = {
-    P01: "Сектор з питань запобігання та виявлення корупції",
-    P02: "Департамент кадрового забезпечення",
-    P03: "Департамент закупівель",
-    P04: "Фінансово-економічний департамент",
-    P05: "Управління матеріально-технічного забезпечення",
-    P06: "Юридичний департамент",
-    P07: "Департамент освіти і науки",
-    P08: "Управління цифрової трансформації",
-    P09: "Управління внутрішнього аудиту",
-    P10: "Управління майна і землекористування",
-    P11: "Управління комунікацій",
-    P12: "Військовий навчальний заклад «Умовний»",
-    P13: "Військово-медичний центр «Умовний»",
-    P14: "Державне підприємство «Умовний ремонтний завод»",
+  Api.DEPARTMENTS = {};
+  Api.loadDepartmentNames = async function () {
+    // Загальний довідник підрозділів належить ADMIN. Не робимо зайвий
+    // заборонений HTTP-запит від MAIN_KOORD, KOORD чи VYK.
+    if (!Api.me || Api.me.role_id !== "ADMIN") return;
+    const rows = await Api.get("/api/departments/");
+    (rows || []).forEach(function (r) { Api.DEPARTMENTS[r.id] = r.name; });
   };
   Api.deptName = function (id) {
     return id ? (Api.DEPARTMENTS[id] || "Підрозділ " + id) : "Не призначено";
   };
 
   // ---------- Розділи ----------
-  // GET /api/sections зараз лише для адміністратора; для інших — номер розділу.
-  Api.sections = async function () {
-    try {
-      const list = await Api.get("/api/sections/", { noRedirect: true });
-      const map = {};
-      (list || []).forEach(function (s) { map[s.id] = s; });
-      return map;
-    } catch (e) {
-      return {};
-    }
+  // Для MAIN_KOORD / KOORD / VYK список розділів доступної програми
+  // отримуємо через program-routing (не через ADMIN-only /api/sections/).
+  Api.sections = async function (programIds) {
+    const ids = Array.from(new Set(programIds || []));
+    const map = {};
+    await Promise.all(ids.map(async function (id) {
+      const rows = await Api.get("/api/program-routing/programs/" +
+        encodeURIComponent(id) + "/sections");
+      (rows || []).forEach(function (section) { map[section.id] = section; });
+    }));
+    return map;
   };
   Api.sectionTitle = function (map, id) {
-    const s = map[id];
+    const s = (map || {})[id];
     if (s) return s.number + ". " + s.title;
-    return "Розділ " + Api.sectionNo(id);
+    return "Розділ " + (id || "—");
   };
 
   // ---------- Поточний користувач ----------
   // Токен містить лише id користувача (поле sub). Підпис перевіряє сервер;
   // тут id потрібен тільки, щоб показати виконавцю його заходи.
   Api.userId = function () {
+    if (Api.me && Api.me.id !== undefined) return Number(Api.me.id);
     const t = Api.token();
     if (!t) return null;
     try {
@@ -311,50 +294,10 @@
     (list || []).forEach(function (x) { (map[x[key]] = map[x[key]] || []).push(x); });
     return map;
   };
-  Api.orders = function () { return Api.getAll("/api/orders/", 100, "skip"); };
-  Api.evidences = function () { return Api.getAll("/api/evidences/", 100, "skip"); };
-  // SHA-256 у hex. crypto.subtle є лише в захищеному контексті (https, localhost),
-  // тому для звичайного http у закритому контурі — власна реалізація.
-  Api.sha256Hex = async function (text) {
-    const bytes = new TextEncoder().encode(text);
-    if (window.crypto && window.crypto.subtle) {
-      const buf = await window.crypto.subtle.digest("SHA-256", bytes);
-      return Array.from(new Uint8Array(buf)).map(function (b) { return b.toString(16).padStart(2, "0"); }).join("");
-    }
-    return sha256Fallback(bytes);
-  };
-  Api.sha256Fallback = function (bytes) { return sha256Fallback(bytes); }; // для перевірки
-  function sha256Fallback(bytes) {
-    const K = [0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2];
-    const H = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
-    const len = bytes.length;
-    const total = ((len + 9 + 63) >> 6) << 6;
-    const m = new Uint8Array(total);
-    m.set(bytes);
-    m[len] = 0x80;
-    const bits = len * 8;
-    for (let i = 0; i < 4; i++) m[total - 1 - i] = (bits >>> (8 * i)) & 0xff;
-    m[total - 5] = Math.floor(bits / 0x100000000) & 0xff;
-    const w = new Uint32Array(64);
-    const rotr = function (x, n) { return (x >>> n) | (x << (32 - n)); };
-    for (let off = 0; off < total; off += 64) {
-      for (let i = 0; i < 16; i++) w[i] = (m[off + 4 * i] << 24) | (m[off + 4 * i + 1] << 16) | (m[off + 4 * i + 2] << 8) | m[off + 4 * i + 3];
-      for (let i = 16; i < 64; i++) {
-        const s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3);
-        const s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
-        w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
-      }
-      let a = H[0], b = H[1], c = H[2], d = H[3], e = H[4], f = H[5], g = H[6], h = H[7];
-      for (let i = 0; i < 64; i++) {
-        const t1 = (h + (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + w[i]) | 0;
-        const t2 = ((rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
-        h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
-      }
-      H[0] = (H[0] + a) | 0; H[1] = (H[1] + b) | 0; H[2] = (H[2] + c) | 0; H[3] = (H[3] + d) | 0;
-      H[4] = (H[4] + e) | 0; H[5] = (H[5] + f) | 0; H[6] = (H[6] + g) | 0; H[7] = (H[7] + h) | 0;
-    }
-    return H.map(function (x) { return (x >>> 0).toString(16).padStart(8, "0"); }).join("");
-  }
+
+  // Таблицю evidences видалено. Документ прив’язаний до executions.
+  // SHA-256 не обчислюється з номера наказу у браузері.
+  // Для підтвердження сервер використовує хеш фактичної order_versions.
 
   // Сповіщення про зміну наказів (новий бекенд). null — бекенд їх не підтримує (404).
   Api.orderAlerts = async function () {
@@ -384,46 +327,88 @@
     return Api.el("a", { href: url, target: "_blank", rel: "noopener noreferrer", text: text });
   };
 
-  Api.analyzeOrder = function (orderId, file) {
-    const form = new FormData();
-    form.append("file", file);
-    return Api.post(
-      "/api/orders/" + encodeURIComponent(orderId) + "/analyze",
-      form
-    );
-  };
 
-  // ---------- Risk Flags ----------
+  // ---------- Risk Flags (обов'язковий program_id; RF8 доступний у поточному періоді) ----------
   Api.FLAGS = {
-    RF1: "Прострочений захід",
-    RF2: "Немає підтверджень",
-    RF3: "Формальне закриття",
-    RF4: "Опис повторює зміст заходу",
-    RF5: "Показник нижче цільового",
-    RF6: "Повторні перенесення / прострочення",
-    RF7a: "Дата виконання поза періодом",
-    RF7b: "Документи пізніші за виконання",
-    RF7c: "Немає пояснення невиконання",
-    RF7d: "Ризик без заходів",
-    RF7e: "Опис для заходу, строк якого не настав",
+    RF1: "Прострочений захід", RF2: "Немає підтвердження",
+    RF3: "Формальне закриття", RF4: "Формальний опис результату",
+    RF5: "Показник нижче цілі", RF6: "Перенесення строків / прострочення",
+    RF7a: "Виконання поза періодом", RF7b: "Пізнє підтвердження",
+    RF7c: "Відсутнє пояснення", RF7d: "Високий ризик без заходів",
+    RF7e: "Передчасний опис", RF8: "Невідомий номер наказу",
   };
   Api.OBJECT_TYPES = { zakhid: "Захід", pidrozdil: "Підрозділ", ryzyk: "Ризик" };
-  // Дата зрізу: сьогодні, але не раніше кінця періоду (так вимагає сервер).
   Api.flagsAsOf = function (period) {
     const m = /^(\d{4})-H([12])$/.exec(period || "");
-    const end = m ? m[1] + (m[2] === "1" ? "-06-30" : "-12-31") : Api.today();
+    if (!m) return Api.today();
+    const end = m[1] + (m[2] === "1" ? "-06-30" : "-12-31");
     return Api.today() > end ? Api.today() : end;
   };
-  // Повертає {ok, data}; ok=false, коли роль не має доступу (зараз лише ADMIN).
-  Api.riskFlags = function (period, asOf, code) {
-    let url = "/api/risk-flags/?period=" + encodeURIComponent(period) + "&as_of=" + encodeURIComponent(asOf || Api.flagsAsOf(period));
-    if (code) url += "&code=" + encodeURIComponent(code);
-    return Api.optional(Api.get(url, { noRedirect: true }));
+  Api.riskFlags = async function (programId, period, code) {
+    if (!programId || !/^(\d{4})-H[12]$/.test(period || "")) {
+      return { ok: false, data: [], reason: "Оберіть програму та звітний період" };
+    }
+    const startOfPeriod = period.slice(0, 4) + (period.endsWith('H1') ? '-01-01' : '-07-01');
+    if (startOfPeriod > Api.today()) return {ok:false,data:[],reason:'Цей період ще не почався'};
+    const end = Api.flagsAsOf(period);
+    const periodEnd = period.slice(0, 4) + (period.endsWith('H1') ? '-06-30' : '-12-31');
+    // API вимагає завершеного періоду для RF1–RF7, але RF8 можна дивитися зараз.
+    const onlyRF8 = periodEnd > Api.today();
+    if (onlyRF8 && code && code !== "RF8") return {ok: true, data: []};
+    let url = "/api/risk-flags/?program_id=" + encodeURIComponent(programId)
+      + "&period=" + encodeURIComponent(period)
+      + "&as_of=" + encodeURIComponent(onlyRF8 ? Api.today() : end);
+    if (onlyRF8 || code) url += "&code=" + encodeURIComponent(onlyRF8 ? "RF8" : code);
+    const result = await Api.optional(Api.get(url));
+    if (onlyRF8) result.note = "Триває звітний період: наразі доступний лише RF8";
+    return result;
   };
   Api.flagBadge = function (f) {
     return Api.el("span", { class: "flag", title: (Api.FLAGS[f.code] || f.message) + (f.explanation ? ": " + f.explanation : ""), text: f.code });
   };
 
+  // Документи API закриті Bearer JWT; звичайне <a href> неавторизоване.
+  Api.downloadProtected = async function (path, filename) {
+    if (!path || !path.startsWith("/api/")) throw new Error("Некоректний маршрут документа");
+    const token = Api.token();
+    if (!token) { Api.logout(true); return; }
+    const response = await fetch(path, { headers: { Authorization: "Bearer " + token } });
+    if (response.status === 401) { Api.logout(true); return; }
+    if (!response.ok) {
+      let detail = "Помилка відкриття документа: " + response.status;
+      try { const j = await response.json(); detail = detailText(j, response.status); } catch (_) {}
+      throw new Api.ApiError(response.status, detail);
+    }
+    const blobUrl = URL.createObjectURL(await response.blob());
+    const link = document.createElement("a");
+    link.href = blobUrl; link.download = filename || "document";
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(function () { URL.revokeObjectURL(blobUrl); }, 60000);
+  };
+  // Open a protected PDF in a new tab; Bearer JWT stays in fetch, never in URL.
+  Api.openProtected = async function (path) {
+    if (!path || !path.startsWith('/api/')) throw new Error('Некоректний маршрут документа');
+    // Must open synchronously from button click to avoid the popup blocker.
+    const tab = window.open('about:blank', '_blank');
+    if (!tab) throw new Error('Дозвольте відкриття вкладок у браузері');
+    try {
+      tab.document.title = 'Перегляд наказу';
+      tab.document.body.textContent = 'Відкриваємо документ…';
+      const response = await fetch(path, { headers: {Authorization: 'Bearer ' + Api.token()} });
+      if (!response.ok) {
+        let message = 'Не вдалося відкрити документ (' + response.status + ')';
+        try { message = detailText(await response.json(), response.status); } catch (_) {}
+        throw new Error(message);
+      }
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      tab.location.href = blobUrl;
+      // Keep URL alive while the browser loads; revoke on delay to limit memory usage.
+      setTimeout(function () { URL.revokeObjectURL(blobUrl); }, 300000);
+    } catch (error) {
+      tab.close(); throw error;
+    }
+  };
   // ---------- Дрібниці ----------
   Api.fmtDate = function (iso) {
     if (!iso) return "";
@@ -443,7 +428,7 @@
     return String(a).localeCompare(String(b), "uk", { numeric: true });
   };
   Api.measureNo = function (m) {
-    return Api.sectionNo(m.section_id) + "." + m.sequence_number;
+    return m.sequence_number == null ? String(m.id || "—") : Api.sectionNo(m.section_id) + "." + m.sequence_number;
   };
   Api.byMeasureOrder = function (a, b) {
     return Api.compareSections(a.section_id, b.section_id) || (a.sequence_number - b.sequence_number);

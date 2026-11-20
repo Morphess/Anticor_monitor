@@ -1,393 +1,448 @@
-// Кабінет виконавця: програма → розділ → заходи, лише заходи, закріплені за користувачем.
-// У рядку заходу — номер наказу. Новий бекенд (є /api/order-change-alerts): номер подається
-// підтвердним документом /api/evidences, сервер звіряє його з реєстром наказів.
-// Старий бекенд: перевірка за реєстром /api/orders на сторінці. Далі звіт іде координатору через /api/executions.
+/* Кабінет VYK. Доступ визначає сервер, не поле measures.assigned_user_id. */
 (function () {
   "use strict";
   const el = Api.el;
-  const root = document.getElementById("programs");
-  const periodSel = document.getElementById("period");
-  const search = document.getElementById("search");
-  const filterSel = document.getElementById("filter");
-
-  let programs = [];
-  let measuresByProg = {}; // лише заходи цього користувача
-  let sections = {};
-  let executions = {};     // measure_id -> звіт за обраний період
-  let ordersByMeasure = {};
-  let ordersOk = true;
-  let allOrders = [];
-  let registryMode = false; // true — новий бекенд: наказ подається через /api/evidences
-  let alerts = [];          // сповіщення про зміну наказів
-  let orderEvidence = {};   // measure_id -> підтвердний документ «Наказ»
-  let measureById = {};
-  const open = new Set();  // розгорнуті вузли: p:ID, s:ID:R
-  const msgs = {};         // measure_id -> {ok, text} останньої спроби подання
-
-  async function init() {
-    if (!await Api.requireRole("VYK")) return;
-    showIdent(Api.me);
-    try {
-      const [progList, ms, secs, orders, routed, alertBox] = await Promise.all([
-        Api.get("/api/programs"), Api.measures(), Api.sections(), Api.optional(Api.orders()),
-        Api.optional(Api.get("/api/program-routing/my/measures", { noRedirect: true })),
-        Api.optional(Api.orderAlerts()),
-      ]);
-      sections = secs;
-      ordersOk = orders.ok;
-      allOrders = orders.data;
-      ordersByMeasure = Api.groupBy(orders.data, "measure_id");
-      registryMode = alertBox.ok && alertBox.data !== null;
-      alerts = registryMode ? alertBox.data.alerts || [] : [];
-      ms.forEach(function (m) { measureById[m.id] = m; });
-
-      // Виконавець бачить тільки свої заходи (assigned_user_id), чужі не показуються.
-      // Свої заходи: закріплені за користувачем (assigned_user_id) або призначені координатором
-      // підрозділу через /api/program-routing (персональні призначення).
-      const me = Api.userId();
-      const routedIds = {};
-      routed.data.forEach(function (m) { routedIds[m.id] = true; });
-      const mine = ms.filter(function (m) {
-        return (me !== null && m.assigned_user_id === me) || routedIds[m.id];
-      }).sort(Api.byMeasureOrder);
-      measuresByProg = Api.groupBy(mine, "program_id");
-      programs = progList.filter(function (p) { return measuresByProg[p.id]; });
-      if (programs.length === 1) open.add("p:" + programs[0].id);
-
-      Api.fillPeriods(periodSel, progList);
-      periodSel.addEventListener("change", load);
-      search.addEventListener("input", render);
-      filterSel.addEventListener("change", render);
-      await load();
-    } catch (err) {
-      Api.showError(err);
-      root.innerHTML = "";
-    }
+  const $ = (id) => document.getElementById(id);
+  const root = $("programs");
+  const search = $("search");
+  const filter = $("filter");
+  const programFilter = $("executor-program");
+  const period = $("period");
+  const dialog = $("execution-dialog");
+  const form = $("execution-form");
+  const saveButton = $("execution-save");
+  const formMessage = $("execution-message");
+  const openIds = new Set();
+  const state = {
+    programs: [], byProgram: {}, measures: [], sections: {}, executions: {}, evidences: {},
+    evidenceListAvailable: true, deadlineReminders: {}, notices: {}, edit: null, loading: false,
+  };
+  const STATUS_LABELS = {
+    not_started: "Не розпочато", in_progress: "У процесі", partial: "Частково виконано",
+    completed: "Виконано", not_completed: "Не виконано",
+  };
+  const isApproved = (x) => !!(x && x.approved_by_coordinator && x.status === "completed");
+  const status = (m) => Api.statusOf(state.executions[m.id]);
+  const safeList = (x) => Array.isArray(x) ? x : [];
+  const getDays = (m) => {
+    if (m.deadline_type && m.deadline_type !== "date") return null;
+    const reminder = state.deadlineReminders[m.id];
+    if (reminder && Number.isFinite(Number(reminder.days_left))) return Number(reminder.days_left);
+    return Notify.daysLeft(m);
+  };
+  function needsAttention(m) {
+    const days = getDays(m);
+    return !isApproved(state.executions[m.id]) && days !== null && days <= 7;
   }
-
-  // «Підрозділ — посада» у верхній панелі.
-  function showIdent(me) {
-    const box = document.getElementById("ident");
-    if (!box || !me) return;
-    const parts = [me.department_id ? Api.deptName(me.department_id) : "", (me.position || "").trim()].filter(Boolean);
-    box.textContent = parts.join(" — ") || me.login;
+  function toast(message, kind) {
+    const wrap = $("executor-toasts");
+    const item = el("div", { class: "executor-toast", "data-kind": kind || "success", role: kind === "error" ? "alert" : "status" }, [
+      el("span", { text: message }),
+      el("button", { type: "button", "aria-label": "Закрити сповіщення", text: "×", onclick: () => item.remove() }),
+    ]);
+    wrap.appendChild(item);
+    setTimeout(() => item.remove(), kind === "error" ? 6500 : 4200);
+  }
+  function errorText(err) { return (err && err.message) || "Не вдалося отримати дані"; }
+  function noticeError(err) {
+    root.innerHTML = "";
+    root.appendChild(el("div", { class: "executor-inline-error", text: errorText(err) }));
+    root.appendChild(el("button", { type: "button", class: "btn", text: "Спробувати знову", onclick: () => refresh(true) }));
+  }
+  function textCell(name, value, klass) {
+    return el("div", { class: klass || "" }, [
+      el("span", { class: "m-label", text: name + ": " }),
+      el("span", { text: String(value || "—") }),
+    ]);
+  }
+  function groupBy(list, key) {
+    return list.reduce((acc, m) => {
+      (acc[m[key]] = acc[m[key]] || []).push(m);
+      return acc;
+    }, {});
+  }
+  async function fetchMeasures() {
+    // Не використовуємо глобальні /api/programs та /api/measures списки.
+    const [assigned, programs] = await Promise.all([
+      Api.get("/api/program-routing/my/measures"),
+      Api.get("/api/program-routing/my/programs"),
+    ]);
+    const mine = safeList(assigned);
+    const allowedPrograms = new Set(safeList(programs).map((p) => p.id));
+    const chosen = mine.filter((m) => allowedPrograms.has(m.program_id));
+    // Кожна повна картка заходу запитується ВИКЛЮЧНО за своїм ID.
+    // Якщо GET /api/measures/{id} недоступний, показуємо короткі відомості
+    // та не вигадуємо ні строків, ні показників.
+    const enriched = [];
+    for (let i = 0; i < chosen.length; i += 6) {
+      const batch = chosen.slice(i, i + 6);
+      const detail = await Promise.all(batch.map(async (m) => {
+        try {
+          const full = await Api.get("/api/measures/" + encodeURIComponent(m.id), { noRedirect: true });
+          return Object.assign({}, m, full && full.id === m.id ? full : {});
+        } catch (err) {
+          if (err.status === 401) throw err;
+          return m;
+        }
+      }));
+      enriched.push(...detail);
+    }
+    const actualPrograms = safeList(programs).filter((p) => enriched.some((m) => m.program_id === p.id));
+    const meta = await Promise.all(actualPrograms.map(async (p) => {
+      let full = {}, sec = [];
+      try { full = await Api.get("/api/program-routing/programs/" + encodeURIComponent(p.id), { noRedirect: true }); }
+      catch (err) { if (err.status === 401) throw err; }
+      try { sec = await Api.get("/api/program-routing/programs/" + encodeURIComponent(p.id) + "/sections", { noRedirect: true }); }
+      catch (err) { if (err.status === 401) throw err; }
+      return { program: Object.assign({}, p, full || {}), sections: safeList(sec) };
+    }));
+    state.programs = meta.map((x) => x.program);
+    state.sections = {};
+    meta.forEach((x) => x.sections.forEach((s) => { state.sections[s.id] = s; }));
+    state.measures = enriched.sort(Api.byMeasureOrder);
+    state.byProgram = groupBy(state.measures, "program_id");
+    state.programs.sort((a, b) => String(a.title || a.id).localeCompare(String(b.title || b.id), "uk"));
+    programFilter.innerHTML = "";
+    programFilter.appendChild(el("option", { value: "", text: "Усі мої програми" }));
+    state.programs.forEach((p) => programFilter.appendChild(el("option", { value: p.id, text: p.title || p.id })));
+    Api.fillPeriods(period, state.programs);
+    if (state.programs.length === 1) openIds.add("p:" + state.programs[0].id);
+    if (state.measures.length === 1) openIds.add("s:" + state.measures[0].program_id + ":" + state.measures[0].section_id);
+  }
+  async function fetchReportData() {
+    const [execs, evidenceResult, deadlineResult] = await Promise.all([
+      Api.executions(period.value),
+      Api.optional(Api.evidences()),
+      // Нагадування з сервера — додатковий, необов'язковий модуль.
+      // За відсутності API працює локальна індикація за датою з картки заходу.
+      Api.optional(Api.get("/api/deadline-reminders/?limit=100&offset=0", { noRedirect: true })),
+    ]);
+    const mineIds = new Set(state.measures.map((m) => m.id));
+    state.executions = {};
+    safeList(execs).forEach((x) => {
+      if (mineIds.has(x.measure_id)) state.executions[x.measure_id] = x;
+    });
+    state.deadlineReminders = {};
+    if (deadlineResult.ok && deadlineResult.data && Array.isArray(deadlineResult.data.reminders)) {
+      safeList(deadlineResult.data.reminders).forEach((reminder) => {
+        if (mineIds.has(reminder.measure_id)) state.deadlineReminders[reminder.measure_id] = reminder;
+      });
+    }
+    state.evidences = {};
+    state.evidenceListAvailable = evidenceResult.ok;
+    safeList(evidenceResult.data).forEach((e) => {
+      if (mineIds.has(e.measure_id) && e.order_number) state.evidences[e.measure_id] = e;
+    });
+  }
+  function contextInfo() {
+    const me = Api.me || {};
+    const box = $("ident");
+    box.textContent = [me.department_id || "", me.position || ""].filter(Boolean).join(" · ") || me.login || "Виконавець";
     box.title = box.textContent;
   }
-
-  async function load() {
-    Api.showError(null);
+  async function refresh(full) {
+    if (state.loading) return;
+    state.loading = true;
+    const button = $("executor-refresh");
+    button.disabled = true;
+    button.textContent = "Оновлення…";
+    root.setAttribute("aria-busy", "true");
     try {
-      const [list, evid] = await Promise.all([
-        Api.executions(periodSel.value),
-        registryMode ? Api.optional(Api.evidences()) : Promise.resolve({ data: [] }),
-      ]);
-      executions = {};
-      list.forEach(function (x) { executions[x.measure_id] = x; });
-      orderEvidence = {};
-      evid.data.forEach(function (e) { if (e.order_number) orderEvidence[e.measure_id] = e; });
+      if (full || !state.programs.length) await fetchMeasures();
+      await fetchReportData();
       render();
+      if (full) toast("Дані кабінету оновлено");
     } catch (err) {
-      Api.showError(err);
+      noticeError(err);
+      toast(errorText(err), "error");
+    } finally {
+      state.loading = false;
+      root.setAttribute("aria-busy", "false");
+      button.disabled = false;
+      button.textContent = "Оновити дані";
     }
   }
-
-  // ---------- пошук і фільтр ----------
-
-  function matches(text, q) { return (text || "").toLowerCase().indexOf(q) !== -1; }
-
-  function measureMatches(m, q) {
-    return matches(m.description, q) || matches(Api.measureNo(m), q) || matches(m.id, q) ||
-      matches(Api.sectionTitle(sections, m.section_id), q) || matches(Api.orderNumber(executions[m.id]), q) ||
-      (ordersByMeasure[m.id] || []).some(function (o) { return matches(o.number, q) || matches(o.title, q); });
+  function matches(m, p, q) {
+    const sec = state.sections[m.section_id];
+    const ev = state.evidences[m.id];
+    return [p.id, p.title, m.id, m.description, m.sequence_number,
+      sec && sec.title, ev && ev.order_number].some((v) => String(v || "").toLocaleLowerCase("uk").includes(q));
   }
-
-  const daysLeft = Notify.daysLeft;
-
-  function passesFilter(m, f) {
+  function matchesFilter(m, f) {
     if (!f) return true;
-    const ex = executions[m.id];
-    const st = Api.statusOf(ex);
-    if (f === "todo") return st !== "done" && st !== "review";
-    if (f === "deadline") { const d = daysLeft(m); return d !== null && d <= 30 && !(ex && ex.approved_by_coordinator); }
-    return st === f;
+    const ex = state.executions[m.id];
+    if (f === "todo") return !ex;
+    if (f === "deadline") return needsAttention(m);
+    if (f === "work") return !!ex && ex.status === "in_progress";
+    return status(m) === f;
   }
-
-  // ---------- дерево ----------
-
-  function toggle(key) { open.has(key) ? open.delete(key) : open.add(key); render(); }
-
-  function isDone(m) { return Api.statusOf(executions[m.id]) === "done"; }
-
-  // «Виконано 7 / 10».
-  function counter(list) {
-    const done = list.filter(isDone).length;
-    return el("div", { class: "count", text: "Виконано " + done + " / " + list.length });
+  function updateCounters() {
+    const all = state.measures;
+    const counts = {
+      "executor-total": all.length,
+      "executor-attention": all.filter(needsAttention).length,
+      "executor-review": all.filter((m) => status(m) === "review").length,
+      "executor-approved": all.filter((m) => isApproved(state.executions[m.id])).length,
+    };
+    Object.entries(counts).forEach(([id, number]) => { $(id).textContent = String(number); });
+    $("executor-program-count").textContent = state.programs.length + " програм";
+    document.querySelectorAll(".executor-stat[data-stat-filter]").forEach((button) => {
+      button.setAttribute("aria-pressed", String(button.dataset.statFilter === filter.value));
+    });
   }
-
+  function empty(title, hint, reset) {
+    const content = el("div", { class: "executor-empty" }, [
+      el("h3", { text: title }), el("p", { text: hint }),
+    ]);
+    if (reset) content.appendChild(el("button", {
+      type: "button", class: "btn", style: "margin-top:12px", text: "Скинути фільтри",
+      onclick: () => { search.value = ""; filter.value = ""; programFilter.value = ""; render(); },
+    }));
+    return content;
+  }
   function render() {
-    renderNotifs();
-    const q = search.value.trim().toLowerCase();
-    const f = filterSel.value;
-    const narrowed = !!(q || f);
+    updateCounters();
     root.innerHTML = "";
-    if (!programs.length) {
-      root.appendChild(el("p", { class: "muted", text: "За вами не закріплено заходів." }));
+    const q = search.value.trim().toLocaleLowerCase("uk");
+    const f = filter.value;
+    const pId = programFilter.value;
+    const active = !!(q || f || pId);
+    if (!state.measures.length) {
+      root.appendChild(empty("Поки немає призначених заходів", "Координатор підрозділу призначає заходи через кабінет KOORD.", false));
+      $("executor-result-count").textContent = "0 заходів";
+      Notify.render([], "Немає термінових повідомлень");
       return;
     }
-    let shown = 0;
-    programs.forEach(function (p) {
-      const all = measuresByProg[p.id] || [];
-      const progHit = !!q && (matches(p.title, q) || matches(p.id, q) || matches(p.organization_name, q));
-      const list = all.filter(function (m) {
-        return passesFilter(m, f) && (!q || progHit || measureMatches(m, q));
-      });
-      if (narrowed && !list.length) return;
-      shown++;
-      root.appendChild(programNode(p, all, list, narrowed));
+    let totalShown = 0;
+    state.programs.forEach((p) => {
+      if (pId && p.id !== pId) return;
+      const all = state.byProgram[p.id] || [];
+      const shown = all.filter((m) => matchesFilter(m, f) && (!q || matches(m, p, q)));
+      if (!shown.length) return;
+      totalShown += shown.length;
+      root.appendChild(programNode(p, all, shown, active));
     });
-    if (!shown) root.appendChild(el("p", { class: "muted", text: "Нічого не знайдено." }));
+    $("executor-result-count").textContent = "Показано " + totalShown + " із " + state.measures.length;
+    if (!totalShown) root.appendChild(empty("Заходів не знайдено", "Спробуйте інший пошуковий запит або фільтр.", true));
+    renderNotifications();
   }
-
-  // Програма: код, назва, орган, що видав.
-  function programNode(p, all, list, forceOpen) {
+  function toggle(key) { openIds.has(key) ? openIds.delete(key) : openIds.add(key); render(); }
+  function counter(ms) {
+    const completed = ms.filter((m) => isApproved(state.executions[m.id])).length;
+    return el("span", { class: "count", text: "Погоджено " + completed + " / " + ms.length });
+  }
+  function programNode(p, all, shown, active) {
     const key = "p:" + p.id;
-    const isOpen = forceOpen || open.has(key);
-    const node = el("div", { class: "prog" }, [
-      el("button", { type: "button", class: "row-head", "aria-expanded": String(isOpen), onclick: function () { toggle(key); } }, [
-        el("span", { class: "title" }, [
-          el("span", { class: "code", text: p.id }),
-          p.title,
-          el("span", { class: "sub", text: p.organization_name || "" }),
-        ]),
-        el("span"),
+    const visible = active || openIds.has(key);
+    const node = el("article", { class: "prog" }, [
+      el("button", { type: "button", class: "row-head", "aria-expanded": String(visible), onclick: () => toggle(key) }, [
+        el("span", { class: "title" }, [el("span", { class: "code", text: p.id }), p.title || p.id,
+          p.organization_name ? el("span", { class: "sub", text: p.organization_name }) : null]),
         counter(all),
       ]),
     ]);
-    if (!isOpen) return node;
+    if (!visible) return node;
     const body = el("div", { class: "prog-body" });
-    const bySec = Api.groupBy(list, "section_id");
-    Object.keys(bySec).sort(Api.compareSections).forEach(function (sid) {
-      body.appendChild(sectionNode(p, sid, all.filter(function (m) { return m.section_id === sid; }), bySec[sid], forceOpen));
+    const groups = groupBy(shown, "section_id");
+    Object.keys(groups).sort(Api.compareSections).forEach((sid) => {
+      body.appendChild(sectionNode(p, sid, all.filter((m) => m.section_id === sid), groups[sid], active));
     });
     node.appendChild(body);
     return node;
   }
-
-  // Розділ: назва і «Виконано X / Y» за всіма заходами розділу; розгорнутий — рядки заходів.
-  function sectionNode(p, sid, all, list, forceOpen) {
+  function sectionNode(p, sid, all, shown, active) {
     const key = "s:" + p.id + ":" + sid;
-    const isOpen = forceOpen || open.has(key);
-    const node = el("div", { class: "sec" }, [
-      el("button", { type: "button", class: "row-head", "aria-expanded": String(isOpen), onclick: function () { toggle(key); } }, [
-        el("span", { class: "title", text: Api.sectionTitle(sections, sid) }),
-        el("span"),
-        counter(all),
+    const visible = active || openIds.has(key);
+    const node = el("section", { class: "sec" }, [
+      el("button", { type: "button", class: "row-head", "aria-expanded": String(visible), onclick: () => toggle(key) }, [
+        el("span", { class: "title", text: Api.sectionTitle(state.sections, sid) }), counter(all),
       ]),
     ]);
-    if (!isOpen) return node;
+    if (!visible) return node;
     node.appendChild(el("div", { class: "mrow head", "aria-hidden": "true" }, [
-      el("span", { text: "Захід" }), el("span", { text: "Термін виконання" }),
-      el("span", { text: "№ наказу" }), el("span", { text: "Статус" }),
+      el("span", { text: "Захід" }), el("span", { text: "Контрольний строк" }),
+      el("span", { text: "Підтвердження" }), el("span", { text: "Виконання" }),
     ]));
-    list.forEach(function (m) { node.appendChild(measureRow(m)); });
+    shown.forEach((m) => node.appendChild(measureRow(m)));
     return node;
   }
-
-  // Нагадування про строк: прострочено або менше 30 днів (для непогоджених).
-  function deadlineChip(m) {
-    const ex = executions[m.id];
-    const d = daysLeft(m);
-    if (d === null || (ex && ex.approved_by_coordinator)) return null;
-    if (d < 0) return el("span", { class: "chip late", text: "прострочено " + -d + " дн." });
-    if (d <= 30) return el("span", { class: "chip soon", text: "ще " + d + " дн." });
-    return null;
-  }
-
-  function endDate(m) {
+  function deadlineText(m) {
     if (m.deadline_on) return Api.fmtDate(m.deadline_on);
     if (m.deadline_type === "ongoing") return "Постійно";
-    return m.deadline_description || "—";
+    return m.deadline_description || "Не вказано";
   }
-
-  // Захід: назва | термін виконання | поле наказу | статус.
-  function measureRow(m) {
-    return el("div", { class: "mrow", id: "row-" + m.id }, [
-      el("div", {}, [el("span", { class: "num", text: Api.measureNo(m) }), m.description]),
-      el("div", { class: "nowrap" }, [el("div", {}, [el("span", { class: "m-label", text: "Виконати до: " }), endDate(m)]), deadlineChip(m)]),
-      orderField(m),
-      el("div", {}, [Api.statusBadge(Api.statusOf(executions[m.id]))]),
-    ]);
-  }
-
-  function orderField(m) {
-    const ex = executions[m.id];
-    const input = el("input", {
-      class: "order-input", value: Api.orderNumber(ex), placeholder: "№ наказу і Enter",
-      "aria-label": "Номер наказу для заходу " + Api.measureNo(m), "aria-describedby": "msg-" + m.id,
-    });
-    const msg = el("div", { id: "msg-" + m.id, class: "msg", role: "status" });
-    const last = msgs[m.id];
-    if (last) {
-      input.className = "order-input " + (last.ok ? "ok" : "err");
-      msg.className = "msg " + (last.ok ? "ok" : "err");
-      msg.textContent = last.text;
-    }
-    if (ex && ex.approved_by_coordinator) {
-      input.readOnly = true;
-      input.title = "Погоджено координатором — зміни недоступні";
-    }
-    input.addEventListener("input", function () { delete msgs[m.id]; input.className = "order-input"; msg.textContent = ""; msg.className = "msg"; });
-    input.addEventListener("keydown", function (e) {
-      if (e.key !== "Enter") return;
-      e.preventDefault();
-      submit(m, input);
-    });
-    const order = Api.findOrder(ordersByMeasure[m.id], Api.orderNumber(ex)) ||
-      (registryMode ? Api.findOrder(allOrders, Api.orderNumber(ex)) : null);
-    return el("div", {}, [
-      input,
-      msg,
-      order ? el("div", { class: "order-title" }, [Api.docLink(order.document_url, order.title)]) : null,
-    ]);
-  }
-
-  // ---------- сповіщення (дзвіночок) ----------
-
-  // Що потребує уваги за обраний період: прострочено, строк ≤ 30 днів, повернуто на доопрацювання.
-  // Заходи, уже подані на розгляд або виконані, не турбують.
-  function renderNotifs() {
-    const out = [];
-    programs.forEach(function (p) {
-      (measuresByProg[p.id] || []).forEach(function (m) {
-        const st = Api.statusOf(executions[m.id]);
-        if (st === "done" || st === "review") return;
-        const which = p.id + " · " + Api.measureNo(m) + " " + m.description;
-        const go = function () { goTo(p, m); };
-        if (st === "rework") out.push({ lvl: "rework", rank: 1, what: "Повернуто на доопрацювання", which: which, go: go });
-        const d = daysLeft(m);
-        if (d === null) return;
-        if (d < 0) out.push({ lvl: "late", rank: 0, days: d, what: "Прострочено на " + -d + " дн.", which: which, go: go });
-        else if (d <= 30) out.push({ lvl: "soon", rank: 2, days: d, what: d === 0 ? "Строк спливає сьогодні" : "Строк спливає через " + d + " дн.", which: which, go: go });
-      });
-    });
-    alerts.filter(function (a) { return !a.is_read; }).forEach(function (a) {
-      const m = measureById[a.measure_id];
-      const p = m && programs.find(function (x) { return x.id === m.program_id; });
-      out.push({
-        lvl: "review", rank: 1,
-        what: "Змінено наказ № " + a.order_number + " (версія " + a.previous_version_number + " → " + a.new_version_number + ")",
-        which: (m ? (p ? p.id + " · " : "") + Api.measureNo(m) + " " + m.description : a.measure_id) +
-          (a.has_approved_execution ? " · звіт уже погоджено" : ""),
-        go: function () {
-          a.is_read = true;
-          Api.post("/api/order-change-alerts/" + a.id + "/read", {}).catch(function () { /* позначка не критична */ });
-          if (m && p) goTo(p, m); else render();
-        },
-      });
-    });
-    out.sort(function (a, b) { return a.rank - b.rank || (a.days || 0) - (b.days || 0); });
-    Notify.render(out, "Усе гаразд — термінових справ немає.");
-  }
-
-  // Перехід до заходу зі сповіщення: скинути пошук і фільтр, розгорнути гілку, підсвітити рядок.
-  function goTo(p, m) {
-    search.value = "";
-    filterSel.value = "";
-    open.add("p:" + p.id);
-    open.add("s:" + p.id + ":" + m.section_id);
-    render();
-    const row = document.getElementById("row-" + m.id);
-    Notify.flash(row);
-    const input = row && row.querySelector("input");
-    if (input) input.focus({ preventScroll: true });
-  }
-
-  // Перевірка: наказ є в реєстрі саме для цього заходу і не поданий для іншого.
-  function check(m, number) {
-    if (!number) return "Введіть номер наказу";
-    if (registryMode) {
-      const usedElsewhere = Object.keys(executions).some(function (id) {
-        return id !== m.id && Api.normNumber(Api.orderNumber(executions[id])) === Api.normNumber(number);
-      });
-      return usedElsewhere ? "Помилка: наказ № " + number + " уже використано для іншого заходу" : null;
-    }
-    if (!ordersOk) return "Помилка: реєстр наказів недоступний, спробуйте пізніше";
-    const own = Api.findOrder(ordersByMeasure[m.id], number);
-    if (!own) {
-      const elsewhere = Object.keys(ordersByMeasure).some(function (id) {
-        return id !== m.id && Api.findOrder(ordersByMeasure[id], number);
-      });
-      return elsewhere
-        ? "Помилка: наказ № " + number + " стосується іншого заходу"
-        : "Помилка: наказу № " + number + " немає в реєстрі для цього заходу";
-    }
-    const taken = Object.keys(executions).some(function (id) {
-      return id !== m.id && Api.normNumber(Api.orderNumber(executions[id])) === Api.normNumber(number);
-    });
-    if (taken) return "Помилка: наказ № " + number + " уже використано для іншого заходу";
+  function deadlineChip(m) {
+    const d = getDays(m);
+    if (d === null || isApproved(state.executions[m.id])) return null;
+    if (d < 0) return el("span", { class: "chip late", text: "Прострочено на " + (-d) + " дн." });
+    if (d === 0) return el("span", { class: "chip soon", text: "Строк сьогодні" });
+    if (d <= 3) return el("span", { class: "chip soon", text: "Залишилося " + d + " дн. · D3" });
+    if (d <= 7) return el("span", { class: "chip soon", text: "Залишилося " + d + " дн. · D7" });
     return null;
   }
-
-  function fail(m, text) { msgs[m.id] = { ok: false, text: text }; render(); }
-
-  async function submit(m, input) {
-    const number = input.value.replace(/^№\s*/, "").trim();
-    const period = periodSel.value;
-    const ex = executions[m.id];
-    if (ex && ex.approved_by_coordinator) return fail(m, "Уже погоджено координатором — зміни недоступні");
-    const problem = check(m, number);
-    if (problem) return fail(m, problem);
-
-    const order = registryMode ? { number: number } : Api.findOrder(ordersByMeasure[m.id], number);
-    input.disabled = true;
-    try {
-      if (registryMode) {
-        const problem = await submitOrderEvidence(m, number);
-        if (problem) { input.disabled = false; return fail(m, problem); }
-      }
-      const fields = {
-        status: "completed",
-        status_label: "На розгляді",
-        completed_on: Api.today(),
-        result_description: Api.withOrder(ex ? ex.result_description : "", order.number),
-      };
-      executions[m.id] = ex
-        ? await Api.patch(Api.executionUrl(m.id, period), fields)
-        : await Api.post("/api/executions/", Object.assign({ measure_id: m.id, period: period }, fields));
-      msgs[m.id] = { ok: true, text: "Успіх — звіт передано координатору" };
-      render();
-    } catch (err) {
-      input.disabled = false;
-      fail(m, "Помилка: " + err.message);
-    }
+  function measureRow(m) {
+    const ex = state.executions[m.id];
+    const ev = state.evidences[m.id];
+    const st = status(m);
+    const done = isApproved(ex);
+    const statusText = done ? "Погоджено координатором. Редагування заблоковане." :
+      st === "review" ? "Результат подано, очікується перевірка KOORD." :
+      st === "rework" ? "Перевірте зауваження координатора та уточніть результат." :
+      ex ? "Результат можна уточнити до погодження." : "Звіт ще не подано.";
+    const info = el("div", {}, [
+      el("div", { class: "executor-measure-name" }, [
+        el("span", { class: "num", text: Api.measureNo(m) }), document.createTextNode(m.description || m.id),
+      ]),
+      el("div", { class: "executor-measure-meta" }, [
+        el("span", { text: "Код: " + m.id }),
+        m.completion_indicator ? el("span", { text: "Очікуваний результат: " + m.completion_indicator }) : null,
+      ]),
+    ]);
+    const deadline = el("div", {}, [textCell("Строк", deadlineText(m), "executor-deadline-label"), deadlineChip(m)]);
+    const evidence = el("div", {}, [
+      el("span", { class: "m-label", text: "Наказ: " }),
+      el("span", { class: "executor-evidence-label", text: ev ? "№ " + ev.order_number : state.evidenceListAvailable ? "Ще не додано" : "Дані недоступні" }),
+      ev && ev.order_version_is_current === false ? el("div", { class: "chip soon", text: "Наказ оновлено — перевірте" }) : null,
+    ]);
+    const action = el("div", {}, [
+      Api.statusBadge(st), el("span", { class: "executor-status-hint", text: statusText }),
+      !done ? el("button", { type: "button", class: "btn", text: ex ? "Уточнити виконання" : "Внести виконання", onclick: () => openForm(m) }) : null,
+      state.notices[m.id] ? el("div", { class: "msg", text: state.notices[m.id] }) : null,
+    ]);
+    return el("div", { class: "mrow", id: "executor-measure-" + m.id }, [info, deadline, evidence, action]);
   }
-
-  // Новий бекенд: номер наказу — у підтвердному документі; сервер звіряє його з реєстром.
-  // Повертає текст помилки або null.
-  async function submitOrderEvidence(m, number) {
-    const existing = orderEvidence[m.id];
-    const body = {
-      document_type: "Наказ",
-      title: "Наказ № " + number,
-      order_number: number,
-      reference_sha256: await Api.sha256Hex(m.id + "|" + number),
-    };
+  function renderNotifications() {
+    const notices = [];
+    state.measures.forEach((m) => {
+      if (isApproved(state.executions[m.id])) return;
+      const ex = state.executions[m.id];
+      const st = status(m);
+      const p = state.programs.find((p) => p.id === m.program_id);
+      const which = (p ? p.title : m.program_id) + " · " + m.id;
+      const go = () => {
+        search.value = ""; filter.value = ""; programFilter.value = "";
+        openIds.add("p:" + m.program_id); openIds.add("s:" + m.program_id + ":" + m.section_id);
+        render(); const row = $("executor-measure-" + m.id); if (row) Notify.flash(row);
+      };
+      if (st === "rework") notices.push({ lvl: "rework", rank: 1, what: "Потрібне доопрацювання", which, go });
+      if (st === "review") return;
+      const d = getDays(m);
+      if (d === null) return;
+      if (d < 0) notices.push({ lvl: "late", rank: 0, what: "Прострочення: " + (-d) + " днів", which, go });
+      else if (d <= 7) notices.push({ lvl: "soon", rank: 2, what: d === 0 ? "Строк спливає сьогодні" : "До строку: " + d + " днів", which, go });
+    });
+    notices.sort((a, b) => a.rank - b.rank);
+    Notify.render(notices, "Немає заходів із терміновими нагадуваннями.");
+  }
+  function formError(text) {
+    formMessage.textContent = text;
+    formMessage.className = "msg err";
+  }
+  function openForm(m) {
+    if (isApproved(state.executions[m.id])) return;
+    state.edit = m;
+    const ex = state.executions[m.id];
+    const p = state.programs.find((x) => x.id === m.program_id);
+    form.reset();
+    $("execution-title").textContent = "Захід " + Api.measureNo(m);
+    $("execution-context").textContent = (p ? p.title : m.program_id) + " · " + Api.sectionTitle(state.sections, m.section_id) + " · " + Api.periodLabel(period.value);
+    $("execution-description").textContent = m.description || m.id;
+    $("execution-deadline").textContent = deadlineText(m);
+    $("execution-target").textContent = m.indicator_target !== null && m.indicator_target !== undefined ?
+      String(m.indicator_target) + (m.indicator_unit ? " " + m.indicator_unit : "") : m.completion_indicator || "Не визначено";
+    const required = String(m.required_evidence || "").trim();
+    $("execution-evidence-req").hidden = !required;
+    $("execution-evidence-text").textContent = required;
+    form.elements.status.value = ex ? ex.status : "in_progress";
+    form.elements.completed_on.value = ex && ex.completed_on ? ex.completed_on.slice(0, 10) : "";
+    form.elements.indicator_actual.value = ex && ex.indicator_actual != null ? ex.indicator_actual : "";
+    form.elements.result_description.value = ex ? Api.noteOf(ex) : "";
+    form.elements.order_number.value = (state.evidences[m.id] || {}).order_number || "";
+    formMessage.textContent = "";
+    formMessage.className = "msg";
+    saveButton.textContent = ex ? "Оновити виконання" : "Зберегти виконання";
+    dialog.showModal();
+  }
+  async function saveEvidence(m, number) {
+    const existing = state.evidences[m.id];
+    if (!number || (existing && Api.normNumber(existing.order_number) === Api.normNumber(number))) return;
+    const evidenceData = { document_type: "Наказ", title: "Наказ № " + number, order_number: number };
     try {
-      orderEvidence[m.id] = existing
-        ? await Api.patch("/api/evidences/" + encodeURIComponent(existing.id), body)
+      state.evidences[m.id] = existing
+        ? await Api.patch("/api/evidences/" + encodeURIComponent(existing.id), evidenceData)
         : await Api.post("/api/evidences/", Object.assign({
             id: ("E" + Date.now().toString(36) + Math.random().toString(36).slice(2)).slice(0, 12),
             measure_id: m.id,
-          }, body));
-      return null;
+          }, evidenceData));
     } catch (err) {
-      const d = err.body && err.body.detail;
-      if (err.status === 404 && d && d.order_check_status === "not_found") {
-        return "Помилка: наказу № " + number + " немає в реєстрі";
-      }
-      return "Помилка: " + err.message;
+      // Якщо наказ відсутній у orders або у нього немає версії — не повідомляємо про успішне підтвердження.
+      throw new Error("Наказ не збережено: " + errorText(err) + ". Перевірте номер і наявність файла наказу в реєстрі.");
     }
   }
-
+  async function submit(event) {
+    event.preventDefault();
+    const m = state.edit;
+    if (!m) return;
+    const prev = state.executions[m.id];
+    if (prev && prev.approved_by_coordinator) { formError("Погоджене виконання заблоковане."); return; }
+    if (!form.reportValidity()) return;
+    const s = form.elements.status.value;
+    const desc = form.elements.result_description.value.trim();
+    const completed = form.elements.completed_on.value || null;
+    const number = form.elements.order_number.value.trim();
+    if (s === "completed" && !completed) { formError("Укажіть фактичну дату виконання."); return; }
+    if (!desc) { formError("Додайте опис результату або причину невиконання."); return; }
+    if (number && !state.evidenceListAvailable) {
+      formError("Список підтверджень недоступний. Щоб не створити дублікат, перевірте доступ до /api/evidences/ і повторіть спробу.");
+      return;
+    }
+    const body = {
+      status: s, status_label: STATUS_LABELS[s],
+      completed_on: completed, result_description: desc,
+      indicator_actual: form.elements.indicator_actual.value.trim() === "" ? null : Number(form.elements.indicator_actual.value),
+    };
+    saveButton.disabled = true;
+    saveButton.textContent = "Збереження…";
+    formMessage.textContent = "";
+    let evidenceSaved = false;
+    try {
+      const oldEvidence = state.evidences[m.id];
+      if (number && (!oldEvidence || Api.normNumber(oldEvidence.order_number) !== Api.normNumber(number))) {
+        await saveEvidence(m, number);
+        evidenceSaved = true;
+      }
+      state.executions[m.id] = prev
+        ? await Api.patch(Api.executionUrl(m.id, period.value), body)
+        : await Api.post("/api/executions/", Object.assign({ measure_id: m.id, period: period.value }, body));
+      dialog.close();
+      toast("Виконання збережено. Погодження координатором — окремий крок.");
+      render();
+      // Перечитати стан із сервера, не покладаючись лише на локальну відповідь PATCH/POST.
+      await refresh(false);
+    } catch (err) {
+      formError("Не вдалося завершити збереження: " + errorText(err) +
+        (evidenceSaved ? " Підтвердження вже додано, але запис виконання не збережено. Виправте помилку й повторіть спробу." : ""));
+    } finally {
+      saveButton.disabled = false;
+      saveButton.textContent = prev ? "Оновити виконання" : "Зберегти виконання";
+    }
+  }
+  async function init() {
+    if (!await Api.requireRole("VYK")) return;
+    contextInfo();
+    await refresh(false);
+  }
+  search.addEventListener("input", render);
+  filter.addEventListener("change", render);
+  programFilter.addEventListener("change", render);
+  period.addEventListener("change", () => refresh(false));
+  $("executor-refresh").addEventListener("click", () => refresh(true));
+  document.querySelectorAll(".executor-stat[data-stat-filter]").forEach((b) => {
+    b.addEventListener("click", () => { filter.value = b.dataset.statFilter; render(); $("executor-list-title").scrollIntoView({ behavior: "smooth", block: "start" }); });
+  });
+  form.addEventListener("submit", submit);
+  $("execution-close").addEventListener("click", () => dialog.close());
+  $("execution-cancel").addEventListener("click", () => dialog.close());
+  dialog.addEventListener("close", () => { state.edit = null; });
   init();
 })();

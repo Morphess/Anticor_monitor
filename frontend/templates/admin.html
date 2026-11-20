@@ -2,152 +2,213 @@
 {% block title %}Адміністрування{% endblock %}
 {% block role_name %}Адміністратор{% endblock %}
 {% block content %}
-<section class="unit">
-  <div>
-    <p class="label">Адміністрування</p>
-    <h1>Користувачі та підрозділи</h1>
-  </div>
-</section>
-<div class="tabs" role="tablist">
-  <button type="button" role="tab" aria-selected="true" data-tab="users">Користувачі</button>
-  <button type="button" role="tab" aria-selected="false" data-tab="departments">Підрозділи</button>
-</div>
+<link rel="stylesheet" href="/static/css/admin-dropdown-overlay.css?v=3">
+<link rel="stylesheet" href="/static/css/admin-ux.css?v=4">
+<div id="admin-toast-stack" class="toast-container position-fixed top-0 end-0 p-3" aria-label="Сповіщення" aria-live="polite"></div>
+<div class="admin-workspace">
+  <nav class="tabs admin-tabs" role="tablist" aria-label="Розділи адміністрування">
+    <button type="button" role="tab" id="tab-users" aria-selected="true" aria-controls="panel-users" data-tab="users">Користувачі</button>
+    <button type="button" role="tab" id="tab-departments" aria-selected="false" aria-controls="panel-departments" data-tab="departments">Підрозділи</button>
+  </nav>
 
-<section data-panel="users">
-  <div class="toolbar">
-    <label class="field grow">Пошук
-      <input id="user-search" type="search" autocomplete="off" placeholder="Логін, ID, роль, підрозділ, посада або програма">
-    </label>
-    <label class="field">Роль
-      <select id="user-role-filter">
-        <option value="">Усі ролі</option>
-        <option value="VYK">Виконавець</option><option value="KOORD">Координатор програми</option>
-          <option value="KER">Керівник</option><option value="ANAL">Аналітик</option><option value="ADMIN">Адміністратор</option>
-      </select>
-    </label>
-    <label class="field">Підрозділ
-      <select id="user-dept-filter"><option value="">Усі підрозділи</option><option value="-">Без підрозділу</option></select>
-    </label>
-    <button class="btn btn-dark" type="button" id="user-create-open">Новий користувач</button>
-  </div>
-  <div class="pager pager-top" id="user-pager-top"></div>
-  <div id="user-edit-msg" class="msg" role="status"></div>
-  <div class="table-wrap">
-    <table class="grid">
-      <thead><tr><th>ID</th><th>Логін</th><th>Роль</th><th>Підрозділ</th><th>Посада</th><th>Програма</th><th><span class="sr-only">Дія</span></th></tr></thead>
-      <tbody id="users"></tbody>
-    </table>
-  </div>
-  <div class="pager" id="user-pager"></div>
-
-  <dialog id="user-create-dialog" aria-labelledby="user-create-title">
-  <form id="user-form">
-    <h2 id="user-create-title">Новий користувач</h2>
-    <div class="form-grid">
-      <label class="field">Логін<input name="login" required minlength="3" pattern="[A-Za-z0-9_.\-]+"></label>
-      <label class="field">Пароль (від 12 символів)<input name="password" type="password" required minlength="12" autocomplete="new-password"></label>
+  <section id="panel-users" role="tabpanel" aria-labelledby="tab-users" data-panel="users">
+    <div class="toolbar admin-toolbar">
+      <label class="field grow">Пошук
+        <input id="user-search" type="search" autocomplete="off" placeholder="Логін, ID, роль, підрозділ або посада">
+      </label>
       <label class="field">Роль
-        <select name="role_id">
-          <option value="VYK">Виконавець</option><option value="KOORD">Координатор програми</option>
-          <option value="KER">Керівник</option><option value="ANAL">Аналітик</option><option value="ADMIN">Адміністратор</option>
+        <select id="user-role-filter">
+          <option value="">Усі ролі</option>
+          <option value="VYK">Виконавець</option><option value="MAIN_KOORD">Головний координатор</option>
+          <option value="KOORD">Координатор підрозділу</option><option value="KER">Керівник</option>
+          <option value="ANAL">Аналітик</option><option value="ADMIN">Адміністратор</option>
         </select>
       </label>
-      <label class="field">Підрозділ<select name="department_id"><option value="">— Не призначено —</option></select></label>
-      <label class="field">Посада<input name="position"></label>
-    </div>
-    <div id="user-msg" class="msg" role="status"></div>
-    <div class="dialog-actions">
-      <button class="btn btn-dark" type="submit">Створити користувача</button>
-      <button class="btn" type="button" data-close>Скасувати</button>
-    </div>
-  </form>
-  </dialog>
-  <dialog id="user-edit-dialog" aria-labelledby="user-edit-title">
-    <form id="user-edit-form">
-      <h2 id="user-edit-title">Редагувати користувача</h2>
-      <p class="muted small" id="user-edit-id"></p>
-      <div class="form-grid">
-        <label class="field">Логін<input name="login" required minlength="3" maxlength="100" pattern="[A-Za-z0-9_.\-]+"></label>
-        <label class="field">Роль
-          <select name="role_id" required>
-            <option value="VYK">Виконавець</option><option value="KOORD">Координатор програми</option>
-            <option value="KER">Керівник</option><option value="ANAL">Аналітик</option><option value="ADMIN">Адміністратор</option>
-          </select>
-        </label>
-        <label class="field">Підрозділ<select name="department_id"><option value="">— Не призначено —</option></select></label>
-        <label class="field">Посада<input name="position"></label>
-        <label class="field">Новий пароль (необов’язково)<input name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password"></label>
-      </div>
-      <p id="user-edit-hint" class="muted small hidden"></p>
-      <div id="user-edit-error" class="msg err hidden" role="alert"></div>
-      <div class="dialog-actions">
-        <button class="btn btn-dark" type="submit">Зберегти зміни</button>
-        <button class="btn" type="button" id="user-edit-cancel">Скасувати</button>
-      </div>
-    </form>
-  </dialog>
-</section>
-
-<section data-panel="departments" class="hidden">
-  <div class="toolbar">
-    <label class="field grow">Пошук
-      <input id="department-search" type="search" autocomplete="off" placeholder="Код, назва, тип або примітки">
-    </label>
-    <label class="field">Тип
-      <select id="department-type-filter"><option value="">Усі типи</option></select>
-    </label>
-    <button class="btn btn-dark" type="button" id="department-create-open">Новий підрозділ</button>
-  </div>
-  <div class="pager pager-top" id="department-pager-top"></div>
-  <div id="department-edit-msg" class="msg" role="status"></div>
-  <div class="table-wrap">
-    <table class="grid">
-      <thead><tr><th>Код</th><th>Назва</th><th>Тип</th><th>Підпорядкованість</th><th>Примітки</th><th><span class="sr-only">Дія</span></th></tr></thead>
-      <tbody id="departments"></tbody>
-    </table>
-  </div>
-  <div class="pager" id="department-pager"></div>
-
-  <dialog id="department-create-dialog" aria-labelledby="department-create-title">
-  <form id="department-form">
-    <h2 id="department-create-title">Новий підрозділ</h2>
-    <div class="form-grid">
-      <label class="field">Код<input name="id" required maxlength="10" pattern="[A-Za-z0-9_\-]+" placeholder="P15"></label>
-      <label class="field">Назва<input name="name" required maxlength="200"></label>
-      <label class="field">Тип підрозділу<input name="department_type" required maxlength="50" placeholder="Департамент"></label>
-      <label class="field">Підпорядкованість
-        <select name="parent_id"><option value="">— Верхній рівень (не підпорядкований) —</option></select>
-        <span class="hint">Вищий відділ чи управління, якому підпорядковується підрозділ</span>
+      <label class="field">Підрозділ
+        <select id="user-dept-filter"><option value="">Усі підрозділи</option><option value="-">Без підрозділу</option></select>
       </label>
-      <label class="field">Примітки<input name="notes" maxlength="1000"></label>
+      <button class="btn btn-dark admin-add-btn" type="button" id="user-create-open">+ Новий користувач</button>
     </div>
-    <div id="department-msg" class="msg" role="status"></div>
-    <div class="dialog-actions">
-      <button class="btn btn-dark" type="submit">Створити підрозділ</button>
-      <button class="btn" type="button" data-close>Скасувати</button>
+    <div class="admin-list-head">
+      <span id="users-count" role="status" aria-live="polite">Завантаження користувачів…</span>
+      <div class="pager pager-top" id="user-pager-top"></div>
     </div>
-  </form>
-  </dialog>
-  <dialog id="department-edit-dialog" aria-labelledby="department-edit-title">
-    <form id="department-edit-form">
-      <h2 id="department-edit-title">Редагувати підрозділ</h2>
-      <p class="muted small" id="department-edit-id"></p>
-      <div class="form-grid">
-        <label class="field">Назва<input name="name" required maxlength="200"></label>
-        <label class="field">Тип підрозділу<input name="department_type" required maxlength="50"></label>
-        <label class="field">Підпорядкованість
-        <select name="parent_id"><option value="">— Верхній рівень (не підпорядкований) —</option></select>
-        <span class="hint">Вищий відділ чи управління, якому підпорядковується підрозділ</span>
+    <div class="table-wrap admin-table-wrap">
+      <table class="grid admin-table" aria-label="Список користувачів">
+        <thead><tr><th scope="col">ID</th><th scope="col">Логін</th><th scope="col">Роль</th><th scope="col">Підрозділ</th><th scope="col">Посада</th><th scope="col">Дії</th></tr></thead>
+        <tbody id="users"><tr><td colspan="6" class="muted">Завантаження…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="pager" id="user-pager"></div>
+
+    <dialog id="user-create-dialog" class="admin-modal" aria-labelledby="user-create-title">
+      <form id="user-form" novalidate>
+        <div class="admin-dialog-header">
+          <h2 id="user-create-title">Новий користувач</h2>
+          <p class="muted small">Створіть обліковий запис і визначте його роль та підрозділ.</p>
+        </div>
+        <div class="form-grid admin-form-grid">
+          <label class="field"><span class="admin-field-label">Логін <span class="admin-required">*</span></span>
+            <input name="login" required minlength="3" maxlength="100" pattern="[A-Za-z0-9_.\-]+" autocomplete="off" placeholder="Наприклад, vyk.p15">
+            <span class="hint">Латинські літери, цифри, крапка, _ та -</span>
+          </label>
+          <div class="field admin-password-field">
+            <label for="admin-create-password">Пароль <span class="admin-required">*</span></label>
+            <div class="admin-password-wrap"><input id="admin-create-password" name="password" type="password" required minlength="12" maxlength="128" autocomplete="new-password" placeholder="Щонайменше 12 символів"><button type="button" class="admin-password-toggle" data-password-target="admin-create-password" aria-label="Показати пароль" aria-pressed="false">Показати</button></div>
+            <span class="hint" data-password-hint="admin-create-password">Мінімум 12 символів</span>
+          </div>
+          <label class="field"><span class="admin-field-label">Роль <span class="admin-required">*</span></span>
+            <select name="role_id" required>
+              <option value="VYK">Виконавець</option><option value="MAIN_KOORD">Головний координатор</option>
+              <option value="KOORD">Координатор підрозділу</option><option value="KER">Керівник</option>
+              <option value="ANAL">Аналітик</option><option value="ADMIN">Адміністратор</option>
+            </select>
+          </label>
+          <label class="field"><span class="admin-field-label">Підрозділ <span class="admin-required" data-dept-required>*</span></span>
+            <select name="department_id"><option value="">— Не призначено —</option></select>
+            <span class="hint" data-role-department-hint>Для виконавця, координатора й керівника підрозділ обов'язковий.</span>
+          </label>
+          <label class="field admin-full-row">Посада
+            <input name="position" maxlength="250" placeholder="Наприклад, спеціаліст із внутрішнього контролю">
+          </label>
+        </div>
+        <div id="user-msg" class="msg err hidden" role="alert"></div>
+        <div class="dialog-actions admin-dialog-actions">
+          <button class="btn btn-dark" type="submit">Створити користувача</button>
+          <button class="btn" type="button" data-close>Скасувати</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="user-edit-dialog" class="admin-modal" aria-labelledby="user-edit-title">
+      <form id="user-edit-form" novalidate>
+        <div class="admin-dialog-header"><h2 id="user-edit-title">Редагувати користувача</h2><p class="muted small" id="user-edit-id"></p></div>
+        <div class="form-grid admin-form-grid">
+          <label class="field"><span class="admin-field-label">Логін <span class="admin-required">*</span></span>
+            <input name="login" required minlength="3" maxlength="100" pattern="[A-Za-z0-9_.\-]+" autocomplete="off">
+          </label>
+          <label class="field"><span class="admin-field-label">Роль <span class="admin-required">*</span></span>
+            <select name="role_id" required>
+              <option value="VYK">Виконавець</option><option value="MAIN_KOORD">Головний координатор</option>
+              <option value="KOORD">Координатор підрозділу</option><option value="KER">Керівник</option>
+              <option value="ANAL">Аналітик</option><option value="ADMIN">Адміністратор</option>
+            </select>
+          </label>
+          <label class="field"><span class="admin-field-label">Підрозділ <span class="admin-required" data-dept-required>*</span></span>
+            <select name="department_id"><option value="">— Не призначено —</option></select>
+            <span class="hint" data-role-department-hint></span>
+          </label>
+          <label class="field">Посада<input name="position" maxlength="250"></label>
+          <div class="field admin-full-row admin-password-field">
+            <label for="admin-edit-password">Новий пароль (необов'язково)</label>
+            <div class="admin-password-wrap"><input id="admin-edit-password" name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password" placeholder="Залиште порожнім, щоб не змінювати"><button type="button" class="admin-password-toggle" data-password-target="admin-edit-password" aria-label="Показати пароль" aria-pressed="false">Показати</button></div>
+            <span class="hint" data-password-hint="admin-edit-password">Не змінюється, якщо поле порожнє</span>
+          </div>
+        </div>
+        <p id="user-edit-hint" class="muted small hidden"></p>
+        <div id="user-edit-error" class="msg err hidden" role="alert"></div>
+        <div class="dialog-actions admin-dialog-actions">
+          <button class="btn btn-dark" type="submit">Зберегти зміни</button>
+          <button class="btn" type="button" id="user-edit-cancel">Скасувати</button>
+        </div>
+      </form>
+    </dialog>
+  </section>
+
+  <section id="panel-departments" role="tabpanel" aria-labelledby="tab-departments" data-panel="departments" class="hidden">
+    <div class="toolbar admin-toolbar">
+      <label class="field grow">Пошук
+        <input id="department-search" type="search" autocomplete="off" placeholder="Код, назва, тип або примітки">
       </label>
-        <label class="field">Примітки<input name="notes" maxlength="1000"></label>
+      <label class="field">Тип
+        <select id="department-type-filter"><option value="">Усі типи</option></select>
+      </label>
+      <button class="btn btn-dark admin-add-btn" type="button" id="department-create-open">+ Новий підрозділ</button>
+    </div>
+    <div class="admin-list-head admin-department-head">
+      <span id="departments-count" role="status" aria-live="polite">Завантаження підрозділів…</span>
+      <div class="admin-view-actions" role="group" aria-label="Режим перегляду підрозділів">
+        <button type="button" class="btn admin-view-btn" id="dept-view-table" aria-pressed="true">Таблиця</button>
+        <button type="button" class="btn admin-view-btn" id="dept-view-tree" aria-pressed="false">Дерево</button>
       </div>
-      <div id="department-edit-error" class="msg err hidden" role="alert"></div>
-      <div class="dialog-actions">
-        <button class="btn btn-dark" type="submit">Зберегти зміни</button>
-        <button class="btn" type="button" id="department-edit-cancel">Скасувати</button>
+    </div>
+    <div id="department-table-area">
+      <div class="pager pager-top" id="department-pager-top"></div>
+      <div class="table-wrap admin-table-wrap">
+        <table class="grid admin-table" aria-label="Таблиця підрозділів">
+          <thead><tr><th scope="col">Код</th><th scope="col">Назва</th><th scope="col">Тип</th><th scope="col">Підпорядкованість</th><th scope="col">Примітки</th><th scope="col">Дії</th></tr></thead>
+          <tbody id="departments"><tr><td colspan="6" class="muted">Завантаження…</td></tr></tbody>
+        </table>
       </div>
-    </form>
+      <div class="pager" id="department-pager"></div>
+    </div>
+    <div id="department-tree-area" class="hidden admin-tree-area">
+      <div class="admin-tree-toolbar"><span class="muted small">Натисни на стрілку, щоб розгорнути підрозділи</span><div><button type="button" class="btn" id="dept-expand-all">Розгорнути все</button><button type="button" class="btn" id="dept-collapse-all">Згорнути все</button></div></div>
+      <div id="department-tree" class="admin-tree" role="tree" aria-label="Ієрархія підрозділів"></div>
+    </div>
+
+    <dialog id="department-create-dialog" class="admin-modal" aria-labelledby="department-create-title">
+      <form id="department-form" novalidate>
+        <div class="admin-dialog-header"><h2 id="department-create-title">Новий підрозділ</h2><p class="muted small">Код повинен бути унікальним. Залежні підрозділи створюють дерево організації.</p></div>
+        <div class="form-grid admin-form-grid">
+          <label class="field"><span class="admin-field-label">Код <span class="admin-required">*</span></span>
+            <input name="id" required maxlength="10" pattern="[A-Za-z0-9_\-]+" autocomplete="off" placeholder="Наприклад, P16">
+          </label>
+          <label class="field"><span class="admin-field-label">Назва <span class="admin-required">*</span></span>
+            <input name="name" required maxlength="200" placeholder="Повна назва підрозділу">
+          </label>
+          <label class="field"><span class="admin-field-label">Тип підрозділу <span class="admin-required">*</span></span>
+            <input name="department_type" required maxlength="50" placeholder="Наприклад, Департамент">
+          </label>
+          <label class="field">Підпорядкованість
+            <select name="parent_id"><option value="">— Верхній рівень —</option></select>
+            <span class="hint">Вибери батьківський підрозділ або залиш верхній рівень.</span>
+          </label>
+          <label class="field admin-full-row">Примітки
+            <textarea name="notes" maxlength="1000" rows="2" placeholder="Необов'язково"></textarea>
+          </label>
+        </div>
+        <div id="department-msg" class="msg err hidden" role="alert"></div>
+        <div class="dialog-actions admin-dialog-actions">
+          <button type="submit" class="btn btn-dark">Створити підрозділ</button>
+          <button type="button" class="btn" data-close>Скасувати</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="department-edit-dialog" class="admin-modal" aria-labelledby="department-edit-title">
+      <form id="department-edit-form" novalidate>
+        <div class="admin-dialog-header"><h2 id="department-edit-title">Редагувати підрозділ</h2><p class="muted small" id="department-edit-id"></p></div>
+        <div class="form-grid admin-form-grid">
+          <label class="field"><span class="admin-field-label">Назва <span class="admin-required">*</span></span><input name="name" required maxlength="200"></label>
+          <label class="field"><span class="admin-field-label">Тип підрозділу <span class="admin-required">*</span></span><input name="department_type" required maxlength="50"></label>
+          <label class="field">Підпорядкованість
+            <select name="parent_id"><option value="">— Верхній рівень —</option></select>
+            <span class="hint">Неможливо обрати цей підрозділ або його нащадків.</span>
+          </label>
+          <label class="field admin-full-row">Примітки<textarea name="notes" maxlength="1000" rows="2"></textarea></label>
+        </div>
+        <div id="department-edit-error" class="msg err hidden" role="alert"></div>
+        <div class="dialog-actions admin-dialog-actions">
+          <button type="submit" class="btn btn-dark">Зберегти зміни</button>
+          <button type="button" class="btn" id="department-edit-cancel">Скасувати</button>
+        </div>
+      </form>
+    </dialog>
+  </section>
+
+  <dialog id="admin-delete-dialog" class="admin-confirm-dialog" aria-labelledby="admin-delete-title" aria-describedby="admin-delete-details">
+    <div class="admin-dialog-header"><h2 id="admin-delete-title">Підтвердження видалення</h2></div>
+    <p id="admin-delete-details"></p>
+    <p class="muted small">Видалення неможливо скасувати. Пов'язані записи можуть заблокувати цю операцію.</p>
+    <div class="dialog-actions admin-dialog-actions">
+      <button type="button" class="btn admin-confirm-danger" id="admin-delete-confirm">Так, видалити</button>
+      <button type="button" class="btn" id="admin-delete-cancel">Скасувати</button>
+    </div>
   </dialog>
-</section>
+</div>
 {% endblock %}
-{% block scripts %}<script src="/static/js/admin.js?v=9"></script>{% endblock %}
+{% block scripts %}
+<script src="/static/js/admin-widgets.js?v=3"></script>
+<script src="/static/js/admin.js?v=17"></script>
+{% endblock %}

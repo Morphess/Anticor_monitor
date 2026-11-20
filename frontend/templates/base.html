@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Моніторинг антикорупційної програми{% endblock %} · Border Group</title>
   <script>try { var t = localStorage.getItem("anticor_theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
-  <link rel="stylesheet" href="/static/css/monitor.css">
+  <link rel="stylesheet" href="/static/css/monitor.css?v=adapt2">
+  <link rel="stylesheet" href="/static/css/role-ux.css?v=adapt2">
 </head>
 <body>
   {% macro brand_logo() %}
@@ -43,7 +44,7 @@
     <div id="page-error" class="alert hidden" role="alert"></div>
     {% block content %}{% endblock %}
   </main>
-  <script src="/static/js/api.js?v=2"></script>
+  <script src="/static/js/api.js?v=adapt2"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

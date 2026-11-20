@@ -568,3 +568,125 @@ dialog { border-color: var(--line-strong); }
   .brand-sub { display: none; }
   .brand-word { font-size: 16px; }
 }
+
+/* === Кабінет ADMIN: компактні Bootstrap-подібні списки та toast ===
+   Відокремлено від основних стилів для збереження двох тем.
+   Не залежить від CDN, працює і без bootstrap.bundle.min.js. */
+#admin-toast-stack.toast-container {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 30000;
+  width: min(380px, calc(100vw - 32px));
+  display: grid;
+  gap: 10px;
+  pointer-events: none;
+}
+#admin-toast-stack .admin-toast {
+  display: block;
+  opacity: 1;
+  pointer-events: auto;
+  border: 1px solid var(--line-strong);
+  border-left: 4px solid var(--review);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: 0 12px 35px rgba(0, 0, 0, .22);
+  overflow: hidden;
+  font-size: 13px;
+}
+#admin-toast-stack .admin-toast-success { border-left-color: var(--ok); }
+#admin-toast-stack .admin-toast-danger { border-left-color: var(--bad); }
+#admin-toast-stack .admin-toast-warning { border-left-color: var(--warn); }
+#admin-toast-stack .toast-header { display: flex; align-items: center; gap: 12px; padding: 9px 12px 4px; background: transparent; color: var(--ink); }
+#admin-toast-stack .toast-header strong { flex: 1; }
+#admin-toast-stack .toast-body { padding: 2px 12px 12px; overflow-wrap: anywhere; }
+#admin-toast-stack .admin-toast-close { border: 0; border-radius: 3px; padding: 0 4px; line-height: 1.1; font-size: 22px; color: var(--muted); background: none; cursor: pointer; }
+#admin-toast-stack .admin-toast-close:hover { color: var(--ink); }
+.admin-native-select { display: none !important; }
+.field .admin-search-select, .admin-search-select { position: relative; width: 100%; min-width: 0; }
+.admin-search-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  padding: 7px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  background: var(--surface);
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.admin-search-trigger:hover { border-color: var(--faint); }
+.admin-search-trigger:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.admin-search-chosen { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-search-trigger.dropdown-toggle::after { content: ""; flex: 0 0 auto; border: 4px solid transparent; border-top-color: currentColor; transform: translateY(2px); }
+.admin-search-select .admin-search-menu.dropdown-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 1100;
+  width: max(100%, 240px);
+  max-width: min(460px, 90vw);
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 10px 24px rgba(0,0,0,.24);
+  background: var(--surface);
+  color: var(--ink);
+}
+.admin-search-select .admin-search-menu.show { display: block; }
+.admin-search-select.admin-search-up .admin-search-menu { top: auto; bottom: calc(100% + 4px); }
+.admin-search-input {
+  display: block;
+  width: 100%;
+  min-width: 0 !important;
+  height: 36px !important;
+  padding: 7px 9px;
+  margin: 0 0 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 13px;
+}
+.admin-search-options {
+  max-height: 216px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.admin-search-option.dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  cursor: pointer;
+}
+.admin-search-option:hover, .admin-search-option:focus { background: var(--sunken); outline: none; }
+.admin-search-option.selected { color: var(--ok); font-weight: 700; }
+.admin-search-empty { padding: 8px 10px; margin: 0; font-size: 13px; color: var(--muted); }
+.admin-row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.admin-row-actions .btn { min-height: 32px; padding: 5px 9px; }
+.admin-delete-btn { border-color: var(--bad); color: var(--bad); }
+.admin-delete-btn:hover { background: var(--bad-bg); }
+@media (max-width: 640px) {
+  #admin-toast-stack.toast-container { top: 8px; right: 8px; width: calc(100vw - 16px); }
+  .admin-search-select .admin-search-menu.dropdown-menu { max-width: min(360px, 90vw); width: 100%; }
+}

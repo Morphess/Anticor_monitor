@@ -1,0 +1,71 @@
+/* Кабінет VYK: лише локальні стилі, не змінює інші ролі. */
+.executor-page { --ex-border: var(--line); --ex-bg: var(--surface); --ex-soft: var(--sunken); }
+.executor-hero { align-items: center; padding-bottom: 20px; margin-bottom: 18px; }
+.executor-subtitle { margin: 9px 0 0; max-width: 760px; color: var(--muted); font-size: 13.5px; line-height: 1.55; }
+.executor-overview { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 24px; }
+.executor-stat { text-align: left; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; padding: 15px 17px; border: 1px solid var(--ex-border); border-radius: var(--radius); background: var(--ex-bg); color: var(--ink); cursor: pointer; box-shadow: var(--shadow); }
+.executor-stat:hover { border-color: var(--line-strong); background: var(--ex-soft); }
+.executor-stat[aria-pressed="true"] { border-color: var(--brand); box-shadow: inset 3px 0 0 var(--brand); }
+.executor-stat > span { color: var(--muted); font-size: 12px; }
+.executor-stat strong { display: block; font-size: 29px; margin: 6px 0; line-height: 1.1; font-variant-numeric: tabular-nums; font-weight: 700; }
+.executor-stat small { color: var(--muted); font-size: 11.5px; line-height: 1.35; }
+.executor-panel { min-width: 0; }
+.executor-panel-heading { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin: 0 0 14px; }
+.executor-panel-heading h2 { margin: 0 0 4px; font-size: 19px; }
+.executor-panel-heading p { margin: 0; }
+.executor-list-count { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.executor-toolbar { gap: 10px 12px; margin-bottom: 8px; }
+.executor-toolbar .field { flex: 0 1 195px; min-width: 0; }
+.executor-toolbar .field.grow { flex: 2 1 260px; }
+.executor-toolbar input, .executor-toolbar select { width: 100%; }
+.executor-period-note { margin: 4px 0 15px; }
+.executor-page .prog { margin-bottom: 12px; }
+.executor-page .prog > .row-head { grid-template-columns: 12px minmax(0,1fr) auto; }
+.executor-page .prog > .row-head .title { overflow-wrap: anywhere; }
+.executor-page .sec > .row-head { grid-template-columns: 12px minmax(0,1fr) auto; }
+.executor-page .mrow { grid-template-columns: minmax(0,1.6fr) minmax(120px,.6fr) minmax(145px,.8fr) minmax(150px,.75fr); gap: 14px; padding: 15px 18px 15px 40px; align-items: start; }
+.executor-page .mrow.head { padding-top: 9px; padding-bottom: 9px; }
+.executor-page .mrow > * { min-width: 0; }
+.executor-measure-name { font-weight: 560; line-height: 1.45; overflow-wrap: anywhere; }
+.executor-measure-meta { margin-top: 7px; display: flex; flex-wrap: wrap; gap: 4px 9px; color: var(--muted); font-size: 12px; }
+.executor-page .mrow .btn { white-space: normal; width: 100%; text-align: center; margin-top: 10px; padding: 7px 9px; }
+.executor-page .mrow .chip { display: inline-block; }
+.executor-page .executor-status-hint { display: block; margin-top: 6px; color: var(--muted); font-size: 11.5px; line-height: 1.4; }
+.executor-page .executor-deadline-label { font-size: 13px; }
+.executor-page .executor-evidence-label { font-size: 12.5px; overflow-wrap: anywhere; }
+.executor-page .executor-empty { padding: 38px 22px; border: 1px dashed var(--line-strong); border-radius: var(--radius); text-align: center; background: var(--ex-bg); }
+.executor-page .executor-empty h3 { margin: 0 0 7px; font-size: 16px; }
+.executor-page .executor-empty p { margin: 0; color: var(--muted); font-size: 13px; }
+.executor-page .executor-inline-error { padding: 12px 14px; border: 1px solid var(--bad); border-radius: var(--radius); margin-bottom: 16px; color: var(--bad); }
+.executor-page .executor-dialog { width: min(780px, calc(100% - 24px)); max-width: 780px; max-height: min(780px, calc(100dvh - 28px)); overflow: hidden; padding: 0; }
+.executor-dialog form { display: flex; flex-direction: column; max-height: min(780px, calc(100dvh - 30px)); }
+.executor-dialog-header { display: flex; gap: 18px; justify-content: space-between; align-items: flex-start; padding: 20px 24px 12px; border-bottom: 1px solid var(--line); }
+.executor-dialog-header h2 { margin: 0 0 6px; }
+.executor-eyebrow { margin: 0 0 5px; text-transform: uppercase; color: var(--muted); font-size: 10.5px; letter-spacing: .08em; }
+.executor-dialog-header .small { margin: 0; }
+.executor-dialog-close { width: 30px; min-width: 30px; height: 30px; border: 1px solid var(--line); background: none; color: var(--ink); cursor: pointer; font-size: 21px; border-radius: var(--radius-sm); }
+.executor-dialog-scroll { overflow-y: auto; flex: 1; min-height: 0; padding: 16px 24px 20px; overscroll-behavior: contain; }
+.executor-measure-desc { line-height: 1.55; font-size: 14px; margin: 0 0 15px; white-space: pre-line; }
+.executor-info-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; margin-bottom: 14px; }
+.executor-info-grid > div { display: flex; flex-direction: column; gap: 6px; background: var(--sunken); padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.executor-info-grid span { color: var(--muted); font-size: 11.5px; }
+.executor-info-grid strong { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.executor-evidence-req { border-left: 3px solid var(--brand); padding: 10px 14px; background: var(--sunken); margin-bottom: 16px; font-size: 12.5px; }
+.executor-evidence-req p { margin: 5px 0 0; line-height: 1.5; }
+.executor-form-grid { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 15px; }
+.executor-form-grid .field, .executor-description-field { min-width: 0; }
+.executor-form-grid .field small, .executor-description-field small { color: var(--muted); line-height: 1.4; font-size: 11.5px; }
+.executor-field-label { display: inline-flex; align-items: baseline; gap: 4px; flex-wrap: wrap; }
+.executor-required { display: inline; color: var(--brand); }
+.executor-dialog .field { line-height: 1.5; }
+.executor-dialog .field input, .executor-dialog .field select, .executor-dialog .field textarea { width: 100%; }
+.executor-description-field { margin: 14px 0; }
+.executor-form-note { color: var(--muted); background: var(--sunken); padding: 10px 12px; border-radius: var(--radius-sm); font-size: 12px; line-height: 1.5; }
+.executor-dialog-actions { padding: 12px 24px 16px; background: var(--surface); border-top: 1px solid var(--line); margin: 0; }
+.executor-toast-stack { position: fixed; z-index: 11000; top: 76px; right: 18px; display: flex; flex-direction: column; gap: 8px; pointer-events: none; max-width: min(380px, calc(100vw - 32px)); }
+.executor-toast { pointer-events: auto; display: flex; gap: 12px; align-items: start; justify-content: space-between; padding: 13px 15px; background: var(--surface); border: 1px solid var(--line-strong); border-left: 3px solid var(--ok); border-radius: var(--radius); box-shadow: var(--shadow); font-size: 13px; }
+.executor-toast[data-kind="error"] { border-left-color: var(--bad); }
+.executor-toast button { background: none; color: var(--ink); border: 0; font-size: 18px; cursor: pointer; }
+.executor-page button:focus-visible, .executor-dialog button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+@media (max-width: 900px) { .executor-overview { grid-template-columns: repeat(2, minmax(0,1fr)); } .executor-page .mrow { grid-template-columns: minmax(0,1fr) minmax(130px,.65fr); padding-left: 20px; } .executor-page .mrow.head { display: none; } .executor-page .mrow .m-label { display: inline; } }
+@media (max-width: 560px) { .executor-hero { align-items: start; } .executor-overview { gap: 8px; } .executor-stat { padding: 12px; } .executor-stat strong { font-size: 24px; } .executor-panel-heading { align-items: start; flex-direction: column; gap: 5px; } .executor-toolbar .field, .executor-toolbar .field.grow { flex: 1 1 100%; } .executor-page .prog > .row-head { padding: 12px 10px; gap: 8px; } .executor-page .sec > .row-head { padding: 11px 10px 11px 18px; gap: 8px; } .executor-page .mrow { grid-template-columns: minmax(0,1fr); padding: 12px 14px 14px 20px; gap: 9px; } .executor-page .mrow > div { padding-bottom: 5px; } .executor-form-grid { grid-template-columns: minmax(0,1fr); } .executor-info-grid { grid-template-columns: minmax(0,1fr); } .executor-dialog-header { padding: 15px 16px 12px; } .executor-dialog-scroll { padding: 13px 16px; } .executor-dialog-actions { padding: 12px 16px; } }

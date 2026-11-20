@@ -16,6 +16,7 @@
   <button type="button" role="tab" aria-selected="true" data-tab="overview">Огляд</button>
   <button type="button" role="tab" aria-selected="false" data-tab="programs">Програми <span class="muted" id="tab-programs-n"></span></button>
   <button type="button" role="tab" aria-selected="false" data-tab="recs">Рекомендації <span class="muted" id="tab-recs-n"></span></button>
+  <button type="button" role="tab" aria-selected="false" data-tab="risk-flags">Risk Flags <span class="muted" id="tab-risk-flags-n"></span></button>
   <button type="button" role="tab" aria-selected="false" data-tab="risks">Ризики <span class="muted" id="tab-risks-n"></span></button>
   <button type="button" role="tab" aria-selected="false" data-tab="depts">За підрозділами <span class="muted" id="tab-depts-n"></span></button>
 </div>
@@ -62,6 +63,12 @@
   <div class="pager" id="recs-pager"></div>
 </section>
 
+<section data-panel="risk-flags" class="hidden" aria-label="Risk Flags для керівника">
+  <div class="role-card"><h2>Risk Flags і сигнали управлінського контролю</h2>
+    <p class="small muted">Керівник бачить тільки сигнали, включені сервером до /api/management/recommendations. Прямий доступ до /api/risk-flags/ для ролі KER відсутній.</p>
+    <div id="manager-risk-flags" class="role-risk-list"></div>
+  </div>
+</section>
 <section data-panel="risks" class="hidden">
   <div class="toolbar">
     <label class="field grow">Пошук
@@ -108,4 +115,4 @@
   <div class="pager" id="depts-pager"></div>
 </section>
 {% endblock %}
-{% block scripts %}<script src="/static/js/manager.js?v=6"></script>{% endblock %}
+{% block scripts %}<script src="/static/js/manager.js?v=8"></script>{% endblock %}
