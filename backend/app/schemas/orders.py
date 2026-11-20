@@ -60,3 +60,4 @@ class OrderAnalysisRead(BaseModel):
     model: str
     analysis: str
     text_truncated: bool
+    output_truncated: bool = False

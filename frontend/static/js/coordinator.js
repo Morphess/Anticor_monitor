@@ -247,12 +247,13 @@
                         disabled:state?.pending||false});
                       analyze.addEventListener('click',async()=>{
                         if(analysisStates.get(key)?.pending)return;
-                        analysisStates.set(key,{pending:true,message:'Порівнюємо наказ зі змістом заходу…'});
+                        analysisStates.set(key,{pending:true,message:'Порівнюємо наказ зі змістом заходу… На CPU це може тривати кілька хвилин.'});
                         render();
                         try{
                           const data=await Api.post('/api/executions/'+encodeURIComponent(ex.id)+'/analyze');
                           analysisStates.set(key,{pending:false,message:data.analysis+
                             (data.text_truncated?'\nПроаналізовано частину документа.':'')+
+                            (data.output_truncated?'\nДосягнуто ліміту відповіді моделі. Висновок може бути неповним.':'')+
                             '\nВерсія наказу: '+data.order_version_id+'. Рішення про погодження приймає координатор.'});
                         }catch(err){
                           analysisStates.set(key,{pending:false,message:'Помилка аналізу: '+err.message});

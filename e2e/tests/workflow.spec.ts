@@ -171,3 +171,16 @@ errorTest('analysis error remains visible after polling', async ({ page, request
   await poll;
   await expect(result).toContainText('Помилка аналізу:');
 });
+
+
+test('analysis warns when the model reaches its output limit', async ({ page, request }) => {
+  expect((await request.post('http://model-stub:11434/limit')).ok()).toBeTruthy();
+  const { button, result } = await openAnalysisCard(page, request);
+  const response = page.waitForResponse(r => new URL(r.url()).pathname.endsWith('/analyze'));
+  await button.click();
+  const reply = await response;
+  expect(reply.status()).toBe(200);
+  expect((await reply.json()).output_truncated).toBe(true);
+  await expect(result).toContainText('Досягнуто ліміту відповіді моделі');
+  await expect(result).toContainText('Висновок може бути неповним');
+});
