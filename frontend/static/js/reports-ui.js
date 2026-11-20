@@ -21,8 +21,73 @@
       const actionsBar = make('div', {class:'report-toolbar-actions'});
       actionsBar.append(preview,generate,reload);
       controls.append(label,actionsBar);
-      root.replaceChildren(controls,note,summary,list);
+      const edits = make('div',{class:'mb-3', 'aria-live':'polite'});
+      root.replaceChildren(controls,note,summary,edits,list);
       let active = 0;
+      const notesByMeasure = new Map();
+      let editableProgram = '';
+      let editablePeriod = '';
+      function clearReportEdits() {
+        notesByMeasure.clear();
+        edits.replaceChildren();
+        editableProgram = '';
+        editablePeriod = '';
+      }
+      function patchNote(measureId, key, value) {
+        const note = notesByMeasure.get(measureId) || {measure_id:measureId};
+        note[key] = value;
+        notesByMeasure.set(measureId, note);
+      }
+      function textInput(labelText, initialValue, handler, multiline) {
+        const container = make('label',{class:'d-block mb-2'});
+        container.appendChild(make('span',{class:'small text-secondary d-block mb-1',text:labelText}));
+        const field = multiline
+          ? make('textarea',{class:'form-control form-control-sm',rows:2})
+          : make('input',{class:'form-control form-control-sm',type:labelText==='Фактична дата виконання'?'date':'number'});
+        field.value = initialValue == null ? '' : String(initialValue);
+        field.addEventListener('input',()=>handler(field.value));
+        container.appendChild(field);
+        return container;
+      }
+      function renderCoordinatorEdits(data) {
+        clearReportEdits();
+        editableProgram = data.program_id;
+        editablePeriod = data.period;
+        const all = (data.sections || []).flatMap(s=>(s.measures||[]).map(m=>({...m, section_number:s.number})));
+        const wrapper=make('div',{class:'role-card'});
+        wrapper.appendChild(make('h3',{text:'Дані звіту — заповнює координатор'}));
+        wrapper.appendChild(make('p',{class:'small muted',text:'Додайте фактичні результати, дати та показники. Це не змінює подання виконавців і не погоджує накази. Натисніть «Сформувати версію», щоб зафіксувати ці дані в новому звіті.'}));
+        all.forEach(m=>{
+          const section=make('details',{class:'border-bottom py-2'});
+          section.appendChild(make('summary',{text:(m.measure_id||'')+' · '+(m.measure_description||'Захід')}));
+          const fields=make('div',{class:'pt-2'});
+          fields.appendChild(make('p',{class:'small muted',text:'Стан за погодженнями: '+m.execution_status+(m.approved_by_coordinator?' · Погоджено':' · Не всі виконання погоджено')}));
+          if(m.approved_by_coordinator && m.execution_status!=='Строк виконання заходу не настав'){
+            const choice = make('select',{class:'form-select form-select-sm mb-2'});
+            ['Виконано','Частково виконано','Не виконано'].forEach(t=>choice.appendChild(make('option',{value:t,text:t})));
+            choice.value = ['Виконано','Частково виконано','Не виконано'].includes(m.execution_status)?m.execution_status:'Не виконано';
+            choice.addEventListener('change',()=>patchNote(m.measure_id,'execution_status',choice.value));
+            fields.appendChild(make('span',{class:'small text-secondary d-block mb-1',text:'Фактичний стан виконання'}));
+            fields.appendChild(choice);
+          }
+          fields.appendChild(textInput('Опис результату або пояснення причин невиконання',m.result_description||'',
+            v=>patchNote(m.measure_id,'result_description',v),true));
+          if(m.approved_by_coordinator){
+            fields.appendChild(textInput('Фактична дата виконання',m.factual_date||'',
+              v=>patchNote(m.measure_id,'factual_date',v||null),false));
+          }
+          if(m.section_number===3){
+            fields.appendChild(textInput('Кількість осіб на навчанні',m.participants_count,
+              v=>patchNote(m.measure_id,'participants_count',v===''?null:Number(v)),false));
+          } else if(m.indicator_target!=null){
+            fields.appendChild(textInput('Фактичний показник',m.indicator_actual,
+              v=>patchNote(m.measure_id,'indicator_actual',v===''?null:Number(v)),false));
+          }
+          section.appendChild(fields);
+          wrapper.appendChild(section);
+        });
+        edits.replaceChildren(wrapper);
+      }
       function fillPrograms() {
         const current = select.value;
         const programs = programsFn() || [];
@@ -71,7 +136,7 @@
             const body=make('div',{class:'report-version-summary'});body.append(make('strong',{text:'Версія '+report.version}),make('p',{class:'small muted m-0',text:statusLabel(report.status)+' · '+Api.periodLabel(report.period)+' · ID '+report.id}));
             const actions=make('div',{class:'report-version-actions'});
             const view=make('button',{type:'button',class:'btn btn-sm btn-outline-secondary',text:'Переглянути'});
-            view.addEventListener('click',async()=>{try{info('Завантаження вмісту…');const payload=await Api.get('/api/reports/'+report.id+'/content');present(payload,'Звіт №'+report.id);info('Вміст збереженої версії.');}catch(err){info(err.message,true);}});
+            view.addEventListener('click',async()=>{try{info('Завантаження вмісту…');const payload=await Api.get('/api/reports/'+report.id+'/content');clearReportEdits();present(payload,'Звіт №'+report.id);info('Вміст збереженої версії.');}catch(err){info(err.message,true);}});
             actions.appendChild(view);
             if(report.status!=='draft'){
               const pdf=make('button',{type:'button',class:'btn btn-sm btn-outline-primary',text:'PDF'});
@@ -82,11 +147,11 @@
               html.addEventListener('click',()=>Api.downloadProtected('/api/reports/'+report.id+'/print','report-'+report.id+'.html').catch(err=>info(err.message,true)));
               actions.append(pdf,csv,html);
               if(report.status==='generated'){
-                const send=make('button',{type:'button',class:'btn btn-sm btn-primary',text:'Подати звіт'});
+                const send=make('button',{type:'button',class:'btn btn-sm btn-primary',text:'Позначити як поданий'});
                 send.addEventListener('click',async()=>{
-                  if(!confirm('Подати збережену версію звіту №'+report.id+'? Після подання її не можна редагувати.'))return;
+                  if(!confirm('Ви вже подали цей звіт через офіційний портал НАЗК? Ця кнопка лише фіксує статус у Anticor_monitor; передавання до НАЗК НЕ відбувається.'))return;
                   send.disabled=true;
-                  try{await Api.patch('/api/reports/'+report.id,{status:'submitted'});await renderList();info('Звіт №'+report.id+' подано.');}
+                  try{await Api.patch('/api/reports/'+report.id,{status:'submitted'});await renderList();info('Звіт №'+report.id+' позначено як поданий у Anticor_monitor. До НАЗК файл автоматично не передано.');}
                   catch(err){info(err.message,true);send.disabled=false;}
                 });actions.appendChild(send);
               }
@@ -98,17 +163,17 @@
       preview.addEventListener('click',async()=>{
         if(!select.value)return;
         preview.disabled=true;info('Розрахунок попереднього звіту…');
-        try{const data=await Api.get('/api/reports/preview?'+qs({program_id:select.value,period:periodFn()}));present(data,'Попередній перегляд');info('Попередній розрахунок не створює запис у базі.');}
+        try{const data=await Api.get('/api/reports/preview?'+qs({program_id:select.value,period:periodFn()}));present(data,'Попередній перегляд');renderCoordinatorEdits(data);info('Відредагуйте звітні дані нижче або сформуйте версію без правок.');}
         catch(err){info(err.message,true);}finally{preview.disabled=false;}
       });
       generate.addEventListener('click',async()=>{
         if(!select.value)return;
         if(!confirm('Сформувати нову незмінну версію звіту для '+Api.periodLabel(periodFn())+'?'))return;
         generate.disabled=true;info('Формування нової версії…');
-        try{const report=await Api.post('/api/reports/auto-generate?'+qs({program_id:select.value,period:periodFn()}));info('Створено звіт №'+report.id+' · версія '+report.version);await renderList();}
+        try{const payload = (editableProgram===select.value && editablePeriod===periodFn()) ? {overrides:Array.from(notesByMeasure.values())} : {overrides:[]}; const report=await Api.post('/api/reports/auto-generate?'+qs({program_id:select.value,period:periodFn()}),payload);clearReportEdits();info('Створено звіт №'+report.id+' · версія '+report.version);await renderList();}
         catch(err){info(err.message,true);}finally{generate.disabled=false;}
       });
-      select.addEventListener('change',()=>{summary.replaceChildren();renderList();});
+      select.addEventListener('change',()=>{clearReportEdits();summary.replaceChildren();renderList();});
       reload.addEventListener('click',renderList);
       return {refresh:async function(){fillPrograms();await renderList();}};
     }

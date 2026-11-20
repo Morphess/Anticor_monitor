@@ -7,6 +7,7 @@ from .section import Section
 from .user import User
 from .order import Order
 from .risk import Risk
+from .risk_assessment import RiskAssessment
 from .risk_measurement import RiskMeasurement
 from .measure import Measure, MeasureCollaborator
 from .execution import Execution

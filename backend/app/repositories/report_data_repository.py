@@ -1,6 +1,8 @@
 """Читання вихідних даних звіту, без авторизації та бізнес-логіки."""
 from __future__ import annotations
 
+from collections import defaultdict
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -9,8 +11,10 @@ from app.models.execution import Execution
 from app.models.measure import Measure
 from app.models.order_version import OrderVersion
 from app.models.program import Program
+from app.models.program_workflow import MeasureAssignment
+from app.models.user import User
 from app.models.section import Section
-from app.services.execution_summary import summaries, assignments_for, summary_for
+from app.services.execution_summary import summary_for
 
 
 class ReportDataRepository:
@@ -28,41 +32,73 @@ class ReportDataRepository:
             return []
         return list(self.db.scalars(select(Measure).where(Measure.id.in_(ids))))
 
-    def executions(self, ids: set[str], period: str,
-                   allowed_users: dict[str, set[int]] | None = None) -> dict:
-        """The KOORD scope is fixed server-side, never supplied by the browser."""
+    def _active_users(self, ids: set[str], allowed_users: dict[str, set[int]] | None):
         if not ids:
             return {}
-        rows = list(self.db.scalars(select(Execution).where(
-            Execution.measure_id.in_(ids), Execution.period == period
-        )))
+        assigned = defaultdict(set)
+        # Only live VYK personnel actually in the assignment's department.
+        for mid, user_id in self.db.execute(
+            select(MeasureAssignment.measure_id, MeasureAssignment.user_id)
+            .join(User, User.id == MeasureAssignment.user_id)
+            .where(MeasureAssignment.measure_id.in_(ids),
+                   User.department_id == MeasureAssignment.department_id,
+                   User.role_id == "VYK")
+        ):
+            assigned[mid].add(user_id)
         if allowed_users is None:
-            return summaries(self.db, ids, period, rows)
-        return {mid: result for mid in ids
-                if (result := summary_for(mid, period, rows, allowed_users.get(mid, set()))) is not None}
+            return dict(assigned)
+        # Narrow to current actual assignments, never merely requested user ids.
+        return {mid: assigned.get(mid, set()) & allowed_users.get(mid, set()) for mid in ids}
 
-    def evidence_counts(self, ids: set[str], period: str,
-                        allowed_users: dict[str, set[int]] | None = None) -> dict[str, int]:
-        """Legacy schema field: count linked order documents, NOT removed Evidence rows.
+    def _valid_approval(self, row: Execution) -> bool:
+        if row.status != "approved" or row.document_changed or not row.order_version_id:
+            return False
+        version = self.db.get(OrderVersion, row.order_version_id)
+        return bool(version and version.order_id == row.order_id
+                    and version.sha256 == row.submitted_sha256)
 
-        Count approved, pinned documents belonging to currently assigned executors.
-        One measure may have several documents (one for each executor).
-        Byte-level integrity is separately checked before approval and by the scanner.
-        """
+    def executions(
+        self, ids: set[str], period: str,
+        allowed_users: dict[str, set[int]] | None = None,
+    ) -> dict:
         if not ids:
             return {}
-        active = allowed_users if allowed_users is not None else assignments_for(self.db, ids)
-        # Count exact current assignments, not old/revoked executor submissions.
-        matched = list(self.db.scalars(select(Execution).where(
+        active = self._active_users(ids, allowed_users)
+        rows = self.db.scalars(select(Execution).where(
+            Execution.measure_id.in_(ids), Execution.period == period,
+        )).all()
+        grouped = defaultdict(list)
+        for row in rows:
+            if row.submitted_by_user_id not in active.get(row.measure_id, set()):
+                continue
+            # An invalid approved order must not be counted as approved.
+            if row.status == "approved" and not self._valid_approval(row):
+                continue
+            grouped[row.measure_id].append(row)
+        result = {}
+        for mid in ids:
+            item = summary_for(mid, period, grouped[mid], active.get(mid, set()))
+            if item is not None:
+                result[mid] = item
+        return result
+
+    def evidence_counts(
+        self, ids: set[str], period: str,
+        allowed_users: dict[str, set[int]] | None = None,
+    ) -> dict[str, int]:
+        if not ids:
+            return {}
+        active = self._active_users(ids, allowed_users)
+        rows = self.db.scalars(select(Execution).where(
             Execution.measure_id.in_(ids), Execution.period == period,
             Execution.status == "approved", Execution.document_changed.is_(False),
             Execution.order_version_id.is_not(None),
-        )))
-        return {mid: sum(1 for row in matched if row.measure_id == mid
-                         and row.submitted_by_user_id in active.get(mid, set())
-                         and (version := self.db.get(OrderVersion, row.order_version_id)) is not None
-                         and version.order_id == row.order_id and version.sha256 == row.submitted_sha256)
-                for mid in ids}
+        )).all()
+        counts = defaultdict(int)
+        for row in rows:
+            if row.submitted_by_user_id in active.get(row.measure_id, set()) and self._valid_approval(row):
+                counts[row.measure_id] += 1
+        return dict(counts)
 
     def departments(self, ids: set[str]) -> dict[str, str]:
         if not ids:

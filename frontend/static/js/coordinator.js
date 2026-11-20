@@ -12,6 +12,60 @@
     $('coord-toast-message').textContent=text;box.classList.remove('hidden');box.dataset.kind=isError?'error':'success';setTimeout(()=>box.classList.add('hidden'),6500);
   };
   const fail=err=>{Api.showError(err);notice(err.message||String(err),true);};
+  // Завантаження одного перевіреного наказу без вкладки чи модального вікна.
+  // Оригінальну назву та розширення беремо з Content-Disposition від FastAPI.
+  function coordOriginalFilename(disposition, fallback, contentType) {
+    let name = '';
+    const encoded = /filename\*\s*=\s*(?:UTF-8'')?([^;]+)/i.exec(disposition || '');
+    if (encoded) {
+      try { name = decodeURIComponent(encoded[1].trim().replace(/^"|"$/g, '')); } catch (_) {}
+    }
+    if (!name) {
+      const quoted = /filename\s*=\s*"([^"]+)"/i.exec(disposition || '');
+      const unquoted = /filename\s*=\s*([^;\s]+)/i.exec(disposition || '');
+      name = quoted ? quoted[1] : (unquoted ? unquoted[1] : '');
+    }
+    name = String(name || '').split(/[\\/]/).pop().replace(/[\x00-\x1f<>:"|?*]/g, '_');
+    if (name) return name;
+    const ext = {'application/pdf':'.pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document':'.docx',
+      'application/vnd.oasis.opendocument.text':'.odt'}[contentType] || '';
+    return 'Наказ-' + String(fallback || 'документ').replace(/[^\wа-яА-ЯіїєґІЇЄҐ\-]/g,'_') + ext;
+  }
+
+  async function downloadCoordinatorOrder(documentPath, orderNumber) {
+    if (typeof documentPath !== 'string' || !documentPath.startsWith('/api/')) {
+      throw new Error('Некоректний маршрут наказу');
+    }
+    const token = Api.token();
+    if (!token) { Api.logout(true); return; }
+    const res = await fetch(documentPath, {
+      headers: {Authorization: 'Bearer ' + token},
+      credentials: 'same-origin'
+    });
+    if (res.status === 401) { Api.logout(true); return; }
+    if (!res.ok) {
+      let reason = 'Не вдалося завантажити наказ (HTTP ' + res.status + ')';
+      try {
+        const data = await res.json();
+        if (typeof data.detail === 'string') reason = data.detail;
+      } catch (_) {}
+      throw new Error(reason);
+    }
+    const mime = (res.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase();
+    const filename = coordOriginalFilename(res.headers.get('Content-Disposition'), orderNumber, mime);
+    const blobURL = URL.createObjectURL(await res.blob());
+    const link = document.createElement('a');
+    link.href = blobURL;
+    link.download = filename;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    try { link.click(); } finally {
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(blobURL), 60000);
+    }
+  }
+
   function showView(name){
     if(!['programs','risks','reports','documents'].includes(name))return;
     currentView=name;
@@ -233,7 +287,7 @@
                       button.addEventListener('click',cb);rowActions.appendChild(button);
                     };
                     if(ex&&ex.document_api_path){
-                      action('Переглянути наказ',()=>Api.openProtected(ex.document_api_path).catch(fail),'btn-outline-secondary');
+                      action('Переглянути наказ',()=>downloadCoordinatorOrder(ex.document_api_path,ex.order_number).catch(fail),'btn-outline-secondary');
                     }
                     if(ex&&ex.status==='pending'&&!ex.document_changed){
                       action('Погодити',()=>review(m,ex,true),'btn-success');
@@ -421,7 +475,9 @@
   function review(m,ex,approve){
     if(!ex||ex.status!=='pending'||ex.document_changed)return;
     const dlg=$('coord-review-dialog');$('coord-review-title').textContent=approve?'Погодити виконання':'Відхилити подання';
-    $('coord-review-details').textContent='Захід '+m.id+' · Виконавець #'+ex.submitted_by_user_id+' · Наказ № '+ex.order_number+' · '+ex.period;
+    const reviewerAssignment = assigned(m).find(a=>Number(a.user_id)===Number(ex.submitted_by_user_id));
+    const departmentName = reviewerAssignment?.department_id ? Api.deptName(reviewerAssignment.department_id) : 'Не визначено';
+    $('coord-review-details').textContent='Захід '+m.id+' · Підрозділ: '+departmentName+' · Наказ № '+ex.order_number+' · '+ex.period;
     $('coord-review-reason-label').hidden=approve;
     $('coord-review-reason').value='';$('coord-review-reason').required=!approve;
     $('coord-review-message').textContent='';dlg.dataset.execution=String(ex.id);dlg.dataset.approve=approve?'1':'0';

@@ -43,6 +43,10 @@ class RiskBase(BaseModel):
                 f"Неправильний бал ризику. " f"Очікується {expected_score}"
             )
 
+        from app.services.risk_assessment_services import risk_level
+        if self.level != risk_level(expected_score):
+            raise ValueError('Рівень ризику не відповідає P × I')
+
         return self
 
 

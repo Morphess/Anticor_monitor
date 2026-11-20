@@ -26,7 +26,7 @@ from app.models.user import User
 from app.schemas.reports import ReportCreate, ReportRead, ReportUpdate
 from app.services.report_services import ReportError, ReportService
 from app.services.report_pdf import PDFExportError, pdf_export
-from app.schemas.report_portal import PortalHalfYearReport
+from app.schemas.report_portal import PortalHalfYearReport, ReportGenerateRequest
 from app.services.report_generation_service import (
     ReportGenerationService, csv_export, print_html,
 )
@@ -193,12 +193,15 @@ def preview_report(
 def auto_generate_report(
     program_id: str,
     period: str = Query(pattern=r"^\d{4}-H[12]$"),
+    data: ReportGenerateRequest | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(require_report_role),
 ):
     _ensure_program_access(db, user, program_id)
     try:
-        return ReportGenerationService(db).auto_generate(program_id, period, user)
+        return ReportGenerationService(db).auto_generate(
+            program_id, period, user, data.overrides if data else None
+        )
     except ReportError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 

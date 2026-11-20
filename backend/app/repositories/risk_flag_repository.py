@@ -22,6 +22,7 @@ from app.services.execution_summary import summaries, assignments_for
 
 from app.models.deadline_change import DeadlineChange
 from app.models.invalid_order_reference import InvalidOrderReference
+from app.models.user import User
 from app.models.execution import Execution
 from app.models.measure import Measure
 from app.models.risk import Risk
@@ -148,6 +149,16 @@ class RiskFlagRepository:
                 InvalidOrderReference.attempted_at < to_dt,
             )
         ))
+
+        # RF8: журнал зберігає actor_user_id. Підтягуємо логін автора
+        # ЛИШЕ після SQL-відбору заходів, доступних цьому координатору.
+        actor_ids = {item.actor_user_id for item in invalid_order_attempts}
+        actors = {
+            actor.id: actor.login
+            for actor in self.db.scalars(select(User).where(User.id.in_(actor_ids)))
+        } if actor_ids else {}
+        for item in invalid_order_attempts:
+            item.actor_login = actors.get(item.actor_user_id)
 
         return {
             "invalid_order_attempts": invalid_order_attempts,

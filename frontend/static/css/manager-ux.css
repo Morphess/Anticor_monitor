@@ -80,3 +80,24 @@
 #manager-dashboard .mgr-department-card .mgr-muted { line-height:1.55; }
 #manager-dashboard .mgr-department-head { flex-wrap:wrap; }
 #manager-dashboard .mgr-department-head .mgr-count { font-variant-numeric:tabular-nums; }
+
+
+/* Read-only assignment progress for each measure in the manager's allowed department tree. */
+#manager-dashboard .mgr-measure-progress { margin:18px 0 4px; border-top:1px solid var(--mgr-line); padding-top:15px; }
+#manager-dashboard .mgr-measure-progress h4 { color:var(--mgr-text); font-size:14px; font-weight:700; margin:0 0 11px; }
+#manager-dashboard .mgr-measure-dept-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+#manager-dashboard .mgr-measure-dept { min-width:0; border:1px solid var(--mgr-line); border-radius:5px; padding:12px 14px; background:var(--mgr-bg); }
+#manager-dashboard .mgr-measure-dept-head { display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:8px; color:var(--mgr-text); }
+#manager-dashboard .mgr-measure-dept-head strong { font-size:13px; overflow-wrap:anywhere; }
+#manager-dashboard .mgr-measure-dept .mgr-count { font-size:12px; }
+#manager-dashboard .mgr-measure-dept p { margin:8px 0 0; font-size:12px; line-height:1.45; }
+#manager-dashboard .mgr-measure-progress-track { margin-top:11px; }
+@media (max-width:850px) { #manager-dashboard .mgr-measure-dept-grid { grid-template-columns:1fr; } }
+
+/* Full programme passport, branch-only execution progress. */
+#manager-dashboard .mgr-status[data-state="outside"] {
+  color: var(--mgr-muted);
+  border-color: var(--mgr-line);
+  white-space: normal;
+  text-align: center;
+}

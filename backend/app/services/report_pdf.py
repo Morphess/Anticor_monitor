@@ -130,7 +130,8 @@ def pdf_export(
         return Paragraph(_safe_text(value, multiline=True) or "—", style)
 
     flow = [
-        Paragraph("Звіт про виконання антикорупційної програми", title_style),
+        Paragraph(_safe_text(snapshot.period_label or "Звіт про виконання антикорупційної програми"), title_style),
+        Paragraph("<b>Орган:</b> " + _safe_text(snapshot.organization_name or "—"), text_style),
         Paragraph(_safe_text(snapshot.program_title), heading_style),
     ]
     status = "Попередній звіт" if snapshot.is_preliminary else "Завершений звітний період"
@@ -174,29 +175,78 @@ def pdf_export(
     ]))
     flow.extend([metric_table, Spacer(1, 6)])
 
-    headers = ["№", "Захід", "Дата виконання", "Стан", "Результат / пояснення", "Погоджено"]
-    col_widths = [width * f for f in (.05, .27, .11, .14, .34, .09)]
+    status_fill = {
+        "Виконано": colors.HexColor("#C6EFCE"),
+        "Частково виконано": colors.HexColor("#FFEB9C"),
+        "Не виконано": colors.HexColor("#FFC7CE"),
+    }
+    risk_fill = colors.HexColor("#E8EEF5")
+    col_widths = [width * f for f in (.05, .37, .11, .13, .34)]
+
+    def labelled(pairs):
+        text = "<br/>".join(
+            f"<b>{_safe_text(label)}</b><br/>{_safe_text(value, multiline=True)}"
+            for label, value in pairs if value
+        )
+        return Paragraph(text or "—", cell_style)
+
+    def measure_cell(measure, number):
+        name = {2: "Найменування заходу", 3: "Навчальний захід"}.get(number, "Опис заходу")
+        who = ("Відповідальні виконавці" if number == 2 else
+               "Найменування структурного підрозділу, відповідального за виконання заходу")
+        pairs = [(name, measure.measure_description),
+                 (who, measure.responsible_department or measure.responsible_department_id),
+                 ("Запланований строк виконання заходу", measure.planned_deadline)]
+        if number == 2:
+            pairs.append(("Індикатор виконання", measure.completion_indicator))
+        return labelled(pairs)
+
     for section in snapshot.sections:
-        flow.append(Paragraph(
-            f"{_safe_text(section.number)}. {_safe_text(section.title)}", heading_style
-        ))
+        flow.append(Paragraph(_safe_text(section.title), heading_style))
+        last = ("Кількість осіб, які взяли участь у навчанні" if section.number == 3
+                else "Опис результату виконання заходу або пояснення причин невиконання")
+        headers = ["№", "Навчальний захід" if section.number == 3 else "Захід",
+                   "Фактичний строк виконання", "Стан виконання", last]
         data = [[paragraph(h, header_style) for h in headers]]
-        for measure in section.measures:
-            description = measure.result_description or "—"
-            if measure.warnings:
-                description += "\nЗауваження: " + "; ".join(measure.warnings)
-            data.append([
-                paragraph(measure.sequence_number if measure.sequence_number is not None else "—", center_style),
-                paragraph(measure.measure_description),
-                paragraph(measure.factual_date.isoformat() if measure.factual_date else "—", center_style),
-                paragraph(measure.execution_status),
-                paragraph(description),
-                paragraph("Так" if measure.approved_by_coordinator else "Ні", center_style),
-            ])
+        styles = []
+        groups = []
+        if section.number == 2:
+            index = {}
+            for measure in section.measures:
+                key = measure.risk.risk_id if measure.risk else None
+                if key not in index:
+                    index[key] = len(groups)
+                    groups.append((measure.risk, []))
+                groups[index[key]][1].append(measure)
+        else:
+            groups = [(None, list(section.measures))]
+        for risk, measures in groups:
+            if risk is not None:
+                data.append([labelled([("Сфера ризику", risk.sphere), ("Назва ризику", risk.title),
+                                       ("Опис ризику", risk.description)]), "", "", "", ""])
+                r = len(data) - 1
+                styles += [("SPAN", (0, r), (-1, r)), ("BACKGROUND", (0, r), (-1, r), risk_fill)]
+            for measure in measures:
+                if section.number == 3:
+                    tail = measure.participants_count if measure.participants_count is not None else "—"
+                else:
+                    tail = measure.result_description or "—"
+                if measure.warnings:
+                    tail = f"{tail}\nЗауваження: " + "; ".join(measure.warnings)
+                data.append([
+                    paragraph(measure.sequence_number if measure.sequence_number is not None else "—", center_style),
+                    measure_cell(measure, section.number),
+                    paragraph(measure.factual_date.strftime("%d.%m.%Y") if measure.factual_date else "—", center_style),
+                    paragraph(measure.execution_status),
+                    paragraph(tail),
+                ])
+                fill = status_fill.get(measure.execution_status)
+                if fill is not None:
+                    r = len(data) - 1
+                    styles.append(("BACKGROUND", (3, r), (3, r), fill))
         if len(data) == 1:
             data.append([paragraph("—", center_style), paragraph("Заходів немає"),
-                         paragraph("—", center_style), paragraph("—"), paragraph("—"),
-                         paragraph("—", center_style)])
+                         paragraph("—", center_style), paragraph("—"), paragraph("—")])
         table = LongTable(
             data, colWidths=col_widths, repeatRows=1, hAlign="LEFT",
             splitByRow=1, splitInRow=1,
@@ -209,7 +259,7 @@ def pdf_export(
             ("RIGHTPADDING", (0, 0), (-1, -1), 7),
             ("TOPPADDING", (0, 0), (-1, -1), 7),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#FBFBFC")]),
+            *styles,
         ]))
         flow.extend([table, Spacer(1, 9)])
 

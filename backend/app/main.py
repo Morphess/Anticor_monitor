@@ -23,6 +23,7 @@ from app.api.departments import router as departments_router
 from app.api.sections import router as sections_router
 from app.api.measures import router as measures_router
 from app.api.risks import router as risks_router
+from app.api.risk_assessments import router as risk_assessments_router
 from app.api.execution import router as execution_router
 from app.api.deadline_changes import router as deadline_changes_router
 from app.api.reports import router as reports_router
@@ -95,6 +96,7 @@ app.include_router(programs_router, prefix="/api")
 app.include_router(sections_router, prefix="/api")
 app.include_router(measures_router, prefix="/api")
 app.include_router(risks_router, prefix="/api")
+app.include_router(risk_assessments_router, prefix="/api")
 app.include_router(execution_router, prefix="/api")
 app.include_router(deadline_changes_router, prefix="/api")
 app.include_router(reports_router, prefix="/api")

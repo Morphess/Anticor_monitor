@@ -125,15 +125,23 @@ def detect_rf8_flags(
     for attempt in invalid_order_attempts:
         day = attempt.attempted_at.date()
         if attempt.measure_id in allowed_ids and period_start <= day <= min(as_of, period_end):
-            rejected[attempt.measure_id].append(attempt.order_number)
+            rejected[attempt.measure_id].append(attempt)
 
     result = []
-    for measure_id, numbers in sorted(rejected.items()):
-        distinct_numbers = ", ".join(sorted(set(numbers)))
+    for measure_id, attempts in sorted(rejected.items()):
+        distinct_numbers = ", ".join(sorted({str(a.order_number) for a in attempts}))
+        # Ім'я/ПІБ не вигадуємо: у users є login, а журнал зберігає ID.
+        # Видалений користувач усе одно ідентифікується через історичний ID.
+        actors = sorted({
+            (str(getattr(a, "actor_login", None) or "Користувач")
+             + " (ID " + str(a.actor_user_id) + ")")
+            for a in attempts
+        })
         result.append(RiskFlagRead(
             code="RF8", object_type="zakhid", object_id=str(measure_id),
             period=period, message=_MESSAGES["RF8"],
-            explanation=f"невдалі спроби: {len(numbers)}; номери: {distinct_numbers}",
+            explanation=(f"невдалі спроби: {len(attempts)}; номери: {distinct_numbers}; "
+                         f"Хто виконав дію: {', '.join(actors)}"),
         ))
     return result
 

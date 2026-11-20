@@ -74,6 +74,8 @@ def update_risk(risk_id: str, data: RiskUpdate,
                 db: Session = Depends(get_db),
                 actor: User = Depends(require_main_coordinator)):
     _owned(db, risk_id, actor)
+    if {'probability_score', 'impact_score', 'score', 'level'} & data.model_fields_set:
+        raise HTTPException(409, detail='Оцінка ризику змінюється лише через /risk-assessments/{risk_id}/drafts')
     try:
         return RiskService(db).update_risk(risk_id, data)
     except RiskError as error:

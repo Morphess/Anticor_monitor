@@ -252,53 +252,88 @@ class ManagementDashboardService:
             ))
         return sorted(items, key=lambda item: (item.deadline_on, item.program_id, item.measure_id))
 
+    @staticmethod
+    def _progress_measure_totals(progress: ManagementDepartmentProgressResponse) -> dict[str, dict[str, int]]:
+        """Sum each assignment exactly once across the KER's own hierarchy."""
+        totals: dict[str, dict[str, int]] = {}
+        for department in progress.departments:
+            for item in department.measures:
+                bucket = totals.setdefault(item.measure_id, dict(
+                    assigned=0, approved=0, pending=0, rejected=0, not_submitted=0))
+                for key in bucket:
+                    bucket[key] += getattr(item, key)
+        return totals
+
+    @staticmethod
+    def _branch_status(totals: dict[str, int] | None) -> str:
+        if not totals or not totals['assigned']:
+            return 'not_started'
+        if totals['approved'] == totals['assigned']:
+            return 'completed'
+        if totals['pending'] or totals['approved']:
+            return 'in_progress'
+        if totals['rejected']:
+            return 'not_completed'
+        return 'not_started'
+
     def dashboard(self, actor, *, program_id: str | None, period: str, as_of: date,
                   upcoming_days: int = 14) -> ManagementSummary:
         ctx = self._context(actor, program_id=program_id, period=period, as_of=as_of)
+        progress = self._progress_from_context(ctx, program_id=program_id)
+        totals = self._progress_measure_totals(progress)
         states = defaultdict(int)
         department_groups = defaultdict(list)
         assigned = self.repo.assigned_units({m.id for m in ctx.measures})
         for measure in ctx.measures:
-            ex = ctx.executions.get(measure.id)
-            state = _execution_outcome(ex)
-            states[state] += 1
+            states[self._branch_status(totals.get(measure.id))] += 1
             dept = measure.responsible_department_id
-            # Захід вищого рівня, доручений відділу гілки, рахуємо за цим відділом.
             if dept not in ctx.branch:
-                units = sorted(assigned.get(measure.id, set()) & ctx.branch)
-                dept = units[0] if units else None
-            # For a collaborator outside the branch, do not reveal the foreign department.
+                scoped_units = sorted(assigned.get(measure.id, set()) & ctx.branch)
+                dept = scoped_units[0] if scoped_units else None
             department_groups[dept].append(measure)
-        deadlines = self._deadlines(ctx, upcoming_days)
+
+        def finished(m):
+            return self._branch_status(totals.get(m.id)) == 'completed'
+
+        def overdue(m):
+            return bool(m.deadline_type == 'date' and m.deadline_on
+                        and m.deadline_on < as_of and not finished(m))
+
+        def soon(m):
+            return bool(m.deadline_type == 'date' and m.deadline_on
+                        and 0 <= (m.deadline_on - as_of).days <= upcoming_days
+                        and not finished(m))
+
         rows = []
-        for dept, measures in sorted(department_groups.items(), key=lambda x: (x[0] is None, x[0] or "")):
+        for dept, measures in sorted(department_groups.items(),
+                                      key=lambda x: (x[0] is None, x[0] or '')):
             rows.append(DepartmentKPI(
                 department_id=dept,
                 department_name=(ctx.department_names.get(dept, dept) if dept is not None
-                                 else "Заходи співвиконання"),
+                                 else 'Заходи співвиконання'),
                 total=len(measures),
-                approved_completed=sum(_approved_completed(ctx.executions.get(m.id)) for m in measures),
-                overdue=sum(_due(m, ctx.executions.get(m.id), as_of) for m in measures),
-                awaiting_approval=sum((ctx.executions[m.id].pending_count if m.id in ctx.executions else 0) for m in measures),
+                approved_completed=sum(finished(m) for m in measures),
+                overdue=sum(overdue(m) for m in measures),
+                awaiting_approval=sum(totals.get(m.id, {}).get('pending', 0) for m in measures),
             ))
-        approved_count = sum(_approved_completed(ctx.executions.get(m.id)) for m in ctx.measures)
+        approved_count = sum(finished(m) for m in ctx.measures)
         risk_items = self._risk_items(ctx)
         count = len(ctx.measures)
         return ManagementSummary(
             department_id=ctx.department_id, department_name=ctx.department_name,
             scope_department_ids=sorted(ctx.branch), program_ids=sorted(ctx.programs),
             period=period, as_of=as_of, total=count,
-            completed=states["completed"], approved_completed=approved_count,
-            partial=states["partial"], in_progress=states["in_progress"],
-            not_completed=states["not_completed"], not_started=states["not_started"],
-            awaiting_approval=sum((ex.pending_count if ex is not None else 0) for ex in ctx.executions.values()),
-            overdue=sum(item.category == "overdue" for item in deadlines),
-            due_soon=sum(item.category == "upcoming" for item in deadlines),
+            completed=states['completed'], approved_completed=approved_count,
+            partial=states['partial'], in_progress=states['in_progress'],
+            not_completed=states['not_completed'], not_started=states['not_started'],
+            awaiting_approval=sum(d.pending for d in progress.departments),
+            overdue=sum(overdue(m) for m in ctx.measures),
+            due_soon=sum(soon(m) for m in ctx.measures),
             approved_completion_percent=round(100 * approved_count / count, 1) if count else 0.0,
-            high_risks=len({r.risk_id for r in risk_items if r.level == "high"}),
-            critical_risks=len({r.risk_id for r in risk_items if r.level == "critical"}),
+            high_risks=len({r.risk_id for r in risk_items if r.level == 'high'}),
+            critical_risks=len({r.risk_id for r in risk_items if r.level == 'critical'}),
             departments=rows,
-            scope="agency" if ctx.agency else "department",
+            scope='agency' if ctx.agency else 'department',
         )
 
     def department_progress(self, actor, *, program_id: str | None, period: str,
@@ -312,6 +347,15 @@ class ManagementDashboardService:
         This endpoint is read-only and never exposes executor identities.
         """
         ctx = self._context(actor, program_id=program_id, period=period, as_of=as_of)
+        return self._progress_from_context(ctx, program_id=program_id)
+
+    def _progress_from_context(self, ctx: Context, *, program_id: str | None
+                               ) -> ManagementDepartmentProgressResponse:
+        """Department-scoped assignment status; also used for KER KPIs.
+
+        Reuses authorization context without repeating all analytical queries.
+        """
+        period = ctx.period
         measure_ids = {m.id for m in ctx.measures}
         groups: dict[str, dict[str, dict]] = {dept: {} for dept in ctx.branch}
         assigned_measures: set[str] = set()
@@ -395,13 +439,17 @@ class ManagementDashboardService:
         )
 
     def programs(self, actor, *, period: str, as_of: date) -> list[ManagementProgram]:
+        # Programme visibility derives from dispatch to the KER's own department,
+        # descendants, or an ancestor whose dispatch covers this branch.
+        # _context still applies the STRICT scope to KPIs/recommendations/risks.
         ctx = self._context(actor, program_id=None, period=period, as_of=as_of)
-        sends = [row for row in self.repo.program_dispatch_rows(set(ctx.programs))
-                 if row[1] in ctx.visible_departments]
-        programs = self.repo.program_rows(set(ctx.programs))
+        visible_program_ids = set(ctx.programs)
+        sends = [row for row in self.repo.program_dispatch_rows(visible_program_ids)
+                 if row[1] in ctx.branch]
+        programs = self.repo.program_rows(visible_program_ids)
         names = self.repo.departments(ctx.branch)
         counts = defaultdict(int)
-        for measure in ctx.measures:
+        for measure in self.repo.full_program_measures(visible_program_ids):
             counts[measure.program_id] += 1
         result = []
         for program in programs:
@@ -424,38 +472,51 @@ class ManagementDashboardService:
 
     def measures(self, actor, *, program_id: str | None, period: str,
                  as_of: date) -> list[ManagementMeasure]:
+        # Authorize *programs* using the routed hierarchy. Do not use
+        # ctx.measures for the catalogue: it is intentionally limited to the
+        # KER's own branch for KPIs, flags and recommendations.
         ctx = self._context(actor, program_id=program_id, period=period, as_of=as_of)
-        sections = self.repo.sections({m.section_id for m in ctx.measures if m.section_id})
-        units = {} if ctx.agency else self.repo.assigned_units({m.id for m in ctx.measures})
-        names = self.repo.departments(ctx.visible_departments)
+        catalogue = self.repo.full_program_measures(set(ctx.programs))
+        scoped_ids = {m.id for m in ctx.measures}
+        branch_totals = self._progress_measure_totals(
+            self._progress_from_context(ctx, program_id=program_id))
+        sections = self.repo.sections({m.section_id for m in catalogue if m.section_id})
+        units = self.repo.assigned_units(scoped_ids)
+        names = self.repo.departments(ctx.branch)
         result = []
-        for measure in ctx.measures:
-            ex = ctx.executions.get(measure.id)
+        for measure in catalogue:
+            in_scope = measure.id in scoped_ids
+            # Only expose approval, submission, actor department or target
+            # values from within the KER's authorized management scope.
+            stats = branch_totals.get(measure.id) if in_scope else None
             section = sections.get(measure.section_id)
             dept = measure.responsible_department_id
-            if dept not in ctx.visible_departments:
-                dept = None  # співвиконання поза гілкою: чужий підрозділ не розкриваємо
+            if dept not in ctx.branch:
+                dept = None
             unit_ids = sorted(u for u in units.get(measure.id, set()) if u in ctx.branch)
             result.append(ManagementMeasure(
                 program_id=measure.program_id,
-                program_title=ctx.programs.get(measure.program_id, measure.program_id),
+                program_title=ctx.programs[measure.program_id],
+                in_scope=in_scope,
                 section_id=measure.section_id,
                 section_number=section.number if section else None,
                 section_title=section.title if section else None,
                 measure_id=measure.id, sequence_number=measure.sequence_number,
                 description=measure.description,
-                responsible_department_id=dept,
-                responsible_department_name=names.get(dept, dept) if dept else None,
+                responsible_department_id=dept if in_scope else None,
+                responsible_department_name=names.get(dept) if in_scope and dept else None,
                 assigned_units=[ManagementUnit(department_id=u, department_name=names.get(u, u))
-                                for u in unit_ids],
+                                for u in unit_ids] if in_scope else [],
                 deadline_type=measure.deadline_type, deadline_on=measure.deadline_on,
                 deadline_description=measure.deadline_description,
-                status=_execution_outcome(ex),
-                approved=bool(ex and ex.approved_by_coordinator),
-                submitted_at=ex.submitted_at if ex else None,
-                completed_on=ex.completed_on if ex else None,
+                status=self._branch_status(stats),
+                approved=self._branch_status(stats) == 'completed',
+                # Dates/actuals from the *global* execution summary might belong
+                # to another department. Never expose those via the KER API.
+                submitted_at=None,
+                completed_on=None,
                 indicator_target=measure.indicator_target,
-                indicator_actual=ex.indicator_actual if ex else None,
+                indicator_actual=None,
             ))
         return result
 

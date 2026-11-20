@@ -419,6 +419,7 @@
     error('mc-measure-error','');show('mc-measure-dialog');
   }
   async function submitMeasure(event){event.preventDefault();error('mc-measure-error','');
+    if(!validateMeasureRiskChoice())return;
     const form=event.currentTarget;const f=measureFields(form);f.section_id=currentSection;
     if(currentProgram){f.program_id=currentProgram;delete f.collaborator_department_ids;}
     else { f.section_id=currentSection; }
@@ -503,29 +504,150 @@
   }
   const riskLevels={low:'Низький',medium:'Середній',high:'Високий',critical:'Критичний'};
   function riskLabel(r){return r.id+' — '+r.title+' · '+(riskLevels[r.level]||r.level);}
+  // Єдине поле пошуку та вибору ризику у формі заходу (тільки MAIN_KOORD).
+  const measureRiskPicker={rows:[],visible:[],active:-1,loading:false,requestId:0};
+  const riskNorm=s=>String(s||'').toLocaleLowerCase('uk-UA').trim();
+  function closeMeasureRiskOptions(){
+    const input=$('mc-measure-risk-input'),list=$('mc-measure-risk-options');
+    if(!input||!list)return;
+    list.hidden=true;
+    input.setAttribute('aria-expanded','false');
+    input.removeAttribute('aria-activedescendant');
+    measureRiskPicker.active=-1;
+  }
+  function chooseMeasureRisk(risk){
+    const input=$('mc-measure-risk-input'),hidden=$('mc-measure-risk-value');
+    hidden.value=risk?.id||'';
+    input.value=risk?.id?riskLabel(risk):'';
+    input.setCustomValidity('');
+    $('mc-measure-risk-hint').textContent=risk?.id?'Обрано: '+risk.id:'Без прив’язки до ризику.';
+    closeMeasureRiskOptions();
+  }
+  function showMeasureRiskOptions(showAll=false){
+    const input=$('mc-measure-risk-input'),list=$('mc-measure-risk-options');
+    if(measureRiskPicker.loading || input.disabled)return;
+    const selected=measureRiskPicker.rows.find(r=>r.id===$('mc-measure-risk-value').value);
+    const query=showAll||(selected&&input.value===riskLabel(selected))?'':riskNorm(input.value);
+    const results=measureRiskPicker.rows.filter(r=>
+      !query||riskNorm(r.id+' '+r.title+' '+(r.process_name||'')).includes(query));
+    // При пошуку першим іде релевантний ризик; за порожнього пошуку — «без прив’язки».
+    measureRiskPicker.visible=query?[...results,null]:[null,...results];
+    measureRiskPicker.active=-1;
+    list.replaceChildren();
+    measureRiskPicker.visible.forEach((risk,index)=>{
+      const item=make('button',{
+        id:'mc-measure-risk-option-'+index,type:'button',role:'option',
+        class:'mc-risk-combo-option','aria-selected':'false',
+        text:risk?riskLabel(risk):'Без прив’язки до ризику',
+      });
+      item.addEventListener('mousedown',e=>e.preventDefault());
+      item.addEventListener('click',()=>chooseMeasureRisk(risk));
+      list.appendChild(item);
+    });
+    if(query&&!results.length)list.prepend(make('div',{class:'mc-risk-combo-empty',text:'Ризиків за запитом немає'}));
+    list.hidden=false;
+    input.setAttribute('aria-expanded','true');
+  }
+  function highlightMeasureRiskOption(){
+    const input=$('mc-measure-risk-input');
+    $('mc-measure-risk-options').querySelectorAll('.mc-risk-combo-option').forEach((item,index)=>{
+      const active=index===measureRiskPicker.active;
+      item.classList.toggle('is-active',active);
+      item.setAttribute('aria-selected',String(active));
+      if(active){
+        input.setAttribute('aria-activedescendant',item.id);
+        item.scrollIntoView({block:'nearest'});
+      }
+    });
+  }
   async function prepareMeasureRisks(_programId='',selectedId=''){
-    const select=$('mc-measure-risk-select'),search=$('mc-measure-risk-search');
-    if(!select)return;
-    const hint=$('mc-measure-risk-hint');
-    search.value=''; select.disabled=false; search.disabled=false;
-    hint.textContent='Завантаження реєстру ризиків…';
-    const risks=await risksOf();
-    const opts=[{id:'',name:'Без прив’язки до ризику'},
-      ...risks.map(r=>({id:r.id,name:riskLabel(r)}))];
-    setSelect(select,opts,selectedId);
-    if(selectedId&&!risks.some(r=>r.id===selectedId))
-      hint.textContent='Обраний раніше ризик більше не доступний у вашому підрозділі.';
-    else hint.textContent=risks.length?'Оберіть ризик зі списку. Пошук працює за назвою та кодом.':
-      'Реєстр ризиків порожній. Відкрийте вкладку «Корупційні ризики».';
+    const requestId=++measureRiskPicker.requestId;
+    const input=$('mc-measure-risk-input'),hidden=$('mc-measure-risk-value');
+    const hint=$('mc-measure-risk-hint'),toggle=$('mc-measure-risk-toggle');
+    measureRiskPicker.rows=[];measureRiskPicker.visible=[];
+    measureRiskPicker.loading=true;
+    input.value='';hidden.value=selectedId||'';
+    input.setCustomValidity('');input.disabled=true;toggle.disabled=true;
+    closeMeasureRiskOptions();
+    hint.textContent='Завантаження ризиків…';
+    try{
+      const risks=await risksOf();
+      if(requestId!==measureRiskPicker.requestId)return;
+      measureRiskPicker.rows=risks;
+      const risk=risks.find(r=>r.id===selectedId);
+      if(risk){input.value=riskLabel(risk);hidden.value=risk.id;}
+      else if(selectedId){
+        input.value=selectedId+' (ризик відсутній у відповіді API)';
+        hidden.value=selectedId; // Не скидаємо стару прив'язку під час редагування.
+      }
+      hint.textContent=selectedId&&!risk?'Попередній ризик не знайдено в отриманому реєстрі.':
+        risks.length?'Доступно ризиків: '+risks.length+'. Шукайте за кодом або назвою.':
+          'Ризиків у відповіді API немає.';
+    }finally{
+      if(requestId===measureRiskPicker.requestId){
+        measureRiskPicker.loading=false;input.disabled=false;toggle.disabled=false;
+      }
+    }
   }
-  async function filterMeasureRisks(){
-    const select=$('mc-measure-risk-select'), selected=select.value;
-    const q=$('mc-measure-risk-search').value.trim().toLocaleLowerCase('uk');
-    const risks=await risksOf();
-    const matches=risks.filter(r=>(r.id+' '+r.title+' '+r.process_name).toLocaleLowerCase('uk').includes(q));
-    setSelect(select,[{id:'',name:'Без прив’язки до ризику'},
-      ...matches.map(r=>({id:r.id,name:riskLabel(r)}))],selected);
+  function validateMeasureRiskChoice(){
+    const input=$('mc-measure-risk-input'),hidden=$('mc-measure-risk-value');
+    if(measureRiskPicker.loading){
+      error('mc-measure-error','Триває завантаження ризиків.');return false;
+    }
+    if(input.value.trim()&&!hidden.value){
+      input.setCustomValidity('Оберіть ризик із випадаючого списку або очистьте поле.');
+      input.reportValidity();return false;
+    }
+    input.setCustomValidity('');return true;
   }
+  // Реальні маршрути з backend/app/api/risk_assessments.py.
+  // Роутер має бути підключений під /api в app.main.
+  const reassessmentAPI = {
+    getRisk: id => {
+      const cached = riskCache.get('department')?.find(r => String(r.id) === String(id));
+      return cached ? Promise.resolve(cached) : risksOf('', true).then(rows => {
+        const found = rows.find(r => String(r.id) === String(id));
+        if (!found) throw new Error('Ризик ' + id + ' відсутній у реєстрі');
+        return found;
+      });
+    },
+    getHistory: id => Api.get('/api/risk-assessments/' + encodeURIComponent(id) + '/history'),
+    getTrend: id => Api.get('/api/risk-assessments/' + encodeURIComponent(id) + '/trend'),
+    createAssessment: (id, data) => Api.post('/api/risk-assessments/' + encodeURIComponent(id) + '/drafts', data),
+    approve: (id, assessmentId, reason) => Api.post('/api/risk-assessments/' + encodeURIComponent(id) + '/drafts/' + encodeURIComponent(assessmentId) + '/approve', {reason}),
+    reject: (id, assessmentId, reason) => Api.post('/api/risk-assessments/' + encodeURIComponent(id) + '/drafts/' + encodeURIComponent(assessmentId) + '/reject', {reason}),
+    baseline: id => Api.post('/api/risk-assessments/' + encodeURIComponent(id) + '/baseline', {}),
+    registerMeasurement: (id, data) => Api.post('/api/risk-assessments/' + encodeURIComponent(id) + '/measurements', data),
+  };
+  let reassessmentRequest = 0;
+  async function openRiskReassessment(risk) {
+    const dialog = $('mc-reassessment-dialog');
+    const host = $('mc-reassessment-host');
+    if (!dialog || !host) return;
+    const request = ++reassessmentRequest;
+    host.replaceChildren();
+    $('mc-reassessment-title').textContent = 'Повторне оцінювання · ' + risk.id;
+    if (!dialog.open) dialog.showModal();
+    if (typeof window.mountRiskReassessment !== 'function') {
+      host.textContent = 'Не завантажено /static/js/risk-reassessment.js';
+      return;
+    }
+    try {
+      await window.mountRiskReassessment({
+        container: host,
+        riskId: risk.id,
+        api: reassessmentAPI,
+        onSaved: async () => {
+          riskCache.clear();
+          if (activeView === 'catalog') await refreshRiskCatalog(true);
+        },
+      });
+      if (request !== reassessmentRequest || !dialog.open) host.replaceChildren();
+    } catch (err) {
+      host.textContent = 'Не вдалося відкрити оцінювання: ' + (err.message || err);
+    }
+  }
+
   async function refreshRiskCatalog(force=false){
     const host=$('mc-risk-catalog-list'), message=$('mc-risk-catalog-message');
     if(!host||!message)return;
@@ -544,7 +666,9 @@
         head.appendChild(make('strong',{text:r.id+' · '+r.title}));
         const actions=make('div',{class:'mc-risk-record-actions'});
         const edit=make('button',{type:'button',class:'btn',text:'Редагувати'});
-        edit.addEventListener('click',()=>openRiskDialog('',r));actions.appendChild(edit);
+         edit.addEventListener('click',()=>openRiskDialog('',r));actions.appendChild(edit);
+         const reassess=make('button',{type:'button',class:'btn btn-dark',text:'Повторно оцінити'});
+         reassess.addEventListener('click',()=>openRiskReassessment(r));actions.appendChild(reassess);
         const del=make('button',{type:'button',class:'btn',text:'Видалити'});
         del.addEventListener('click',()=>deleteRisk(r));actions.appendChild(del);
         head.appendChild(actions);card.appendChild(head);
@@ -626,7 +750,42 @@
     $('mc-risk-search').addEventListener('input',()=>refreshRiskCatalog());
     $('mc-risk-reload').addEventListener('click',()=>refreshRiskCatalog(true));
     $('mc-risk-create').addEventListener('click',()=>openRiskDialog());
-    $('mc-measure-risk-search').addEventListener('input',()=>filterMeasureRisks().catch(err=>error('mc-measure-error',err.message)));
+    // Введення та вибір в одному пошуковому списку.
+    $('mc-measure-risk-input').addEventListener('input',()=>{
+      $('mc-measure-risk-value').value='';
+      $('mc-measure-risk-input').setCustomValidity('');
+      showMeasureRiskOptions();
+    });
+    $('mc-measure-risk-input').addEventListener('focus',()=>showMeasureRiskOptions());
+    $('mc-measure-risk-toggle').addEventListener('click',()=>{
+      const isClosed=$('mc-measure-risk-options').hidden;
+      if(isClosed){$('mc-measure-risk-input').focus();showMeasureRiskOptions(true);}
+      else closeMeasureRiskOptions();
+    });
+    $('mc-measure-risk-input').addEventListener('keydown',event=>{
+      if(event.key==='ArrowDown'||event.key==='ArrowUp'){
+        event.preventDefault();
+        if($('mc-measure-risk-options').hidden)showMeasureRiskOptions();
+        const count=measureRiskPicker.visible.length;
+        if(count){
+          measureRiskPicker.active=(measureRiskPicker.active+(event.key==='ArrowDown'?1:-1)+count)%count;
+          highlightMeasureRiskOption();
+        }
+      }else if(event.key==='Enter'){
+        event.preventDefault();
+        if(!$('mc-measure-risk-options').hidden && measureRiskPicker.visible.length){
+          chooseMeasureRisk(measureRiskPicker.visible[Math.max(0,measureRiskPicker.active)]);
+        }
+      }else if(event.key==='Escape'&&!$('mc-measure-risk-options').hidden){
+        event.preventDefault();event.stopPropagation();closeMeasureRiskOptions();
+      }
+    });
+    document.addEventListener('pointerdown',event=>{
+      if(!$('mc-measure-risk-combo').contains(event.target))closeMeasureRiskOptions();
+    });
+    $('mc-measure-risk-combo').addEventListener('focusout',()=>setTimeout(()=>{
+      if(!$('mc-measure-risk-combo').contains(document.activeElement))closeMeasureRiskOptions();
+    },0));
     $('mc-measure-form').elements.sequence_number.addEventListener('input',validateSequence);
     $('mc-risk-form').elements.probability_score.addEventListener('change',updateRiskScore);
     $('mc-risk-form').elements.impact_score.addEventListener('change',updateRiskScore);

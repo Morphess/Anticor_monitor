@@ -118,6 +118,9 @@ class ManagementProgram(BaseModel):
 class ManagementMeasure(BaseModel):
     program_id: str
     program_title: str
+    # Whether execution and status data are within this KER's own department tree.
+    # Out-of-scope measures remain visible as programme passport entries only.
+    in_scope: bool = True
     section_id: str | None
     section_number: int | None
     section_title: str | None
