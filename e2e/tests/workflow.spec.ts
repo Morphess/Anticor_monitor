@@ -34,10 +34,10 @@ test('executor submits a pinned order, coordinator views and approves it', async
   await login(page, 'pw_executor', '/executor');
   await expect(page.locator('#executor-total')).toHaveText('1');
   await page.getByLabel('Звітний період', { exact: true }).selectOption(PERIOD);
-  await page.getByRole('button', { name: 'Внести виконання', exact: true }).click();
+  await page.getByRole('button', { name: 'Підтвердити виконання', exact: true }).click();
   await page.getByRole('dialog').getByRole('textbox').fill('PW-ORDER-1');
   const submitted = page.waitForResponse(r => r.url().endsWith('/api/executions/submit') && r.request().method() === 'POST');
-  await page.getByRole('button', { name: 'Надіслати на перевірку', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Підтвердити виконання', exact: true }).click();
   const response = await submitted;
   expect(response.status()).toBe(201);
   expect(response.request().postDataJSON()).toEqual({ measure_id: 'PW000001', period: PERIOD, order_number: 'PW-ORDER-1' });
@@ -85,6 +85,6 @@ test('executor submits a pinned order, coordinator views and approves it', async
   }
   await page.reload();
   await expect(page.locator('#executor-approved')).toHaveText('1');
-  await expect(page.getByRole('button', { name: 'Внести виконання', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Підтвердити виконання', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Уточнити виконання', exact: true })).toHaveCount(0);
 });

@@ -13,9 +13,24 @@ class ExecutionSubmit(BaseModel):
     order_number: str = Field(min_length=1, max_length=150)
 
 
+class ExecutionChangeOrder(BaseModel):
+    """Only executor may replace the order for an already pending submission."""
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    order_number: str = Field(min_length=1, max_length=150)
+
+
+class ExecutionReviewGuard(BaseModel):
+    """Prevent approving a different order than the coordinator reviewed."""
+    model_config = ConfigDict(extra="forbid")
+    expected_order_version_id: int | None = None
+    expected_submitted_at: datetime | None = None
+
+
 class ExecutionReject(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     reason: str = Field(min_length=3, max_length=2000)
+    expected_order_version_id: int | None = None
+    expected_submitted_at: datetime | None = None
 
 
 class ExecutionRead(BaseModel):

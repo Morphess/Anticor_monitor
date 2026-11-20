@@ -1,10 +1,14 @@
 """One independent submission, document and review decision per executor."""
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
+from sqlalchemy import select
+from app.models.action_log import ActionLog
+from app.models.execution import Execution
 from sqlalchemy.orm import Session
 from app.database.db_connection import get_db
 from app.models.user import User
-from app.schemas.execution import ExecutionSubmit, ExecutionReject, ExecutionRead, ExecutionStatus
+from app.schemas.execution import (ExecutionSubmit, ExecutionChangeOrder, ExecutionReviewGuard,
+                                   ExecutionReject, ExecutionRead, ExecutionStatus)
 from app.services.execution_services import ExecutionService, ExecutionError
 from app.services.measure_access import (
     require_execution_actor, require_executor, require_department_coordinator,
@@ -58,6 +62,40 @@ def list_executions(measure_id: str | None = None, period: str | None = None,
     )]
 
 
+@router.get('/order-number-changes', summary='KOORD: order number replacement history in own department')
+def order_number_changes(limit: int = Query(50, ge=1, le=100),
+                         db: Session = Depends(get_db),
+                         actor: User = Depends(require_department_coordinator)):
+    """Read from immutable ActionLog entries; separate from file SHA-256 alerts."""
+    measure_ids = visible_measure_ids(db, actor)
+    if not measure_ids or not actor.department_id:
+        return []
+    try:
+        departments = ProgramWorkflowService(db).tree.descendants(actor.department_id)
+    except WorkflowError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    execution_rows = db.scalars(select(Execution).where(
+        Execution.measure_id.in_(measure_ids),
+        Execution.submitted_department_id.in_(departments),
+    )).all()
+    by_id = {str(row.id): row for row in execution_rows}
+    if not by_id:
+        return []
+    events = db.scalars(select(ActionLog).where(
+        ActionLog.entity_type == 'execution',
+        ActionLog.action == 'change_order_number',
+        ActionLog.field_name == 'order_number',
+        ActionLog.entity_id.in_(list(by_id)),
+    ).order_by(ActionLog.occurred_at.desc()).limit(limit)).all()
+    return [{
+        'id': log.id, 'execution_id': row.id, 'measure_id': row.measure_id,
+        'period': row.period, 'submitted_by_user_id': row.submitted_by_user_id,
+        'old_order_number': log.old_value, 'new_order_number': log.new_value,
+        'occurred_at': log.occurred_at.isoformat(),
+        'status_after_change': 'pending', 'current_status': row.status,
+    } for log in events if (row := by_id.get(log.entity_id)) is not None]
+
+
 @router.get('/{execution_id}', response_model=ExecutionRead, summary='Individual submission')
 def get_execution(execution_id: int, db: Session = Depends(get_db),
                   actor: User = Depends(require_execution_actor)):
@@ -86,15 +124,33 @@ def get_document(execution_id: int, which: str = Query('submitted', pattern='^(s
         raise _http(exc) from exc
 
 
+@router.post('/{execution_id}/change-order', response_model=ExecutionRead,
+             summary='VYK: replace own pending order, notify coordinator')
+def change_order(execution_id: int, data: ExecutionChangeOrder,
+                 db: Session = Depends(get_db), actor: User = Depends(require_executor)):
+    svc = ExecutionService(db)
+    try:
+        row = svc.get(execution_id)
+        require_visible_measure(db, actor, row.measure_id)
+        return svc.as_read(svc.change_order(execution_id, data.order_number, actor))
+    except ExecutionError as exc:
+        raise _http(exc) from exc
+
+
 @router.post('/{execution_id}/approve', response_model=ExecutionRead,
              summary='KOORD: approve exactly this executor submission')
-def approve(execution_id: int, db: Session = Depends(get_db),
+def approve(execution_id: int, data: ExecutionReviewGuard | None = None,
+            db: Session = Depends(get_db),
             actor: User = Depends(require_department_coordinator)):
     svc = ExecutionService(db)
     try:
         row = svc.get(execution_id)
         require_visible_measure(db, actor, row.measure_id)
-        return svc.as_read(svc.review(execution_id, actor, approve=True))
+        return svc.as_read(svc.review(
+            execution_id, actor, approve=True,
+            expected_order_version_id=data.expected_order_version_id if data else None,
+            expected_submitted_at=data.expected_submitted_at if data else None,
+        ))
     except ExecutionError as exc:
         raise _http(exc) from exc
 
@@ -107,6 +163,10 @@ def reject(execution_id: int, data: ExecutionReject,
     try:
         row = svc.get(execution_id)
         require_visible_measure(db, actor, row.measure_id)
-        return svc.as_read(svc.review(execution_id, actor, approve=False, reason=data.reason))
+        return svc.as_read(svc.review(
+            execution_id, actor, approve=False, reason=data.reason,
+            expected_order_version_id=data.expected_order_version_id,
+            expected_submitted_at=data.expected_submitted_at,
+        ))
     except ExecutionError as exc:
         raise _http(exc) from exc

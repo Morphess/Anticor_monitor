@@ -138,3 +138,35 @@ class ManagementMeasure(BaseModel):
     completed_on: date | None
     indicator_target: Decimal | None
     indicator_actual: Decimal | None
+
+
+class ManagementMeasureAssignmentProgress(BaseModel):
+    measure_id: str
+    assigned: int
+    approved: int
+    pending: int
+    rejected: int
+    not_submitted: int
+
+
+class ManagementDepartmentProgress(BaseModel):
+    department_id: str
+    department_name: str
+    is_own_department: bool
+    measures_total: int
+    measures_approved: int
+    assigned: int
+    approved: int
+    pending: int
+    rejected: int
+    not_submitted: int
+    measures: list[ManagementMeasureAssignmentProgress] = Field(default_factory=list)
+
+
+class ManagementDepartmentProgressResponse(BaseModel):
+    department_id: str
+    period: str
+    program_id: str | None = None
+    measures_total: int
+    unassigned_measures: int
+    departments: list[ManagementDepartmentProgress] = Field(default_factory=list)

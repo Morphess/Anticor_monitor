@@ -12,6 +12,7 @@ from app.models.user import User
 from app.schemas.management_dashboard import (
     ManagementDeadline, ManagementMeasure, ManagementProgram,
     ManagementRecommendationsResponse, ManagementRisk, ManagementSummary,
+    ManagementDepartmentProgressResponse,
 )
 from app.services.management_dashboard_services import (
     ManagementDashboardError, ManagementDashboardService, default_period,
@@ -132,5 +133,20 @@ def measures(
 ):
     chosen_period, chosen_date = _params(period, as_of)
     return _call(lambda: ManagementDashboardService(db).measures(
+        actor, program_id=program_id, period=chosen_period, as_of=chosen_date
+    ))
+
+
+@router.get('/department-progress', response_model=ManagementDepartmentProgressResponse,
+            summary='KER: прогрес виконавців у своєму та підпорядкованих підрозділах')
+def department_progress(
+    program_id: str | None = Query(default=None, min_length=1, max_length=50),
+    period: str | None = Query(default=None, pattern=r'^\d{4}-H[12]$'),
+    as_of: date | None = None,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_department_head),
+):
+    chosen_period, chosen_date = _params(period, as_of)
+    return _call(lambda: ManagementDashboardService(db).department_progress(
         actor, program_id=program_id, period=chosen_period, as_of=chosen_date
     ))
