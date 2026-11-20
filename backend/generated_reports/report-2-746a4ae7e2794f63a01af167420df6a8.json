@@ -1,0 +1,94 @@
+{
+  "program_id": "RF-TEST-2026",
+  "program_title": "[ТЕСТ RF] Сигнали ризику 2026",
+  "period": "2026-H2",
+  "period_start": "2026-07-01",
+  "period_end": "2026-12-31",
+  "as_of": "2026-11-20",
+  "is_preliminary": true,
+  "generated_at": "2026-11-20T16:23:50.844913Z",
+  "scope": "program",
+  "department_id": null,
+  "sections": [
+    {
+      "section_id": "R1",
+      "number": 1,
+      "title": "Заходи з реалізації засад загальної відомчої політики, виконання антикорупційної стратегії та державної антикорупційної програми",
+      "measures": [
+        {
+          "measure_id": "RF260101",
+          "sequence_number": 901,
+          "measure_description": "[ТЕСТ RF1/RF7c] Провести перевірку дотримання антикорупційних вимог",
+          "responsible_department_id": "P02",
+          "responsible_department": "Департамент кадрового забезпечення",
+          "risk_id": null,
+          "factual_date": null,
+          "execution_status": "Не виконано",
+          "result_description": "",
+          "indicator_actual": null,
+          "indicator_target": "5.000",
+          "approved_by_coordinator": false,
+          "evidence_count": 0,
+          "warnings": [
+            "Не зазначено пояснення причин невиконання"
+          ]
+        },
+        {
+          "measure_id": "RF260102",
+          "sequence_number": 902,
+          "measure_description": "[ТЕСТ RF1/RF7c] Завершити інвентаризацію процедур контролю",
+          "responsible_department_id": "P02",
+          "responsible_department": "Департамент кадрового забезпечення",
+          "risk_id": null,
+          "factual_date": null,
+          "execution_status": "Не виконано",
+          "result_description": "",
+          "indicator_actual": null,
+          "indicator_target": "1.000",
+          "approved_by_coordinator": false,
+          "evidence_count": 0,
+          "warnings": [
+            "Не зазначено пояснення причин невиконання"
+          ]
+        },
+        {
+          "measure_id": "RF260103",
+          "sequence_number": 903,
+          "measure_description": "[ТЕСТ RF8] Подати підтвердження зареєстрованим наказом",
+          "responsible_department_id": "P02",
+          "responsible_department": "Департамент кадрового забезпечення",
+          "risk_id": null,
+          "factual_date": null,
+          "execution_status": "Строк виконання заходу не настав",
+          "result_description": "",
+          "indicator_actual": null,
+          "indicator_target": "1.000",
+          "approved_by_coordinator": false,
+          "evidence_count": 0,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "section_id": "R2",
+      "number": 2,
+      "title": "Заходи з усунення корупційних ризиків",
+      "measures": []
+    },
+    {
+      "section_id": "R3",
+      "number": 3,
+      "title": "Навчання та заходи з поширення антикорупційної інформації",
+      "measures": []
+    }
+  ],
+  "summary": {
+    "total": 3,
+    "completed": 0,
+    "partial": 0,
+    "not_completed": 2,
+    "not_due": 1,
+    "unapproved": 0,
+    "missing_explanations": 2
+  }
+}

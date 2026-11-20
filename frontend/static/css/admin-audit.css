@@ -1,0 +1,19 @@
+/* ---------- Журнал дій ---------- */
+.audit-toolbar { flex-wrap: wrap; }
+.audit-toolbar .field input[type="date"] { min-width: 150px; }
+.audit-table .audit-time { white-space: nowrap; font-variant-numeric: tabular-nums; font-family: var(--font-mono); font-size: 13px; }
+.audit-table td { vertical-align: top; }
+.audit-sub { margin-top: 2px; font-size: 12px; color: var(--muted); }
+.audit-system { color: var(--muted); font-style: italic; }
+.audit-link { background: none; border: 0; padding: 0; color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.audit-link:hover { color: var(--brand); }
+.audit-badge { display: inline-block; padding: 2px 8px; border-radius: var(--radius-pill); font-size: 12px; font-weight: 600; white-space: nowrap; background: var(--idle-bg); color: var(--idle); }
+.audit-create { background: var(--ok-bg); color: var(--ok); }
+.audit-update { background: var(--review-bg); color: var(--review); }
+.audit-delete { background: var(--bad-bg); color: var(--bad); }
+.audit-change_order_number { background: var(--warn-bg); color: var(--warn); }
+.audit-field { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 2px; }
+.audit-diff { word-break: break-word; max-width: 420px; }
+.audit-old { color: var(--muted); text-decoration: line-through; }
+.audit-arrow { color: var(--faint); }
+.audit-new { font-weight: 600; }

@@ -1,0 +1,39 @@
+<!-- ADD this inside the existing main_coordinator.html where you want the panel -->
+<link rel="stylesheet" href="/static/css/risk-reassessment.css">
+<div id="risk-reassessment-panel" hidden></div>
+<script src="/static/js/risk-reassessment.js" defer></script>
+
+<!-- ADD this to main-coordinator.js (adapt routes and payload to actual FastAPI API) -->
+<script>
+// This is an integration EXAMPLE, not a verified route contract.
+// Replace with your actual endpoints from backend/app/api and your auth mechanism.
+const assessmentAPI = {
+  async getRisk(id) {
+    return await apiJSON(`/api/risks/${encodeURIComponent(id)}`);
+  },
+  async getHistory(id) {
+    return await apiJSON(`/api/risks/${encodeURIComponent(id)}/assessments`);
+  },
+  async createAssessment(id, body) {
+    return await apiJSON(`/api/risks/${encodeURIComponent(id)}/assessments`, {
+      method: 'POST', body: JSON.stringify(body)
+    });
+  }
+};
+async function apiJSON(url, options={}) {
+  const res = await fetch(url, {
+    credentials: 'same-origin',
+    ...options,
+    headers: { 'Content-Type':'application/json', ...(options.headers || {}) }
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 180)}`);
+  return await res.json();
+}
+async function showRiskAssessmentForSelectedRisk(riskId) {
+  const panel = document.getElementById('risk-reassessment-panel');
+  panel.hidden = false;
+  await mountRiskReassessment({ container: panel, riskId, api: assessmentAPI });
+}
+// Call showRiskAssessmentForSelectedRisk(selectedRisk.id) in the existing
+// main-coordinator risk-selection handler. Do not create a second selection handler.
+</script>

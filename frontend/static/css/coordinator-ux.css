@@ -379,3 +379,37 @@
 .coord-page .coord-assign-dialog .coord-assign-hint[hidden] {
   display: none !important;
 }
+
+/* Fix KOORD approval/rejection dialog layout without touching other modals. */
+.coord-page #coord-review-dialog[open] {
+  box-sizing: border-box;
+  width: min(580px, calc(100vw - 24px)); max-width: 580px;
+  max-height: calc(100dvh - 24px); overflow-y: auto;
+  padding: clamp(18px, 2.5vw, 28px);
+  border: 1px solid var(--line-strong); border-radius: 10px;
+  background: var(--surface); color: var(--ink);
+}
+.coord-page #coord-review-dialog::backdrop { background: rgba(0, 0, 0, .72); }
+.coord-page #coord-review-form { display:flex; flex-direction:column; align-items:stretch; gap:16px; margin:0; }
+.coord-page #coord-review-title { margin:0; line-height:1.35; }
+.coord-page #coord-review-details { margin:0; line-height:1.6; overflow-wrap:anywhere; }
+.coord-page #coord-review-reason-label {
+  display:flex; flex-direction:column; align-items:stretch; gap:9px;
+  margin:0; width:100%; min-width:0; color:var(--muted);
+}
+.coord-page #coord-review-reason-label[hidden] { display:none !important; }
+.coord-page #coord-review-reason {
+  box-sizing:border-box; display:block; width:100%; max-width:100%; min-width:0;
+  min-height:120px; max-height:35dvh; margin:0; padding:12px;
+  border:1px solid var(--line-strong); border-radius:5px;
+  background:var(--surface); color:var(--ink); font:inherit; line-height:1.5;
+  resize:vertical;
+}
+.coord-page #coord-review-dialog .role-dialog-actions {
+  display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap;
+  gap:10px; padding-top:4px; margin:0;
+}
+.coord-page #coord-review-dialog .role-message:empty { display:none; }
+@media (max-width:520px) {
+  .coord-page #coord-review-dialog .role-dialog-actions .btn { flex:1 1 150px; }
+}

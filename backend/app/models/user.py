@@ -32,7 +32,7 @@ class User(Base):
     )
 
     # Роль користувача: ADMIN, MAIN_KOORD, KOORD,
-    # VYK або KER.
+    # VYK, KER або ANAL.
     role_id: Mapped[str] = mapped_column(
         ForeignKey("roles.id"),
         nullable=False,

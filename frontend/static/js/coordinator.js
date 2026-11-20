@@ -7,39 +7,65 @@
   let currentView='programs',alertPage=0,alertTotal=0,alertUnread=0;
   let knownOrderChangeIds=null;
   const alertLimit=50;
-  // Keep analysis state outside DOM: polling and filters recreate the cards.
-  const analysisStates = new Map();
-  const analysisLoading = new Set(), analysisCheckedAt = new Map();
-  const analysisKey = (ex,m) => JSON.stringify([ex.id, ex.order_version_id, ex.submitted_sha256,
-    ex.order_number,m.description,m.deadline_on,m.deadline_description,m.completion_indicator,m.required_evidence]);
-  function analysisMessage(data){
-    return data.analysis+(data.text_truncated?'\nПроаналізовано частину документа.':'')+
-      (data.output_truncated?'\nДосягнуто ліміту відповіді моделі. Висновок може бути неповним.':'')+
-      '\nВерсія наказу: '+data.order_version_id+'. Модель: '+data.model+
-      (data.created_at?' · Збережено: '+new Date(data.created_at).toLocaleString('uk-UA'):'')+
-      '\nРішення про погодження приймає координатор.';
-  }
-  function loadSavedAnalysis(ex,key){
-    const previous=analysisStates.get(key);
-    if(previous?.pending||analysisLoading.has(key)||Date.now()-(analysisCheckedAt.get(key)||0)<40000)return;
-    analysisLoading.add(key);
-    Api.get('/api/executions/'+encodeURIComponent(ex.id)+'/analysis').then(data=>{
-      if(analysisStates.get(key)!==previous)return;
-      if(data&&data.analysis_id!==previous?.record?.analysis_id)
-        analysisStates.set(key,{pending:false,record:data,message:analysisMessage(data)});
-      else if(!data&&previous?.record)analysisStates.delete(key);
-    }).catch(err=>{
-      if(analysisStates.get(key)===previous&&!previous?.record)
-        analysisStates.set(key,{pending:false,message:'Не вдалося завантажити збережений аналіз: '+err.message});
-    }).finally(()=>{
-      analysisLoading.delete(key);analysisCheckedAt.set(key,Date.now());render();
-    });
-  }
   const expanded = new Set(); // Старе дерево: програма → розділ → захід
   const notice=(text,isError)=>{ const box=$('coord-toast');if(!box)return;
     $('coord-toast-message').textContent=text;box.classList.remove('hidden');box.dataset.kind=isError?'error':'success';setTimeout(()=>box.classList.add('hidden'),6500);
   };
   const fail=err=>{Api.showError(err);notice(err.message||String(err),true);};
+  // Завантаження одного перевіреного наказу без вкладки чи модального вікна.
+  // Оригінальну назву та розширення беремо з Content-Disposition від FastAPI.
+  function coordOriginalFilename(disposition, fallback, contentType) {
+    let name = '';
+    const encoded = /filename\*\s*=\s*(?:UTF-8'')?([^;]+)/i.exec(disposition || '');
+    if (encoded) {
+      try { name = decodeURIComponent(encoded[1].trim().replace(/^"|"$/g, '')); } catch (_) {}
+    }
+    if (!name) {
+      const quoted = /filename\s*=\s*"([^"]+)"/i.exec(disposition || '');
+      const unquoted = /filename\s*=\s*([^;\s]+)/i.exec(disposition || '');
+      name = quoted ? quoted[1] : (unquoted ? unquoted[1] : '');
+    }
+    name = String(name || '').split(/[\\/]/).pop().replace(/[\x00-\x1f<>:"|?*]/g, '_');
+    if (name) return name;
+    const ext = {'application/pdf':'.pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document':'.docx',
+      'application/vnd.oasis.opendocument.text':'.odt'}[contentType] || '';
+    return 'Наказ-' + String(fallback || 'документ').replace(/[^\wа-яА-ЯіїєґІЇЄҐ\-]/g,'_') + ext;
+  }
+
+  async function downloadCoordinatorOrder(documentPath, orderNumber) {
+    if (typeof documentPath !== 'string' || !documentPath.startsWith('/api/')) {
+      throw new Error('Некоректний маршрут наказу');
+    }
+    const token = Api.token();
+    if (!token) { Api.logout(true); return; }
+    const res = await fetch(documentPath, {
+      headers: {Authorization: 'Bearer ' + token},
+      credentials: 'same-origin'
+    });
+    if (res.status === 401) { Api.logout(true); return; }
+    if (!res.ok) {
+      let reason = 'Не вдалося завантажити наказ (HTTP ' + res.status + ')';
+      try {
+        const data = await res.json();
+        if (typeof data.detail === 'string') reason = data.detail;
+      } catch (_) {}
+      throw new Error(reason);
+    }
+    const mime = (res.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase();
+    const filename = coordOriginalFilename(res.headers.get('Content-Disposition'), orderNumber, mime);
+    const blobURL = URL.createObjectURL(await res.blob());
+    const link = document.createElement('a');
+    link.href = blobURL;
+    link.download = filename;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    try { link.click(); } finally {
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(blobURL), 60000);
+    }
+  }
+
   function showView(name){
     if(!['programs','risks','reports','documents'].includes(name))return;
     currentView=name;
@@ -261,34 +287,7 @@
                       button.addEventListener('click',cb);rowActions.appendChild(button);
                     };
                     if(ex&&ex.document_api_path){
-                      action('Переглянути наказ',()=>Api.openProtected(ex.document_api_path).catch(fail),'btn-outline-secondary');
-                      const key=analysisKey(ex,m);
-                      loadSavedAnalysis(ex,key);
-                      const state=analysisStates.get(key),loading=analysisLoading.has(key);
-                      const result=make('pre',{class:'analysis-result',role:'status',
-                        text:state?.message||(loading?'Завантажуємо збережений аналіз…':''),hidden:!state&&!loading});
-                      result.style.whiteSpace='pre-wrap';result.style.overflowWrap='anywhere';
-                      line.appendChild(result);
-                      const analyze=make('button',{type:'button',class:'btn',
-                        text:state?.record?'Повторити аналіз':'Проаналізувати наказ',
-                        disabled:state?.pending||loading});
-                      analyze.addEventListener('click',async()=>{
-                        if(analysisStates.get(key)?.pending||analysisLoading.has(key))return;
-                        const previous=analysisStates.get(key)||{};
-                        analysisStates.set(key,{...previous,pending:true,message:'Порівнюємо наказ зі змістом заходу… На CPU це може тривати кілька хвилин.'});
-                        render();
-                        try{
-                          const data=await Api.post('/api/executions/'+encodeURIComponent(ex.id)+'/analyze'+
-                            (previous.record?'?force=true':''));
-                          analysisStates.set(key,{pending:false,record:data,message:analysisMessage(data)});
-                          analysisCheckedAt.set(key,Date.now());
-                        }catch(err){
-                          analysisStates.set(key,{...previous,pending:false,message:'Помилка аналізу: '+err.message+
-                            (previous.record?'\nПопередній збережений висновок:\n'+analysisMessage(previous.record):'')});
-                        }
-                        render();
-                      });
-                      rowActions.appendChild(analyze);
+                      action('Переглянути наказ',()=>downloadCoordinatorOrder(ex.document_api_path,ex.order_number).catch(fail),'btn-outline-secondary');
                     }
                     if(ex&&ex.status==='pending'&&!ex.document_changed){
                       action('Погодити',()=>review(m,ex,true),'btn-success');
@@ -338,8 +337,8 @@
       const me=Api.me;
       // Посаду беремо з /api/auth/me; назву підрозділу не використовуємо замість посади.
       $('unit-name').textContent=String(me?.position||'').trim()||'Координатор підрозділу';
-
-
+      
+      
       $('assign-open').classList.remove('hidden');
       ['period','coord-risk-period','coord-report-period'].forEach(id=>Api.fillPeriods($(id),programs));
       if(!flagsPanel){flagsPanel=RiskFlagPanel.mount('coord-risk-panel',()=>programs,()=>$('coord-risk-period').value,jump);}
@@ -476,7 +475,9 @@
   function review(m,ex,approve){
     if(!ex||ex.status!=='pending'||ex.document_changed)return;
     const dlg=$('coord-review-dialog');$('coord-review-title').textContent=approve?'Погодити виконання':'Відхилити подання';
-    $('coord-review-details').textContent='Захід '+m.id+' · Виконавець #'+ex.submitted_by_user_id+' · Наказ № '+ex.order_number+' · '+ex.period;
+    const reviewerAssignment = assigned(m).find(a=>Number(a.user_id)===Number(ex.submitted_by_user_id));
+    const departmentName = reviewerAssignment?.department_id ? Api.deptName(reviewerAssignment.department_id) : 'Не визначено';
+    $('coord-review-details').textContent='Захід '+m.id+' · Підрозділ: '+departmentName+' · Наказ № '+ex.order_number+' · '+ex.period;
     $('coord-review-reason-label').hidden=approve;
     $('coord-review-reason').value='';$('coord-review-reason').required=!approve;
     $('coord-review-message').textContent='';dlg.dataset.execution=String(ex.id);dlg.dataset.approve=approve?'1':'0';

@@ -4,6 +4,248 @@
 {% block topbar_tools %}{% include "_bell.html" %}{% endblock %}
 {% block content %}
 <link rel="stylesheet" href="/static/css/main-coordinator.css?v=report-pdf1">
+<link rel="stylesheet" href="/static/css/risk-reassessment.css?v=mc-rra-clean-title-1">
+<style>
+/* Тільки комбіноване поле ризику головного координатора. Інші блоки не змінюємо. */
+.mc-risk-picker .mc-risk-combo {
+  width: 100%;
+  min-width: 0;
+}
+.mc-risk-picker .mc-risk-combo-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  height: 54px;
+  overflow: hidden;
+  box-sizing: border-box;
+  border: 1px solid #626262;
+  border-radius: 8px;
+  background: #353535;
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+.mc-risk-picker .mc-risk-combo-control:hover {
+  border-color: #919191;
+}
+.mc-risk-picker .mc-risk-combo-control:focus-within {
+  border-color: #ed713b;
+  box-shadow: 0 0 0 2px rgba(237,113,59,.16);
+}
+.mc-risk-picker .mc-risk-combo-control input,
+.mc-risk-picker .mc-risk-combo-control input:hover,
+.mc-risk-picker .mc-risk-combo-control input:focus {
+  flex: 1 1 auto;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0 66px 0 15px;
+  box-sizing: border-box;
+  background: transparent;
+  color: #f7f7f7;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  outline: none;
+  font: inherit;
+  line-height: 1.35;
+}
+.mc-risk-picker .mc-risk-combo-control input::placeholder {
+  color: #a6a6a6;
+  opacity: 1;
+}
+.mc-risk-picker .mc-risk-combo-control button {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  border: 0;
+  border-left: 1px solid rgba(255,255,255,.13);
+  border-radius: 0;
+  background: rgba(255,255,255,.035);
+  color: #e7e7e7;
+  cursor: pointer;
+  outline: none;
+  box-shadow: none;
+  transition: background .16s ease;
+}
+.mc-risk-picker .mc-risk-combo-control button:hover {
+  background: rgba(255,255,255,.11);
+}
+.mc-risk-picker .mc-risk-combo-control button:focus {
+  outline: none;
+  box-shadow: none;
+}
+.mc-risk-picker .mc-risk-combo-control button:focus-visible {
+  outline: 2px solid #ed713b;
+  outline-offset: -4px;
+  border-radius: 0 7px 7px 0;
+}
+.mc-risk-picker .mc-risk-combo-control button svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+  transition: transform .16s ease;
+}
+.mc-risk-picker .mc-risk-combo-control input[aria-expanded="true"] + button svg {
+  transform: rotate(180deg);
+}
+.mc-risk-picker .mc-risk-combo-control :disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+.mc-risk-picker .mc-risk-combo-list {
+  max-height: 240px;
+  overflow-y: auto;
+  margin-top: 6px;
+  padding: 5px;
+  box-sizing: border-box;
+  border: 1px solid #555;
+  border-radius: 8px;
+  background: #2c2c2c;
+  box-shadow: 0 10px 22px rgba(0,0,0,.22);
+}
+.mc-risk-picker .mc-risk-combo-list[hidden] {
+  display: none;
+}
+.mc-risk-picker .mc-risk-combo-option {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 11px 12px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #f2f2f2;
+  font: inherit;
+  line-height: 1.4;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.mc-risk-picker .mc-risk-combo-option:hover,
+.mc-risk-picker .mc-risk-combo-option.is-active {
+  background: #474747;
+}
+.mc-risk-picker .mc-risk-combo-option:focus-visible {
+  outline: 2px solid #ed713b;
+  outline-offset: -2px;
+}
+.mc-risk-picker .mc-risk-combo-empty {
+  padding: 12px;
+  color: #c2c2c2;
+}
+.mc-risk-picker #mc-measure-risk-hint {
+  display: block;
+  margin-top: 7px;
+  line-height: 1.4;
+}
+@media (max-width: 520px) {
+  .mc-risk-picker .mc-risk-combo-control { height: 50px; }
+  .mc-risk-picker .mc-risk-combo-control button { width: 46px; }
+  .mc-risk-picker .mc-risk-combo-control input { padding-right: 58px; }
+}
+
+/* Toast-сповіщення головного координатора: тільки положення та вигляд. */
+#mc-toasts.mc-toasts {
+  position: fixed !important;
+  inset: 20px 20px auto auto !important;
+  top: 20px !important;
+  right: 20px !important;
+  bottom: auto !important;
+  left: auto !important;
+  z-index: 10000 !important;
+  display: flex !important;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  width: min(380px, calc(100vw - 40px));
+  max-height: calc(100vh - 40px);
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: visible;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  transform: none !important;
+  pointer-events: none;
+}
+#mc-toasts.mc-toasts > .role-message {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  margin: 0 !important;
+  padding: 13px 16px;
+  border: 1px solid #454545;
+  border-left: 4px solid #4caf84;
+  border-radius: 10px;
+  background: #282828 !important;
+  color: #f4f4f4 !important;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  box-shadow: 0 10px 26px rgba(0,0,0,.32);
+  pointer-events: auto;
+  animation: mc-toast-enter .22s ease-out both;
+}
+#mc-toasts.mc-toasts > .role-message.success::before {
+  content: '✓';
+  flex: 0 0 22px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(76,175,132,.15);
+  color: #77d9a6;
+  font-weight: 700;
+}
+#mc-toasts.mc-toasts > .role-message.error {
+  border-left-color: #ef7777;
+}
+#mc-toasts.mc-toasts > .role-message.error::before {
+  content: '!';
+  flex: 0 0 22px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(239,119,119,.15);
+  color: #ffaaaa;
+  font-weight: 700;
+}
+@keyframes mc-toast-enter {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@media (max-width: 520px) {
+  #mc-toasts.mc-toasts {
+    top: 12px !important;
+    right: 12px !important;
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #mc-toasts.mc-toasts > .role-message { animation: none; }
+}
+</style>
 <div class="mc-shell">
   <h1 class="mc-sr-only">Кабінет головного координатора</h1>
   <nav class="mc-view-navigation" role="tablist" aria-label="Розділи головного координатора">
@@ -171,12 +413,24 @@
       <label class="field mc-full">Необхідне підтвердження <input name="required_evidence" required placeholder="Наказ, протокол, звіт"></label>
       <label class="field mc-full">Ресурси <input name="resources" required value="У межах кошторису"></label>
       <div class="mc-full mc-risk-picker">
-        <label class="field" for="mc-measure-risk-search">Корупційний ризик (за наявності)</label>
-        <input id="mc-measure-risk-search" type="search" placeholder="Пошук за кодом або назвою ризику" autocomplete="off">
-        <select id="mc-measure-risk-select" name="risk_id" aria-label="Вибрати корупційний ризик">
-          <option value="">Без прив’язки до ризику</option>
-        </select>
-        <small id="mc-measure-risk-hint" class="muted">Ризики вибираються з окремого реєстру підрозділу.</small>
+        <label class="field" for="mc-measure-risk-input">Корупційний ризик (за наявності)</label>
+        <div id="mc-measure-risk-combo" class="mc-risk-combo">
+          <div class="mc-risk-combo-control">
+            <input id="mc-measure-risk-input" type="text" role="combobox"
+                   aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false"
+                   aria-controls="mc-measure-risk-options" aria-describedby="mc-measure-risk-hint"
+                   placeholder="Пошук або вибір ризику" autocomplete="off">
+            <button id="mc-measure-risk-toggle" type="button" aria-label="Показати всі ризики">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                <path d="m6 9 6 6 6-6"/>
+              </svg>
+            </button>
+          </div>
+          <div id="mc-measure-risk-options" class="mc-risk-combo-list" role="listbox" hidden></div>
+        </div>
+        <input id="mc-measure-risk-value" type="hidden" name="risk_id" value="">
+        <small id="mc-measure-risk-hint" class="muted">Шукайте за кодом або назвою та обирайте зі списку.</small>
       </div>
     </div>
     <div id="mc-measure-error" class="mc-error hidden" role="alert"></div>
@@ -185,6 +439,16 @@
       <button type="submit" class="btn btn-dark" id="mc-measure-submit">Додати захід</button>
     </footer>
   </form>
+</dialog>
+
+<!-- Повторне оцінювання: окремий діалог, існуючий реєстр не змінюємо -->
+<dialog id="mc-reassessment-dialog" class="mc-dialog mc-large mc-reassessment-dialog" aria-labelledby="mc-reassessment-title">
+  <header class="mc-dialog-header">
+    <h2 id="mc-reassessment-title">Повторне оцінювання корупційного ризику</h2>
+    <button type="button" class="mc-icon-close" data-dialog-close="mc-reassessment-dialog" aria-label="Закрити">×</button>
+  </header>
+  <div class="mc-dialog-content"><div id="mc-reassessment-host" aria-live="polite"></div></div>
+  <footer class="mc-dialog-footer"><button type="button" class="btn" data-dialog-close="mc-reassessment-dialog">Закрити</button></footer>
 </dialog>
 
 <dialog id="mc-risk-dialog" class="mc-dialog mc-large" aria-labelledby="mc-risk-dialog-title">
@@ -247,5 +511,6 @@
 <script src="/static/js/notify.js"></script>
 <script src="/static/js/risk-flags.js?v=1"></script>
 <script src="/static/js/reports-ui.js?v=pdf1"></script>
-<script src="/static/js/main-coordinator.js?v=measure-ui3"></script>
+<script src="/static/js/risk-reassessment.js?v=mc-rra-clean-title-1"></script>
+<script src="/static/js/main-coordinator.js?v=mc-rra-schema-5"></script>
 {% endblock %}

@@ -47,7 +47,7 @@ def main() -> None:
             ]:
                 if table in existing_tables:
                     print(f"PRESENT: {table}")
-
+            
             if {"risks", "measures"} <= existing_tables:
                 print("\n--- Risks whose program cannot be inferred uniquely from measures ---")
                 rows = conn.execute(text("""

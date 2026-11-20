@@ -94,6 +94,15 @@ class ReportService:
             raise ReportError("Є непогоджені виконання; сформуй нову версію після погодження", 409)
         if snapshot.summary.missing_explanations:
             raise ReportError("Відсутні пояснення невиконання; сформуй нову версію після виправлення", 409)
+        completed_rows = (
+            row for block in snapshot.sections for row in block.measures
+            if row.execution_status in ("Виконано", "Частково виконано")
+        )
+        if snapshot.summary.missing_results or any(
+            not row.result_description.strip() or row.factual_date is None
+            for row in completed_rows
+        ):
+            raise ReportError("Відсутній опис результатів або фактичні дати; сформуй нову версію", 409)
         report.status = "submitted"
         try:
             return self.repo.save(report)

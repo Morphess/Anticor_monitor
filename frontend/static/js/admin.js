@@ -12,7 +12,7 @@
   const $ = (id) => document.getElementById(id);
   const ROLE_NAMES = {
     ADMIN: "Адміністратор", MAIN_KOORD: "Головний координатор", KOORD: "Координатор підрозділу",
-    VYK: "Виконавець", KER: "Керівник",
+    VYK: "Виконавець", KER: "Керівник", ANAL: "Аналітик",
   };
   const ROLES_NEED_DEPARTMENT = new Set(["KOORD", "VYK", "KER"]);
   const PAGE_SIZES = [10, 25, 50, 100];
@@ -267,7 +267,7 @@
     UI.refreshSelect(select);
   }
   async function loadDepartments() {
-    departments = await Api.get("/api/departments");
+    departments = await Api.get("/api/departments/");
     departmentsLoaded = true;
     const deptFilter = $("user-dept-filter");
     const previousFilter = deptFilter.value;
@@ -567,7 +567,7 @@
     try {
       const result = edit
         ? await Api.patch("/api/departments/" + encodeURIComponent(editingDeptId), data)
-        : await Api.post("/api/departments", data);
+        : await Api.post("/api/departments/", data);
       saved = true;
       (edit ? deptEdit : deptCreate).close();
       if (edit) editingDeptId = null;

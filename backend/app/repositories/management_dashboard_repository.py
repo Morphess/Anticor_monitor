@@ -104,6 +104,21 @@ class ManagementDashboardRepository:
         )
         return list(self.db.scalars(stmt))
 
+    def full_program_measures(self, program_ids: set[str]) -> list[Measure]:
+        """Complete programme passport, *not* scoped execution/analytics data.
+
+        Caller must authorize program IDs before invoking this read-only query.
+        It deliberately does not join assignment/execution tables.
+        """
+        if not program_ids:
+            return []
+        return list(self.db.scalars(
+            select(Measure)
+            .where(Measure.program_id.in_(program_ids))
+            .order_by(Measure.program_id, Measure.section_id,
+                      Measure.sequence_number, Measure.id)
+        ))
+
     def collaborators(self, ids: set[str]) -> dict[str, set[str]]:
         if not ids:
             return {}

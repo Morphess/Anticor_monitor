@@ -3,12 +3,14 @@
 {% block role_name %}Адміністратор{% endblock %}
 {% block content %}
 <link rel="stylesheet" href="/static/css/admin-dropdown-overlay.css?v=3">
-<link rel="stylesheet" href="/static/css/admin-ux.css?v=4">
+<link rel="stylesheet" href="/static/css/admin-ux.css?v=5">
+<link rel="stylesheet" href="/static/css/admin-audit.css?v=3">
 <div id="admin-toast-stack" class="toast-container position-fixed top-0 end-0 p-3" aria-label="Сповіщення" aria-live="polite"></div>
 <div class="admin-workspace">
   <nav class="tabs admin-tabs" role="tablist" aria-label="Розділи адміністрування">
     <button type="button" role="tab" id="tab-users" aria-selected="true" aria-controls="panel-users" data-tab="users">Користувачі</button>
     <button type="button" role="tab" id="tab-departments" aria-selected="false" aria-controls="panel-departments" data-tab="departments">Підрозділи</button>
+    <button type="button" role="tab" id="tab-audit" aria-selected="false" aria-controls="panel-audit" data-tab="audit">Журнал дій</button>
   </nav>
 
   <section id="panel-users" role="tabpanel" aria-labelledby="tab-users" data-panel="users">
@@ -197,6 +199,49 @@
     </dialog>
   </section>
 
+  <section id="panel-audit" role="tabpanel" aria-labelledby="tab-audit" data-panel="audit" class="hidden">
+    <div class="toolbar admin-toolbar audit-toolbar">
+      <label class="field grow">Пошук
+        <input id="audit-search" type="search" autocomplete="off" maxlength="100"
+               placeholder="Логін, посада, підрозділ, об'єкт, поле або значення">
+      </label>
+      <label class="field">Користувач
+        <select id="audit-user"><option value="">Усі користувачі</option></select>
+      </label>
+      <label class="field">Підрозділ
+        <select id="audit-dept"><option value="">Усі підрозділи</option><option value="-">Без підрозділу / система</option></select>
+      </label>
+      <label class="field">Дія
+        <select id="audit-action"><option value="">Усі дії</option></select>
+      </label>
+      <label class="field">Об'єкт
+        <select id="audit-entity"><option value="">Усі об'єкти</option></select>
+      </label>
+      <label class="field">З дати
+        <input id="audit-from" type="date">
+      </label>
+      <label class="field">По дату
+        <input id="audit-to" type="date">
+      </label>
+      <button class="btn" type="button" id="audit-reset">Скинути фільтри</button>
+    </div>
+    <div class="admin-list-head">
+      <span id="audit-count" role="status" aria-live="polite">Відкрийте вкладку, щоб завантажити журнал…</span>
+      <div class="pager pager-top" id="audit-pager-top"></div>
+    </div>
+    <div class="table-wrap admin-table-wrap">
+      <table class="grid admin-table audit-table" aria-label="Журнал дій користувачів">
+        <thead><tr>
+          <th scope="col">Дата і час</th><th scope="col">Користувач</th><th scope="col">Підрозділ</th>
+          <th scope="col">Дія</th><th scope="col">Об'єкт</th><th scope="col">Що змінено</th>
+        </tr></thead>
+        <tbody id="audit-rows"><tr><td colspan="6" class="muted">Завантаження…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="pager" id="audit-pager"></div>
+    <p class="muted small">Відображаються події, які зберіг бекенд. Підрозділ показано за поточним обліковим записом користувача. Паролі й секрети приховано.</p>
+  </section>
+
   <dialog id="admin-delete-dialog" class="admin-confirm-dialog" aria-labelledby="admin-delete-title" aria-describedby="admin-delete-details">
     <div class="admin-dialog-header"><h2 id="admin-delete-title">Підтвердження видалення</h2></div>
     <p id="admin-delete-details"></p>
@@ -211,4 +256,6 @@
 {% block scripts %}
 <script src="/static/js/admin-widgets.js?v=3"></script>
 <script src="/static/js/admin.js?v=17"></script>
+<script src="/static/js/admin-audit.js?v=3"></script>
+<script src="/static/js/admin-audit-tabs.js?v=3"></script>
 {% endblock %}

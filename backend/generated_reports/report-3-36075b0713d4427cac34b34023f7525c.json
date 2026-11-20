@@ -1,0 +1,186 @@
+{
+  "program_id": "AKP-SYN-2026-27-03",
+  "program_title": "Демонстраційна антикорупційна програма Умовного державного органу на 2026–2027 роки",
+  "organization_name": "Умовний державний орган (демонстраційні дані)",
+  "period_label": "Звіт за друге півріччя 2026 року",
+  "period": "2026-H2",
+  "period_start": "2026-07-01",
+  "period_end": "2026-12-31",
+  "as_of": "2026-11-20",
+  "is_preliminary": true,
+  "generated_at": "2026-11-20T16:47:09.706337Z",
+  "scope": "department",
+  "department_id": "P02",
+  "sections": [
+    {
+      "section_id": "R1",
+      "number": 1,
+      "title": "Заходи з реалізації засад загальної відомчої політики, виконання антикорупційної стратегії та державної антикорупційної програми",
+      "measures": [
+        {
+          "measure_id": "AM260101",
+          "sequence_number": 1,
+          "measure_description": "Затвердити план внутрішнього моніторингу виконання антикорупційних заходів на 2027 рік.",
+          "responsible_department_id": "P15",
+          "responsible_department": "Test",
+          "planned_deadline": "До 26.11.2026",
+          "completion_indicator": "Затверджений план моніторингу",
+          "indicator_unit": "шт.",
+          "participants_count": null,
+          "risk_id": null,
+          "risk": null,
+          "factual_date": null,
+          "execution_status": "Строк виконання заходу не настав",
+          "result_description": "",
+          "indicator_actual": null,
+          "indicator_target": "1.000",
+          "approved_by_coordinator": false,
+          "evidence_count": 1,
+          "warnings": [
+            "Виконання ще не погоджено координатором"
+          ]
+        },
+        {
+          "measure_id": "AM260102",
+          "sequence_number": 2,
+          "measure_description": "Провести інвентаризацію внутрішніх процедур, які можуть містити корупційні ризики, і сформувати перелік процедур для перегляду.",
+          "responsible_department_id": "P02",
+          "responsible_department": "Департамент кадрового забезпечення",
+          "planned_deadline": "До 20.12.2026",
+          "completion_indicator": "Кількість перевірених внутрішніх процедур",
+          "indicator_unit": "шт.",
+          "participants_count": null,
+          "risk_id": null,
+          "risk": null,
+          "factual_date": null,
+          "execution_status": "Строк виконання заходу не настав",
+          "result_description": "",
+          "indicator_actual": null,
+          "indicator_target": "12.000",
+          "approved_by_coordinator": false,
+          "evidence_count": 0,
+          "warnings": [
+            "Захід не призначено жодному виконавцю"
+          ]
+        },
+        {
+          "measure_id": "AM260103",
+          "sequence_number": 3,
+          "measure_description": "Забезпечити щоквартальний аналіз повідомлень про можливі порушення антикорупційних обмежень з узагальненням результатів без персональних даних.",
+          "responsible_department_id": "P15",
+          "responsible_department": "Test",
+          "planned_deadline": "Щокварталу протягом 2027 року",
+          "completion_indicator": "Кількість підготовлених узагальнених аналітичних довідок",
+          "indicator_unit": "шт.",
+          "participants_count": null,
+          "risk_id": null,
+          "risk": null,
+          "factual_date": null,
+          "execution_status": "Не виконано",
+          "result_description": "",
+          "indicator_actual": null,
+          "indicator_target": "4.000",
+          "approved_by_coordinator": false,
+          "evidence_count": 0,
+          "warnings": [
+            "Виконання ще не погоджено координатором",
+            "Не зазначено пояснення причин невиконання"
+          ]
+        },
+        {
+          "measure_id": "AM260104",
+          "sequence_number": 4,
+          "measure_description": "Оновити внутрішні правила декларування та врегулювання потенційного конфлікту інтересів у службових процесах.",
+          "responsible_department_id": "P02",
+          "responsible_department": "Департамент кадрового забезпечення",
+          "planned_deadline": "До 31.03.2027",
+          "completion_indicator": "Кількість затверджених актуалізованих регламентів",
+          "indicator_unit": "шт.",
+          "participants_count": null,
+          "risk_id": null,
+          "risk": null,
+          "factual_date": null,
+          "execution_status": "Строк виконання заходу не настав",
+          "result_description": "",
+          "indicator_actual": null,
+          "indicator_target": "1.000",
+          "approved_by_coordinator": false,
+          "evidence_count": 0,
+          "warnings": [
+            "Захід не призначено жодному виконавцю"
+          ]
+        }
+      ]
+    },
+    {
+      "section_id": "R2",
+      "number": 2,
+      "title": "Заходи з усунення корупційних ризиків",
+      "measures": [
+        {
+          "measure_id": "AM260203",
+          "sequence_number": 3,
+          "measure_description": "Упровадити подвійне погодження рішень про списання майна з фіксацією підстав.",
+          "responsible_department_id": "P02",
+          "responsible_department": "Департамент кадрового забезпечення",
+          "planned_deadline": "До 30.04.2027",
+          "completion_indicator": "Частка рішень про списання з подвійним погодженням",
+          "indicator_unit": "%",
+          "participants_count": null,
+          "risk_id": null,
+          "risk": null,
+          "factual_date": null,
+          "execution_status": "Строк виконання заходу не настав",
+          "result_description": "",
+          "indicator_actual": null,
+          "indicator_target": "100.000",
+          "approved_by_coordinator": false,
+          "evidence_count": 0,
+          "warnings": [
+            "Захід не призначено жодному виконавцю"
+          ]
+        },
+        {
+          "measure_id": "AM260205",
+          "sequence_number": 5,
+          "measure_description": "Розробити порядок документування та незалежного перегляду кадрових рішень із підвищеним ризиком конфлікту інтересів.",
+          "responsible_department_id": "P02",
+          "responsible_department": "Департамент кадрового забезпечення",
+          "planned_deadline": "До 31.08.2027",
+          "completion_indicator": "Кількість затверджених процедур перевірки кадрових рішень",
+          "indicator_unit": "шт.",
+          "participants_count": null,
+          "risk_id": null,
+          "risk": null,
+          "factual_date": null,
+          "execution_status": "Строк виконання заходу не настав",
+          "result_description": "",
+          "indicator_actual": null,
+          "indicator_target": "1.000",
+          "approved_by_coordinator": false,
+          "evidence_count": 0,
+          "warnings": [
+            "Захід не призначено жодному виконавцю"
+          ]
+        }
+      ]
+    },
+    {
+      "section_id": "R3",
+      "number": 3,
+      "title": "Навчання та заходи з поширення антикорупційної інформації",
+      "measures": []
+    }
+  ],
+  "summary": {
+    "total": 6,
+    "completed": 0,
+    "partial": 0,
+    "not_completed": 1,
+    "not_due": 5,
+    "unapproved": 2,
+    "missing_explanations": 1,
+    "missing_results": 0
+  },
+  "_koord_subtree_scope_v1": "P02"
+}

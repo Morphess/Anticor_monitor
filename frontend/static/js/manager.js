@@ -28,6 +28,29 @@
   function message(text) { const box = $('mgr-message'); box.textContent = text || ''; box.hidden = !text; }
   function empty(host, label) { add(clear(host), node('p', 'mgr-empty', label)); }
 
+  function measuresWord(n) {
+    const last = n % 10, lastTwo = n % 100;
+    return n + ' ' + ((lastTwo >= 11 && lastTwo <= 14) ? 'заходів'
+      : last === 1 ? 'захід' : last >= 2 && last <= 4 ? 'заходи' : 'заходів');
+  }
+
+  // A complete routed programme is visible, while management statistics are
+  // restricted to the executor assignments in the KER's department branch.
+  function measureTotals(measureId) {
+    const totals = {assigned: 0, approved: 0, pending: 0, rejected: 0, not_submitted: 0};
+    for (const department of state.departmentProgress?.departments || []) {
+      const row = (department.measures || []).find(m => m.measure_id === measureId);
+      if (!row) continue;
+      Object.keys(totals).forEach(key => { totals[key] += Number(row[key] || 0); });
+    }
+    return totals;
+  }
+  function completeInScope(measure) {
+    if (!measure.in_scope) return false;
+    const t = measureTotals(measure.measure_id);
+    return t.assigned > 0 && t.approved === t.assigned;
+  }
+
   function setTab(name) {
     app.querySelectorAll('[data-mgr-tab]').forEach(btn => {
       const on = btn.dataset.mgrTab === name;
@@ -38,16 +61,43 @@
     });
   }
 
+  // Management statistics use today's server-side snapshot. A reporting period
+  // that has not started cannot be queried (backend rejects as_of < start).
+  // Keep future periods visible in the dropdown but not selectable.
+  function guardReportingPeriod() {
+    const select = $('mgr-period');
+    const current = Api.currentPeriod();
+    for (const option of select.options) {
+      const future = /^\d{4}-H[12]$/.test(option.value) && option.value > current;
+      option.disabled = future;
+      if (future) option.title = 'Період ще не почався';
+    }
+    if (!select.value || select.value > current) {
+      let fallback = [...select.options].find(opt => opt.value === current);
+      if (!fallback) {
+        fallback = new Option(Api.periodLabel(current), current);
+        select.add(fallback);
+      }
+      select.value = fallback.value;
+      // Keep the shared saved preference consistent across reloads.
+      if (typeof Api.pref === 'function') Api.pref('period', fallback.value);
+    }
+    return select.value;
+  }
+
   function kpis() {
     const d = state.dashboard || {};
-    info('mgr-kpi-total', Number(d.total || 0));
-    info('mgr-kpi-completed', Number(d.approved_completed || 0));
-    // API's awaiting_approval counts individual pending submissions, not entire measures.
-    info('mgr-kpi-pending', Number(d.awaiting_approval || 0));
+    // Total = entire authorised programme passports, NOT only managed measures.
+    info('mgr-kpi-total', state.measures.length);
+    const loaded = Boolean(state.departmentProgress && state.departmentProgress.period === $('mgr-period').value);
+    info('mgr-kpi-completed', loaded ? state.measures.filter(completeInScope).length : Number(d.approved_completed || 0));
+    // Pending submissions in the managed branch, one entry per executor.
+    info('mgr-kpi-pending', loaded
+      ? state.departmentProgress.departments.reduce((n, dep) => n + Number(dep.pending || 0), 0)
+      : Number(d.awaiting_approval || 0));
     info('mgr-kpi-overdue', Number(d.overdue || 0));
     info('mgr-position', Api.me && Api.me.position ? Api.me.position : 'Керівник');
     info('mgr-department', d.department_name || 'Підрозділ керівника');
-    info('mgr-progress-period', Api.periodLabel($('mgr-period').value));
   }
 
   function progress() {
@@ -56,11 +106,6 @@
     const rows = result?.departments || [];
     const search = $('mgr-department-search').value.trim().toLocaleLowerCase('uk');
     const found = rows.filter(r => matches(search, r.department_id, r.department_name));
-    const totalAssigned = rows.reduce((sum, r) => sum + r.assigned, 0);
-    const totalApproved = rows.reduce((sum, r) => sum + r.approved, 0);
-    info('mgr-progress-caption', result
-      ? 'Погоджено ' + totalApproved + ' із ' + totalAssigned + ' призначень · Заходів без виконавців у доступній сфері: ' + result.unassigned_measures
-      : '');
     if (!result) return empty(host, 'Дані про прогрес за підрозділами завантажуються…');
     if (!found.length) return empty(host, 'Підрозділів за цим пошуком не знайдено.');
     found.forEach(dept => {
@@ -80,8 +125,6 @@
       track.setAttribute('aria-label', 'Погоджено виконавців — ' + dept.department_name);
       add(track, bar);
       add(box, heading, track,
-        node('p', 'mgr-muted', 'Заходів із призначеннями: ' + dept.measures_total +
-          ' · Повністю погоджено: ' + dept.measures_approved),
         node('p', 'mgr-muted', 'Очікують: ' + dept.pending +
           ' · Відхилено: ' + dept.rejected +
           ' · Не подано: ' + dept.not_submitted));
@@ -89,12 +132,75 @@
     });
   }
 
+  // The KER API supplies one progress record per (department, measure).
+  // Do not infer scope client-side: only render departments returned by the KER-only API.
+  function measureDepartmentProgress(measure, host) {
+    clear(host);
+    // This measure is in the *programme passport*, not the branch work plan.
+    if (measure.in_scope === false) {
+      host.appendChild(node('p', 'mgr-muted', 'У вашому підрозділі та його підпорядкованих підрозділах виконання цього заходу не передбачене.'));
+      return;
+    }
+    const result = state.departmentProgress;
+    if (!result || result.period !== $('mgr-period').value) {
+      host.appendChild(node('p', 'mgr-muted', 'Завантажуємо прогрес за підрозділами…'));
+      return;
+    }
+    const departments = result.departments || [];
+    if (!departments.length) {
+      host.appendChild(node('p', 'mgr-muted', 'Немає доступних підрозділів.'));
+      return;
+    }
+    departments.forEach(dept => {
+      const item = (dept.measures || []).find(row => row.measure_id === measure.measure_id);
+      const assigned = Number(item?.assigned || 0);
+      const approved = Number(item?.approved || 0);
+      const pending = Number(item?.pending || 0);
+      const rejected = Number(item?.rejected || 0);
+      const notSubmitted = Number(item?.not_submitted || 0);
+      const card = node('div', 'mgr-measure-dept');
+      const heading = node('div', 'mgr-measure-dept-head');
+      add(heading,
+        node('strong', '', dept.department_name + (dept.is_own_department ? ' · Ваш підрозділ' : '')),
+        node('span', 'mgr-count', 'Погоджено ' + approved + ' із ' + assigned));
+      card.appendChild(heading);
+      if (assigned) {
+        const track = node('div', 'mgr-progress-track mgr-measure-progress-track');
+        const bar = node('div', 'mgr-progress-bar');
+        bar.style.width = Math.max(0, Math.min(100, 100 * approved / assigned)) + '%';
+        track.setAttribute('role', 'progressbar');
+        track.setAttribute('aria-label', 'Погоджено призначень: ' + dept.department_name);
+        track.setAttribute('aria-valuemin', '0');
+        track.setAttribute('aria-valuemax', String(assigned));
+        track.setAttribute('aria-valuenow', String(approved));
+        track.appendChild(bar);
+        add(card, track, node('p', 'mgr-muted',
+          'Очікують: ' + pending + ' · Відхилено: ' + rejected +
+          ' · Не подано: ' + notSubmitted));
+      } else {
+        card.appendChild(node('p', 'mgr-muted', 'Виконавців на цей захід не призначено.'));
+      }
+      host.appendChild(card);
+    });
+  }
+
+  function updateMeasureProgress() {
+    app.querySelectorAll('[data-mgr-measure-progress]').forEach(host => {
+      const measure = state.measures.find(m => m.measure_id === host.dataset.mgrMeasureProgress);
+      if (measure) measureDepartmentProgress(measure, host);
+    });
+  }
+
   function status(measure) {
-    if (measure.approved && measure.status === 'completed') return ['Виконано', 'approved'];
-    if (measure.approved) return ['Погоджено', 'approved'];
-    if (measure.status === 'in_progress') return ['У процесі', 'in_progress'];
-    if (measure.status === 'not_completed') return ['Не виконано', 'overdue'];
-    return [STATUS[measure.status] || 'Не подано', 'none'];
+    if (measure.in_scope === false) return ['Поза сферою виконання', 'outside'];
+    if (!state.departmentProgress) return ['Дані завантажуються', 'none'];
+    const t = measureTotals(measure.measure_id);
+    if (t.assigned === 0) return ['Не призначено', 'none'];
+    if (t.approved === t.assigned) return ['Виконано', 'approved'];
+    if (t.pending > 0) return ['Очікує погодження', 'pending'];
+    if (t.rejected > 0) return ['Відхилено', 'rejected'];
+    if (t.approved > 0) return ['Погоджено ' + t.approved + ' із ' + t.assigned, 'in_progress'];
+    return ['Не подано', 'none'];
   }
 
   function buildMeasure(measure) {
@@ -108,14 +214,15 @@
     badge.dataset.state = current;
     add(header, title, node('span', 'mgr-meta', measure.deadline_on ? humanDate(measure.deadline_on) : (measure.deadline_description || '—')), badge);
     const body = node('div', 'mgr-measure-body');
-    add(body,
-      node('p', '', 'Код заходу: ' + measure.measure_id),
-      node('p', '', 'Відповідальний підрозділ: ' + (measure.responsible_department_name || '—')),
-      node('p', '', 'Контрольний строк: ' + (measure.deadline_on ? humanDate(measure.deadline_on) : (measure.deadline_description || '—'))));
-    if (measure.assigned_units?.length) {
-      add(body, node('p', '', 'Підрозділи виконання: ' + measure.assigned_units.map(x => x.department_name).join(', ')));
-    }
-    if (measure.submitted_at) add(body, node('p', '', 'Останнє подання: ' + humanDate(measure.submitted_at)));
+    // Details contain only the department-scoped progress; heading has deadline and status.
+    const progressSection = node('section', 'mgr-measure-progress');
+    progressSection.setAttribute('aria-label', 'Прогрес виконання заходу за підрозділами');
+    progressSection.appendChild(node('h4', '', 'Прогрес за підрозділами · ' + Api.periodLabel($('mgr-period').value)));
+    const deptList = node('div', 'mgr-measure-dept-grid');
+    deptList.dataset.mgrMeasureProgress = measure.measure_id;
+    measureDepartmentProgress(measure, deptList);
+    progressSection.appendChild(deptList);
+    body.appendChild(progressSection);
     add(details, header, body);
     return details;
   }
@@ -139,7 +246,8 @@
       if (search && !matchesProgram) measures = measures.filter(m =>
         matches(search, m.measure_id, m.description, m.section_title, m.responsible_department_name));
       const total = measures.length;
-      const count = measures.filter(m => m.approved && m.status === 'completed').length;
+      const scoped = measures.filter(m => m.in_scope !== false);
+      const count = scoped.filter(completeInScope).length;
       const item = node('details', 'mgr-program');
       // Native details/summary keep program → section → measure navigable without edit actions.
       if (i === 0 || search) item.open = true;
@@ -148,8 +256,11 @@
       add(title, node('span', 'mgr-code', program.id), document.createTextNode(program.title));
       add(header, title,
         node('span', 'mgr-meta', humanDate(program.start_date) + ' – ' + humanDate(program.end_date)),
-        node('span', 'mgr-count', 'Виконано ' + count + ' / ' + total));
+        node('span', 'mgr-count', measuresWord(total)));
       const body = node('div', 'mgr-program-body');
+      add(body, node('div', 'mgr-program-meta',
+        'У вашій сфері відповідальності: ' + measuresWord(scoped.length) +
+        ' · Повністю погоджено: ' + count));
       const dispatch = (program.dispatched_to || []).map(d => d.department_name).filter(Boolean);
       if (dispatch.length) add(body, node('div', 'mgr-program-meta', 'Направлено: ' + dispatch.join(', ')));
       if (!measures.length) add(body, node('p', 'mgr-muted', 'Доступних заходів немає.'));
@@ -222,24 +333,32 @@
   async function loadDepartmentProgress() {
     const period = $('mgr-period').value;
     if (!period) return;
-    const programId = $('mgr-program').value;
-    const url = '/api/management/department-progress?period=' + encodeURIComponent(period) +
-      (programId ? '&program_id=' + encodeURIComponent(programId) : '');
+    // Department tab always summarises all programmes in the KER's server-authorized branch.
+    // The programme selector filters only the programme tree, not this management summary.
+    const url = '/api/management/department-progress?period=' + encodeURIComponent(period);
     const request = ++departmentProgressRequest;
+    state.departmentProgress = null;
+    progress();
+    updateMeasureProgress();
     try {
       const result = await Api.get(url);
       if (request !== departmentProgressRequest) return;
       state.departmentProgress = result;
       progress();
+      drawTree();
+      kpis();
     } catch (error) {
       if (request !== departmentProgressRequest) return;
       state.departmentProgress = null;
-      empty($('mgr-department-progress'), 'Не вдалося завантажити прогрес: ' + (error.message || 'помилка сервера'));
+      const text = 'Не вдалося завантажити прогрес: ' + (error.message || 'помилка сервера');
+      empty($('mgr-department-progress'), text);
+      app.querySelectorAll('[data-mgr-measure-progress]').forEach(host => empty(host, text));
+      kpis();
     }
   }
 
   async function load() {
-    const period = $('mgr-period').value;
+    const period = guardReportingPeriod();
     if (!period) return;
     message('');
     $('mgr-refresh').disabled = true;
@@ -277,7 +396,7 @@
     app.querySelectorAll('[data-mgr-tab]').forEach(btn => btn.addEventListener('click', () => setTab(btn.dataset.mgrTab)));
     $('mgr-refresh').addEventListener('click', load);
     $('mgr-program-search').addEventListener('input', drawTree);
-    $('mgr-program').addEventListener('change', () => { drawTree(); loadDepartmentProgress(); });
+    $('mgr-program').addEventListener('change', drawTree);
     $('mgr-department-search').addEventListener('input', progress);
     $('mgr-rec-search').addEventListener('input', renderRecommendations);
     $('mgr-rec-priority').addEventListener('change', renderRecommendations);
@@ -288,9 +407,7 @@
       const programs = await Api.get('/api/management/programs?period=' + encodeURIComponent(period));
       const now = new Date().getFullYear();
       Api.fillPeriods($('mgr-period'), programs.length ? programs : [{start_date:(now-2)+'-01-01',end_date:(now+1)+'-12-31'}]);
-      // The service checks as_of >= period start. Avoid selecting a future half-year.
-      const current = Api.currentPeriod();
-      if ($('mgr-period').value > current) $('mgr-period').value = current;
+      guardReportingPeriod();
       await load();
     } catch(error) {
       message('Не вдалося завантажити кабінет: ' + (error.message || 'помилка сервера'));

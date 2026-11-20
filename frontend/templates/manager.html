@@ -2,7 +2,7 @@
 {% block title %}Кабінет керівника — моніторинг виконання{% endblock %}
 {% block role_name %}Керівник{% endblock %}
 {% block content %}
-<link rel="stylesheet" href="/static/css/manager-ux.css?v=ker-depts2">
+<link rel="stylesheet" href="/static/css/manager-ux.css?v=ker-full-programme4">
 <div id="manager-dashboard" class="mgr-page">
   <header class="mgr-heading-row">
     <div>
@@ -13,6 +13,7 @@
 
   <nav class="mgr-nav" aria-label="Розділи кабінету керівника" role="tablist">
     <button type="button" role="tab" data-mgr-tab="programs" aria-selected="true">Програми та прогрес</button>
+    <button type="button" role="tab" data-mgr-tab="departments" aria-selected="false">Прогрес за підрозділами</button>
     <button type="button" role="tab" data-mgr-tab="recommendations" aria-selected="false">Рекомендації <span id="mgr-rec-count"></span></button>
     <button type="button" role="tab" data-mgr-tab="flags" aria-selected="false">Risk Flags <span id="mgr-flags-count"></span></button>
     <button type="button" role="tab" data-mgr-tab="risks" aria-selected="false">Корупційні ризики</button>
@@ -28,7 +29,7 @@
 
   <section data-mgr-panel="programs" role="tabpanel" class="mgr-panel">
     <div class="mgr-stats" aria-label="Статистика виконання заходів">
-      <div class="mgr-stat"><span>Усього заходів</span><strong id="mgr-kpi-total">—</strong></div>
+      <div class="mgr-stat"><span>Усього заходів у програмах</span><strong id="mgr-kpi-total">—</strong></div>
       <div class="mgr-stat"><span>Виконано</span><strong id="mgr-kpi-completed">—</strong></div>
       <div class="mgr-stat"><span>Очікують погодження</span><strong id="mgr-kpi-pending">—</strong></div>
       <div class="mgr-stat"><span>Прострочені</span><strong id="mgr-kpi-overdue">—</strong></div>
@@ -43,19 +44,20 @@
       </label>
     </div>
 
+    <section class="mgr-section" aria-label="Доступні програми й заходи">
+      <div class="mgr-section-head"><h2>Програми та заходи</h2><span id="mgr-program-count" class="mgr-muted"></span></div>
+      <div id="mgr-program-tree" class="mgr-tree"><p class="mgr-muted">Завантаження…</p></div>
+    </section>
+  </section>
+
+  <section data-mgr-panel="departments" role="tabpanel" class="mgr-panel" hidden>
     <section class="mgr-section" aria-label="Прогрес за підрозділами">
-      <div class="mgr-section-head"><h2>Прогрес за підрозділами</h2><span id="mgr-progress-period" class="mgr-muted"></span></div>
-      <p id="mgr-progress-caption" class="mgr-muted mgr-progress-caption"></p>
       <label class="mgr-field mgr-department-search" for="mgr-department-search">Пошук підрозділу
         <input type="search" id="mgr-department-search" autocomplete="off" placeholder="Назва або код підрозділу">
       </label>
       <div id="mgr-department-progress" class="mgr-department-grid"><p class="mgr-muted">Завантаження…</p></div>
     </section>
 
-    <section class="mgr-section" aria-label="Доступні програми й заходи">
-      <div class="mgr-section-head"><h2>Програми та заходи</h2><span id="mgr-program-count" class="mgr-muted"></span></div>
-      <div id="mgr-program-tree" class="mgr-tree"><p class="mgr-muted">Завантаження…</p></div>
-    </section>
   </section>
 
   <section data-mgr-panel="recommendations" role="tabpanel" class="mgr-panel" hidden>
@@ -91,4 +93,4 @@
   </section>
 </div>
 {% endblock %}
-{% block scripts %}<script src="/static/js/manager.js?v=ker-depts2"></script>{% endblock %}
+{% block scripts %}<script src="/static/js/manager.js?v=ker-clean-period5"></script>{% endblock %}
