@@ -5,6 +5,7 @@ from app.core.dependencies import get_current_user, require_admin
 from app.database.db_connection import get_db
 from app.models.user import User
 from app.models.measure import Measure
+from app.models.program import Program
 
 from app.schemas.deadline_changes import (
     DeadlineChangeCreate,
@@ -25,11 +26,17 @@ router = APIRouter(
 
 
 # Перевірка прав на зміну строків
-def check_edit_access(user: User, measure: Measure) -> None:
+def check_edit_access(user: User, measure: Measure, db: Session | None = None) -> None:
 
     # Адміністратор
     if user.role_id == "ADMIN":
         return
+
+    # Головний координатор — власник програми (як і для редагування заходів).
+    if user.role_id == "MAIN_KOORD" and db is not None:
+        program = db.get(Program, measure.program_id)
+        if program is not None and program.created_by_user_id == user.id:
+            return
 
     # Координатор своєї програми
     if user.role_id == "KOORD":
@@ -54,7 +61,7 @@ def create_change(
     if measure is None:
         raise HTTPException(status_code=422, detail="Захід не існує")
 
-    check_edit_access(user, measure)
+    check_edit_access(user, measure, db)
 
     try:
         return DeadlineChangeService(db).create_change(data, user.id)
@@ -105,7 +112,7 @@ def update_change(
         if measure is None:
             raise HTTPException(status_code=404, detail="Захід не знайдено")
 
-        check_edit_access(user, measure)
+        check_edit_access(user, measure, db)
 
         return service.update_change(change_id, data)
 
