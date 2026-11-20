@@ -1,0 +1,68 @@
+{
+  "program_id": "PW-PROGRAM",
+  "program_title": "Playwright synthetic program",
+  "organization_name": "Synthetic institution",
+  "period_label": "Звіт за друге півріччя 2026 року",
+  "period": "2026-H2",
+  "period_start": "2026-07-01",
+  "period_end": "2026-12-31",
+  "as_of": "2026-11-20",
+  "is_preliminary": true,
+  "generated_at": "2026-11-20T21:19:06.784901Z",
+  "scope": "program",
+  "department_id": null,
+  "sections": [
+    {
+      "section_id": "R1",
+      "number": 1,
+      "title": "Synthetic section 1",
+      "measures": []
+    },
+    {
+      "section_id": "R2",
+      "number": 2,
+      "title": "Synthetic section 2",
+      "measures": []
+    },
+    {
+      "section_id": "R3",
+      "number": 3,
+      "title": "Synthetic training",
+      "measures": [
+        {
+          "measure_id": "PW000001",
+          "sequence_number": 1,
+          "measure_description": "Conduct one synthetic integrity training",
+          "responsible_department_id": "PW-TEAM",
+          "responsible_department": "Synthetic PW-TEAM",
+          "planned_deadline": "Synthetic deadline for overdue example (01.11.2026)",
+          "completion_indicator": "One training",
+          "indicator_unit": "training",
+          "participants_count": null,
+          "risk_id": null,
+          "risk": null,
+          "factual_date": null,
+          "execution_status": "Не виконано",
+          "result_description": "",
+          "indicator_actual": null,
+          "indicator_target": "1.000",
+          "approved_by_coordinator": false,
+          "evidence_count": 0,
+          "warnings": [
+            "Не зазначено пояснення причин невиконання"
+          ]
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "completed": 0,
+    "partial": 0,
+    "not_completed": 1,
+    "not_due": 0,
+    "unapproved": 0,
+    "missing_explanations": 1,
+    "missing_results": 0
+  }
+}

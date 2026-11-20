@@ -1,0 +1,21 @@
+{
+  "department_id": "PW-TEAM",
+  "period": "2026-H2",
+  "as_of": "2026-11-20",
+  "total": 1,
+  "recommendations": [
+    {
+      "key": "PW-PROGRAM:DL_OVERDUE:zakhid:PW000001",
+      "code": "DL_OVERDUE",
+      "program_id": "PW-PROGRAM",
+      "object_type": "zakhid",
+      "object_id": "PW000001",
+      "priority": "critical",
+      "title": "Прострочено строк виконання",
+      "reason": "Строк 2026-11-01; прострочення 19 дн.; стан not_started; погоджене виконання відсутнє.",
+      "suggestion": "Перевірити причини затримки та проконтролювати коригувальні дії.",
+      "source": "operational",
+      "as_of": "2026-11-20"
+    }
+  ]
+}
