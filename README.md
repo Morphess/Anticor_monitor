@@ -89,7 +89,6 @@ docker compose -p bordergroup-demo --env-file .env.demo exec ollama ollama pull 
 - [PostgreSQL і розгортання](docs/database.md) — конфігурація БД, Docker Compose і доступ через Tailscale.
 - [Перевірка релізу й деплой](docs/release.md) — міграція, резервні копії та команди production.
 - [Базовий аудит безпеки](docs/security-review.md) — перевірки, виправлення та межі аудиту.
-- [Правила внеску](CONTRIBUTING.md) — робота з гілками, PR і рев’ю.
 
 ## Що використали
 
