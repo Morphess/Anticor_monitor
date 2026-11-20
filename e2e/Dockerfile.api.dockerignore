@@ -3,9 +3,9 @@
 !backend/
 !backend/app/
 !backend/app/**
-!backend/alembic.ini
-!backend/alembic/
-!backend/alembic/**
+!alembic.ini
+!alembic/
+!alembic/**
 !frontend/
 !frontend/**
 !e2e/

@@ -2,9 +2,16 @@ name: CI
 
 on:
   pull_request:
-    branches: [main, demid]
+    branches: [main, backend, demid]
   push:
-    branches: [main, demid]
+    branches: [main, backend, demid]
+
+env:
+  APP_NAME: BorderGroup CI
+  DEBUG: "false"
+  SQL_ECHO: "false"
+  DATABASE_URL: postgresql+psycopg://ci_user:ci_test_only@127.0.0.1:5432/bordergroup_ci
+  JWT_SECRET_KEY: synthetic-ci-only-hs256-key-at-least-32-bytes
 
 permissions:
   contents: read
