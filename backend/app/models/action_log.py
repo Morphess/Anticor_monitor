@@ -9,7 +9,6 @@ from app.database.base import Base
 
 # Аудит дій користувачів: зберігаємо, хто, коли та що змінив.
 class ActionLog(Base):
-    # Ім’я таблиці в PostgreSQL, з якою працює ця модель.
     __tablename__ = "action_logs"
 
     # Унікальний ID події (демо L-0001; для нових подій можна використовувати UUID).
@@ -28,12 +27,10 @@ class ActionLog(Base):
     entity_type: Mapped[str] = mapped_column(String(50), nullable=False)
     # ID конкретного об’єкта; це не FK, адже об’єкти лежать у різних таблицях.
     entity_id: Mapped[str] = mapped_column(String(50), nullable=False)
-    # Назва поля, яке було змінено; може не заповнюватися.
     field_name: Mapped[str | None] = mapped_column(String(100))
     # Попереднє значення зміненого поля; може бути порожнім.
     old_value: Mapped[str | None] = mapped_column(Text)
     # Нове значення зміненого поля; може бути порожнім.
     new_value: Mapped[str | None] = mapped_column(Text)
 
-    # ORM-доступ до об’єкта User через actor_user_id.
     actor_user: Mapped["User | None"] = relationship("User")

@@ -9,7 +9,6 @@ from app.database.base import Base
 
 # Окреме рішення про перенесення строку заходу; первинний строк заходу не перезаписуємо.
 class DeadlineChange(Base):
-    # Ім’я таблиці в PostgreSQL, з якою працює ця модель.
     __tablename__ = "deadline_changes"
 
     # Внутрішній автоматично створюваний номер рішення про перенесення.

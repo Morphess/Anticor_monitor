@@ -1,3 +1,4 @@
+from app.schemas.orders import OrderAnalysisRead
 """Schemas for the order-based approval workflow."""
 from datetime import datetime
 from typing import Literal
@@ -52,3 +53,10 @@ class ExecutionRead(BaseModel):
     rejection_reason: str | None
     # Client fetches with JWT; a plain <a href> would not carry Bearer token.
     document_api_path: str | None = None
+
+class ExecutionAnalysisRead(OrderAnalysisRead):
+    analysis_id: int | None = None
+    created_at: datetime | None = None
+    execution_id: int
+    order_version_id: int
+    submitted_sha256: str

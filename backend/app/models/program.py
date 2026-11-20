@@ -33,7 +33,6 @@ class Program(Base):
         primary_key=True,
     )
 
-    # Назва антикорупційної програми.
     title: Mapped[str] = mapped_column(
         Text,
         nullable=False,

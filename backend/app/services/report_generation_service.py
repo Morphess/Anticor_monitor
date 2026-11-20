@@ -77,9 +77,9 @@ def half_year_bounds(period: str) -> tuple[date, date]:
 
 def export_root() -> Path:
     # Каталог поза backend/app. У Docker слід примонтувати як persistent volume.
-    default_path = Path(__file__).resolve().parents[2] / "generated_reports"
+    default_path = Path(__file__).resolve().parents[3] / "reports"
     root = Path(os.getenv("REPORT_EXPORT_DIR", str(default_path))).expanduser().resolve()
-    root.mkdir(parents=True, exist_ok=True)
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)
     return root
 
 
@@ -366,7 +366,7 @@ class ReportGenerationService:
         path = export_root() / f"report-{report.id}-{uuid.uuid4().hex}.json"
         tmp = path.with_suffix(".tmp")
         try:
-            with tmp.open("x", encoding="utf-8") as stream:
+            with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w", encoding="utf-8") as stream:
                 # Mark newly restricted KOORD snapshots. Older files may include
                 # all program measures and must not be exposed as subtree reports.
                 document = snapshot.model_dump(mode="json")

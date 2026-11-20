@@ -1,6 +1,7 @@
+from fastapi.concurrency import run_in_threadpool
 """One independent submission, document and review decision per executor."""
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import select
 from app.models.action_log import ActionLog
 from app.models.execution import Execution
@@ -15,6 +16,12 @@ from app.services.measure_access import (
     require_visible_measure, visible_measure_ids,
 )
 from app.services.program_workflow_services import ProgramWorkflowService, WorkflowError
+
+from app.schemas.execution import ExecutionAnalysisRead
+from app.services.execution_analysis_services import analysis_input, saved_analysis_context
+from app.repositories.execution_analysis_repository import ExecutionAnalysisRepository
+from app.services.order_analysis_services import OrderAnalysisError, analyze_order_document, analysis_fingerprint
+
 
 router = APIRouter(prefix='/executions', tags=['Executions'])
 
@@ -170,3 +177,61 @@ def reject(execution_id: int, data: ExecutionReject,
         ))
     except ExecutionError as exc:
         raise _http(exc) from exc
+
+
+def _analysis_read(row):
+    # Read the private file before Pydantic wraps property errors.
+    return ExecutionAnalysisRead.model_validate({
+        field: getattr(row, field, None) for field in ExecutionAnalysisRead.model_fields
+    })
+
+
+@router.post('/{execution_id}/analyze', response_model=ExecutionAnalysisRead,
+             summary='Координатор: порівняти наказ подання зі змістом заходу')
+async def analyze_execution(execution_id: int, force: bool = Query(False), db: Session = Depends(get_db),
+                            actor: User = Depends(require_execution_actor)):
+    if actor.role_id not in {'MAIN_KOORD', 'KOORD'}:
+        raise HTTPException(status_code=403, detail='Аналіз доступний лише координатору')
+    try:
+        order, measure, name, content, version_id, digest = await run_in_threadpool(
+            analysis_input, db, actor, execution_id
+        )
+        repo = ExecutionAnalysisRepository(db)
+        input_digest = analysis_fingerprint(order, measure)
+        if not force:
+            saved = await run_in_threadpool(repo.latest, execution_id, version_id, digest, input_digest)
+            if saved is not None:
+                return _analysis_read(saved)
+        if not await run_in_threadpool(repo.try_lock, execution_id):
+            raise ExecutionError("Аналіз цього подання вже триває. Результат з’явиться після завершення.", 409)
+        if not force:
+            saved = await run_in_threadpool(repo.latest, execution_id, version_id, digest, input_digest)
+            if saved is not None:
+                return _analysis_read(saved)
+        result = await analyze_order_document(order, measure, name, content)
+        saved = await run_in_threadpool(repo.save, execution_id, version_id, digest,
+                                       input_digest, actor.id, result)
+        return _analysis_read(saved)
+    except (ExecutionError, OrderAnalysisError) as exc:
+        raise _http(exc) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=503, detail='Сховище документів недоступне') from exc
+
+
+@router.get('/{execution_id}/analysis', response_model=ExecutionAnalysisRead,
+            responses={204: {"description": "Актуальний збережений аналіз відсутній"}},
+            summary='Координатор: отримати збережений аналіз без запуску моделі')
+def get_saved_analysis(execution_id: int, db: Session = Depends(get_db),
+                       actor: User = Depends(require_execution_actor)):
+    if actor.role_id not in {'MAIN_KOORD', 'KOORD'}:
+        raise HTTPException(status_code=403, detail='Аналіз доступний лише координатору')
+    try:
+        version_id, digest, input_digest = saved_analysis_context(db, actor, execution_id)
+        saved = ExecutionAnalysisRepository(db).latest(execution_id, version_id, digest, input_digest)
+        if saved is None:
+            return Response(status_code=204)
+        return _analysis_read(saved)
+    except ExecutionError as exc:
+        raise _http(exc) from exc
+    except OSError as exc:
+        raise HTTPException(503, "Сховище висновків недоступне") from exc

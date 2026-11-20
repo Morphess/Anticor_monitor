@@ -32,10 +32,11 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8001:8000"
+      - "127.0.0.1:${API_BIND_PORT:-8001}:8000"
     environment:
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL for the application user in .env}
       APP_NAME: ${APP_NAME:-BorderGroup}
+      CORS_ORIGINS: '${CORS_ORIGINS:-["http://127.0.0.1:8001","http://localhost:8001"]}'
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
       OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-600}

@@ -7,16 +7,13 @@ from argon2.exceptions import VerificationError, InvalidHashError
 from app.core.config import settings
 
 
-# Хешування паролів
 password_hasher = PasswordHasher()
 
 
-# Створення хешу пароля
 def hash_password(password: str) -> str:
     return password_hasher.hash(password)
 
 
-# Перевірка пароля
 def verify_password(password: str, password_hash: str) -> bool:
     try:
         return password_hasher.verify(password_hash, password)

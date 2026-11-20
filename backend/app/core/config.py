@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -21,6 +22,7 @@ class Settings(BaseSettings):
 
     SQL_ECHO: bool
     JWT_SECRET_KEY: str
+    CORS_ORIGINS: list[str] = ["http://127.0.0.1:8001", "http://localhost:8001"]
     OLLAMA_BASE_URL: str = "http://ollama:11434"
     OLLAMA_MODEL: str = "qwen2.5:3b"
     OLLAMA_TIMEOUT_SECONDS: int = Field(default=600, ge=30, le=3600)

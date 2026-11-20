@@ -18,9 +18,7 @@ from app.database.base import Base
 
 # Запис про сформовану/подану версію звіту, а не сам вміст звіту.
 class Report(Base):
-    # Ім’я таблиці в PostgreSQL, з якою працює ця модель.
     __tablename__ = "reports"
-    # Правила цілісності БД: унікальність і перевірки значень.
     __table_args__ = (
         # Одна версія звіту для певної програми й періоду може існувати лише раз.
         UniqueConstraint("program_id", "period", "version", name="uq_report_version"),
@@ -32,7 +30,6 @@ class Report(Base):
         ),
     )
 
-    # Автоматичний номер сформованого звіту.
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     # Для якої програми підготовлений звіт.
     program_id: Mapped[str] = mapped_column(ForeignKey("programs.id"), nullable=False)
@@ -51,7 +48,5 @@ class Report(Base):
     # Шлях до збереженого файлу звіту, якщо його експортували.
     export_file_path: Mapped[str | None] = mapped_column(Text)
 
-    # ORM-доступ до програми звіту.
     program: Mapped["Program"] = relationship("Program")
-    # ORM-доступ до користувача, який створив звіт.
     generated_by_user: Mapped["User | None"] = relationship("User")

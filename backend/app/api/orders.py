@@ -32,7 +32,7 @@ from app.services.order_document_storage import (
 from fastapi.responses import FileResponse
 from app.schemas.order_versions import OrderVersionRead
 
-router = APIRouter(prefix="/orders", tags=["Orders"])
+router = APIRouter(prefix="/orders", tags=["Orders"], dependencies=[Depends(require_admin)])
 
 
 @router.post(

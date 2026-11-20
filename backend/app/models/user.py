@@ -6,18 +6,15 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import Base
 
 
-# Обліковий запис користувача для входу в FastAPI.
 class User(Base):
     __tablename__ = "users"
 
-    # Унікальний числовий ID користувача.
     id: Mapped[int] = mapped_column(
         Integer,
         primary_key=True,
         autoincrement=True,
     )
 
-    # Логін користувача.
     login: Mapped[str] = mapped_column(
         String(100),
         unique=True,
@@ -25,7 +22,6 @@ class User(Base):
         nullable=False,
     )
 
-    # Хеш пароля (Argon2 або bcrypt).
     password_hash: Mapped[str] = mapped_column(
         String(255),
         nullable=False,
@@ -50,7 +46,6 @@ class User(Base):
         nullable=True,
     )
 
-    # Посада користувача.
     position: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,

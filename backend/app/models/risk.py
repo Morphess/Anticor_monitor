@@ -8,9 +8,7 @@ from app.database.base import Base
 
 # Корупційний ризик, його оцінка, індикатори й відповідальний підрозділ.
 class Risk(Base):
-    # Ім’я таблиці в PostgreSQL, з якою працює ця модель.
     __tablename__ = "risks"
-    # Правила цілісності БД: унікальність і перевірки значень.
     __table_args__ = (
         # Імовірність ризику повинна бути в межах 1–4.
         CheckConstraint(
@@ -32,13 +30,10 @@ class Risk(Base):
         ),
     )
 
-    # Код ризику з Excel, наприклад KR01.
     id: Mapped[str] = mapped_column(String(8), primary_key=True)  # KR01
     # Функція або процес, у якому виникає ризик.
     process_name: Mapped[str] = mapped_column(Text, nullable=False)
-    # Коротка назва ризику.
     title: Mapped[str] = mapped_column(Text, nullable=False)
-    # Детальний зміст ризику.
     description: Mapped[str] = mapped_column(Text, nullable=False)
     # Джерела та чинники ризику.
     risk_sources: Mapped[str] = mapped_column(Text, nullable=False)
@@ -58,7 +53,6 @@ class Risk(Base):
     )
     # Показник, за яким можна визначити зміну ризику.
     indicator_name: Mapped[str] = mapped_column(Text, nullable=False)
-    # Одиниця вимірювання показника (% або шт.).
     indicator_unit: Mapped[str] = mapped_column(String(20), nullable=False)
     # Кращий напрям зміни: increase або decrease.
     indicator_direction: Mapped[str] = mapped_column(String(12), nullable=False)
@@ -70,11 +64,9 @@ class Risk(Base):
     indicator_target_value: Mapped[Decimal] = mapped_column(
         Numeric(14, 3), nullable=False
     )
-    # Дата, до якої потрібно досягнути цілі.
     target_date: Mapped[date] = mapped_column(Date, nullable=False)
 
 
-    # ORM-доступ до підрозділу-власника ризику.
     owner_department: Mapped["Department"] = relationship("Department")
     # Усі значення індикатора за різні дати.
     measurements: Mapped[list["RiskMeasurement"]] = relationship(

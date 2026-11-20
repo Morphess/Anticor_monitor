@@ -45,12 +45,28 @@ def snapshot():
         return result
 
 
+alembic("upgrade", "b14e28a0c6f9")
+with engine.begin() as connection:
+    connection.execute(text("""INSERT INTO execution_analyses
+        (execution_id, order_id, order_version_id, submitted_sha256, input_sha256,
+         model, file_name, analysis, text_truncated, output_truncated)
+        SELECT id, order_id, order_version_id, submitted_sha256, :fingerprint,
+               'synthetic-model', 'synthetic.pdf', 'Legacy synthetic report', false, false
+        FROM executions WHERE id = :probe"""), {"fingerprint": "a" * 64, "probe": probe_id})
 before = snapshot()
 alembic("upgrade", "head")
-if before != snapshot():
+after = snapshot()
+if before != {key: after.get(key) for key in before}:
     raise SystemExit("Migration changed existing synthetic records")
 alembic("current", "--check-heads")
 alembic("check")
+from app.services.migrate_analysis_files import main as migrate_files
+from app.models.execution_analysis import ExecutionAnalysis
+migrate_files()
+with SessionLocal() as db:
+    report = db.scalar(select(ExecutionAnalysis).where(ExecutionAnalysis.execution_id == probe_id))
+    if report.legacy_analysis is not None or report.analysis != "Legacy synthetic report":
+        raise SystemExit("Legacy report was not preserved in file storage")
 # Remove only the rehearsal submission, leaving the E2E fixture ready for UI submission.
 with SessionLocal() as db:
     db.delete(db.get(Execution, probe_id))

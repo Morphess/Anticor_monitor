@@ -10,6 +10,7 @@ from .risk import Risk
 from .risk_assessment import RiskAssessment
 from .risk_measurement import RiskMeasurement
 from .measure import Measure, MeasureCollaborator
+from .execution_analysis import ExecutionAnalysis
 from .execution import Execution
 from .deadline_change import DeadlineChange
 from .action_log import ActionLog

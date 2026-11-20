@@ -21,3 +21,10 @@
 **/*.pem
 **/__pycache__/
 **/*.py[cod]
+
+**/*.bak
+**/*.bak-*
+**/*.log
+**/*.dump
+**/node_modules/
+**/.venv/

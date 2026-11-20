@@ -1,0 +1,4 @@
+services:
+  api:
+    environment:
+      DEMO_PASSWORD: ${DEMO_PASSWORD:?Run python3 scripts/demo-init.py first}

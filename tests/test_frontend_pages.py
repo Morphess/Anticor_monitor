@@ -16,7 +16,7 @@ os.environ.setdefault(
 
 from app.web.frontend_pages import router as pages_router
 
-PAGES = [route.path for route in pages_router.routes if route.path != "/"]
+PAGES = [route.path for route in pages_router.routes if route.path not in {"/", "/analyst"}]
 
 
 ROOT = Path(__file__).resolve().parents[1]

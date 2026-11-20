@@ -17,52 +17,63 @@ Cклад команди:
 
 - Зберігає структуру програми, її розділи, заходи та пов’язані сутності в PostgreSQL.
 - Надає API для входу, користувачів, програм, розділів і заходів.
-- Перевіряє права доступу для частини операцій за ролями користувачів.
+- Перевіряє доступ до програм, заходів, документів і звітів за роллю та підрозділом.
 - Застосовує версійні міграції схеми БД через Alembic.
 - Перевіряє HTTP-сценарії API та міграції в GitHub Actions.
 
+![Кабінет головного координатора із синтетичною програмою](docs/images/dashboard.png)
+
 ## Демонстрація
------
------
-##  Розгортання
 
-Потрібні Git, Docker і Docker Compose v2+. Команди виконуються в корені репо. Для локального запуску потрібні окремий користувач застосунку в PostgreSQL і синтетичні дані; секрети не додавайте до Git.
+Відео основного сценарію до 3 хвилин команда додасть перед поданням.
+Сценарій: MAIN_KOORD створює програму → KOORD призначає виконавця →
+VYK подає наказ → KOORD перевіряє документ і висновок ШІ та погоджує
+виконання → формування піврічного звіту. Використовуйте лише вигадані дані.
 
-1. Клонуйте репозиторій:
+## Розгортання для журі — 5 кроків
 
+Потрібні Git, Python 3 і Docker із Compose v2. Запуск на Linux/macOS
+або Docker Desktop; порт 8001 має бути вільним. Це окремий локальний
+демопроєкт із власними volumes, не конфігурація production.
+
+1. Клонуйте проєкт:
    ```sh
    git clone https://github.com/Morphess/Anticor_monitor.git
    cd Anticor_monitor
    ```
-
-2. Створіть локальний `.env` з `.env.example`, задайте власні `POSTGRES_PASSWORD`, `DATABASE_URL` і `JWT_SECRET_KEY` та перевірте конфігурацію:
-
+2. Згенеруйте випадкові локальні секрети (файл не перезаписується):
    ```sh
-   cp .env.example .env
-   chmod 600 .env
-   # Заповніть .env у редакторі: DATABASE_URL має вказувати на db:5432.
-   docker compose config --quiet
+   python3 scripts/demo-init.py
    ```
-
-3. Запустіть PostgreSQL і створіть у ньому окремого користувача для застосунку. `POSTGRES_USER=postgres` потрібен лише для адміністрування; порядок створення ролі та права описані в [документації БД](docs/database.md):
-
+3. Зберіть API та запустіть БД:
    ```sh
-   docker compose up -d --wait db
+   docker compose -p bordergroup-demo --env-file .env.demo -f compose.yaml -f compose.demo.yaml build api
+   docker compose -p bordergroup-demo --env-file .env.demo -f compose.yaml -f compose.demo.yaml up -d --wait db
    ```
-
-4. Застосуйте міграції:
-
+4. Застосуйте міграції та створіть адміністратора порожньої демо-БД:
    ```sh
-   docker compose run --rm api alembic -c /app/alembic.ini upgrade head
+   docker compose -p bordergroup-demo --env-file .env.demo -f compose.yaml -f compose.demo.yaml run --rm --no-deps api alembic -c /app/alembic.ini upgrade head
+   docker compose -p bordergroup-demo --env-file .env.demo -f compose.yaml -f compose.demo.yaml run --rm --no-deps api python -m app.services.bootstrap_demo
    ```
-
-5. Запустіть API та перевірте його на комп’ютері, де працює Docker:
-
+5. Запустіть застосунок і відкрийте http://127.0.0.1:8001/login:
    ```sh
-   docker compose up --build -d api
-   curl --fail http://127.0.0.1:8001/
-   curl --fail http://127.0.0.1:8001/db
+   docker compose -p bordergroup-demo --env-file .env.demo -f compose.yaml -f compose.demo.yaml up -d --no-deps api
+   curl --fail http://127.0.0.1:8001/health
    ```
+   Логін — `demo_admin`, пароль — значення `DEMO_PASSWORD` у вашому
+   `.env.demo`. З адміністратора створіть користувачів потрібних ролей.
+   База використовує окремого demo_user лише для локальної демонстрації;
+   production потребує окремих адміністративної та прикладної ролей.
+
+ШІ необов'язкова для основного workflow. Для аналізу потрібні приблизно
+4 ГБ вільної RAM додатково та завантаження моделі (~1,9 ГБ):
+```sh
+docker compose -p bordergroup-demo --env-file .env.demo --profile ai up -d ollama
+docker compose -p bordergroup-demo --env-file .env.demo exec ollama ollama pull qwen2.5:3b
+```
+На CPU аналіз може тривати кілька хвилин. Журі не потрібен доступ до
+серверного Tailscale. Інструкція production — [docs/release.md](docs/release.md).
+
 ## Побудова
 
 **Стек:** Python 3.13, FastAPI, Jinja2, HTML/CSS/JavaScript, PostgreSQL 17, SQLAlchemy, Alembic, Docker Compose, GitHub Actions.
@@ -81,6 +92,8 @@ Cклад команди:
 
 - [Використання ШІ](docs/ai.md) — інструменти, застосування та перевірка командою; записка доповнюється під час розробки.
 - [PostgreSQL і розгортання](docs/database.md) — конфігурація БД, Docker Compose і доступ через Tailscale.
+- [Перевірка релізу й деплой](docs/release.md) — міграція, резервні копії та команди production.
+- [Базовий аудит безпеки](docs/security-review.md) — перевірки, виправлення та межі аудиту.
 - [Правила внеску](CONTRIBUTING.md) — робота з гілками, PR і рев’ю.
 
 ## Що використали

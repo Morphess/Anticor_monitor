@@ -57,4 +57,5 @@ def manager(request: Request):
 
 @router.get("/analyst", response_class=HTMLResponse, include_in_schema=False)
 def analyst(request: Request):
-    return page(request, "analyst.html")
+    from fastapi import HTTPException
+    raise HTTPException(404, "Кабінет аналітика більше не використовується")

@@ -8,10 +8,8 @@ from app.database.base import Base
 
 # Довідник структурних підрозділів установи.
 class Department(Base):
-    # Ім’я таблиці в PostgreSQL, з якою працює ця модель.
     __tablename__ = "departments"
 
-    # Код підрозділу з Excel, наприклад P01.
     id: Mapped[str] = mapped_column(String(10), primary_key=True)
     # Повна офіційна/умовна назва підрозділу.
     name: Mapped[str] = mapped_column(Text, nullable=False)

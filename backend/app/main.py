@@ -13,6 +13,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.database.db_connection import get_db, engine
 
+from app.core.config import settings
 from app.core.audit import enable_audit
 
 from app.api.auth import router as auth_router
@@ -38,20 +39,16 @@ from app.api.order_change_alerts import router as order_change_alerts_router
 from app.api.management_dashboard import router as management_dashboard_router
 from app.web.frontend_pages import FRONTEND_DIR, router as frontend_router
 
-# Налаштування логування
 logger = logging.getLogger(__name__)
 
 
-# Коренева папка проєкту
 BASE_DIR = Path(__file__).resolve().parents[2]
 
-# Папки фронтенду
 FRONTEND_DIR = BASE_DIR / "frontend"
 TEMPLATES_DIR = FRONTEND_DIR / "templates"
 STATIC_DIR = FRONTEND_DIR / "static"
 
 
-# Життєвий цикл застосунку
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Anticor Monitor запускається...")
@@ -65,7 +62,6 @@ async def lifespan(app: FastAPI):
 
 enable_audit()
 
-# Створення FastAPI
 app = FastAPI(
     title="Anticor Monitor API",
     description="API системи моніторингу корупційних ризиків",
@@ -74,21 +70,15 @@ app = FastAPI(
 )
 
 
-# Налаштування CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://127.0.0.1:8000",
-        "http://localhost:8000",
-        "https://ubuntu.ermine-great.ts.net",
-    ],
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-# Підключення API
 app.include_router(auth_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
 app.include_router(coordinator_users_router, prefix="/api")
@@ -113,11 +103,9 @@ app.include_router(management_dashboard_router, prefix="/api")
 app.include_router(frontend_router)
 
 
-# HTML-шаблони
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 
-# Статичні файли
 app.mount(
     "/static",
     StaticFiles(directory=str(STATIC_DIR)),
@@ -125,7 +113,6 @@ app.mount(
 )
 
 
-# Головна сторінка
 @app.get("/", tags=["System"])
 def read_root():
     return {
@@ -134,7 +121,6 @@ def read_root():
     }
 
 
-# Перевірка роботи FastAPI
 @app.get("/health", tags=["System"])
 def health_check():
     return {
@@ -143,7 +129,6 @@ def health_check():
     }
 
 
-# Перевірка PostgreSQL
 @app.get("/db", tags=["System"])
 def database_health_check(
     db: Session = Depends(get_db),

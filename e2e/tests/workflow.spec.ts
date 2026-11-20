@@ -23,6 +23,7 @@ test('main coordinator can see own program and planned measure', async ({ page }
   await login(page, 'pw_main', '/main-coordinator');
   await expect(page.getByText('Playwright synthetic program', { exact: true })).toBeVisible();
   await expect(page.locator('#mc-count-measures')).toHaveText('1');
+  await page.screenshot({ path: '/artifacts/release-dashboard.png', fullPage: true });
 });
 
 test('coordinator sees only the dispatched workflow', async ({ page }) => {
@@ -71,15 +72,14 @@ test('executor submits a pinned order, coordinator views and approves it', async
     await coord.getByRole('button', { name: /Conduct one synthetic integrity training/ }).click();
     await expect(coord.getByRole('button', { name: /^(Проаналізувати наказ|Повторити аналіз)$/ })).toBeVisible();
     const documentResponse = coord.waitForResponse(r => new URL(r.url()).pathname === `/api/executions/${execution.id}/document`);
-    const popup = coord.waitForEvent('popup');
+    const download = coord.waitForEvent('download');
     await coord.getByRole('button', { name: 'Переглянути наказ', exact: true }).click();
     const pdf = await documentResponse;
     expect(pdf.status()).toBe(200);
     expect(pdf.headers()['content-type']).toContain('application/pdf');
     expect((await pdf.body()).subarray(0, 5).toString()).toBe('%PDF-');
-    const documentPage = await popup;
-    await expect(documentPage).toHaveURL(/^blob:/);
-    await documentPage.close();
+    const document = await download;
+    expect(document.suggestedFilename()).toBe('synthetic-order.pdf');
     await coord.getByRole('button', { name: 'Погодити', exact: true }).click();
     const approved = coord.waitForResponse(r => r.url().endsWith(`/api/executions/${execution.id}/approve`));
     await coord.locator('#coord-review-submit').click();

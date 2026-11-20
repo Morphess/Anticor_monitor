@@ -58,7 +58,6 @@ class Measure(Base):
     # Розділ R1, R2 або R3.
     section_id: Mapped[str] = mapped_column(ForeignKey("sections.id"), nullable=False)
 
-    # Порядковий номер заходу всередині розділу програми.
     sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # ==========================================
@@ -102,7 +101,6 @@ class Measure(Base):
     # Очікуваний результат заходу.
     completion_indicator: Mapped[str] = mapped_column(Text, nullable=False)
 
-    # Одиниця вимірювання (% або шт.).
     indicator_unit: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # Планове числове значення.
@@ -161,10 +159,8 @@ class Measure(Base):
 class MeasureCollaborator(Base):
     __tablename__ = "measure_collaborators"
 
-    # Код заходу.
     measure_id: Mapped[str] = mapped_column(ForeignKey("measures.id"), primary_key=True)
 
-    # Код підрозділу-співвиконавця.
     department_id: Mapped[str] = mapped_column(
         ForeignKey("departments.id"), primary_key=True
     )

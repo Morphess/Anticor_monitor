@@ -6,7 +6,6 @@ from app.database.base import Base
 
 # Довідник системних ролей та опису їхніх повноважень.
 class Role(Base):
-    # Ім’я таблиці в PostgreSQL, з якою працює ця модель.
     __tablename__ = "roles"
 
     # Код ролі: ADMIN, KOORD, VYK, KER або ANAL.

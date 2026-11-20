@@ -36,6 +36,12 @@ class AnalysisFingerprintTests(unittest.TestCase):
 @unittest.skipUnless(os.environ.get("ORDER_TEST_DATABASE_URL"), "Disposable PostgreSQL URL not supplied")
 class AnalysisPersistencePostgresTests(unittest.TestCase):
     def setUp(self):
+        import tempfile
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        env = patch.dict(os.environ, {"REPORT_EXPORT_DIR": self.directory.name})
+        env.start()
+        self.addCleanup(env.stop)
         self.engine = create_engine(os.environ["ORDER_TEST_DATABASE_URL"])
         self.conn = self.engine.connect()
         self.addCleanup(self.engine.dispose)
@@ -47,7 +53,7 @@ class AnalysisPersistencePostgresTests(unittest.TestCase):
             order_version_id integer NOT NULL, submitted_sha256 varchar(64) NOT NULL,
             input_sha256 varchar(64) NOT NULL, created_by_user_id integer,
             model varchar(200) NOT NULL, file_name varchar(255) NOT NULL,
-            analysis text NOT NULL, text_truncated boolean NOT NULL,
+            analysis text, report_key varchar(64), report_sha256 varchar(64), text_truncated boolean NOT NULL,
             output_truncated boolean NOT NULL,
             created_at timestamptz NOT NULL DEFAULT clock_timestamp()
         )'''))

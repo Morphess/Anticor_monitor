@@ -159,6 +159,17 @@ docker compose --env-file "$env_file" build api
 
 echo "Образ API зібрано. Контейнер ще не оновлено."
 
+echo "Резервна копія документів і файлових звітів..."
+files_backup="${backup_file%.dump}-files.tar.gz"
+if ! docker compose --env-file "$env_file" run --rm --no-deps -T api \
+    tar -C /app/storage -czf - orders reports > "$files_backup"; then
+    rm -f -- "$files_backup"
+    echo "Не вдалося створити копію файлового сховища." >&2
+    exit 1
+fi
+test -s "$files_backup"
+sha256sum "$files_backup"
+
 echo "Звірка БД застосунку з резервною копією..."
 
 backup_database="$(
@@ -216,6 +227,12 @@ echo "Перевірка ревізії після міграції..."
 docker compose --env-file "$env_file" \
     run --rm --no-deps -T api \
     alembic -c /app/alembic.ini current --check-heads
+
+echo "Зупинка старого API перед перенесенням висновків..."
+docker compose --env-file "$env_file" stop api
+
+echo "Перенесення наявних висновків у файлове сховище..."
+docker compose --env-file "$env_file" run --rm --no-deps -T api python -m app.services.migrate_analysis_files
 
 echo "Оновлення контейнера API..."
 docker compose --env-file "$env_file" \

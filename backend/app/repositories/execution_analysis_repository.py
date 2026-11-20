@@ -19,9 +19,12 @@ class ExecutionAnalysisRepository:
         return self.db.scalar(select(func.pg_try_advisory_xact_lock(50_050, execution_id)))
 
     def save(self, execution_id, version_id, digest, input_digest, actor_id, result):
+        from app.services.analysis_report_storage import write_report
+        payload = result.model_dump()
+        key, checksum = write_report(payload.pop("analysis"))
         row = ExecutionAnalysis(execution_id=execution_id, order_version_id=version_id,
             submitted_sha256=digest, input_sha256=input_digest,
-            created_by_user_id=actor_id, **result.model_dump())
+            created_by_user_id=actor_id, report_key=key, report_sha256=checksum, **payload)
         self.db.add(row)
         self.db.commit()
         self.db.refresh(row)

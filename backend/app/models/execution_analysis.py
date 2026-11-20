@@ -19,7 +19,16 @@ class ExecutionAnalysis(Base):
     created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     model: Mapped[str] = mapped_column(String(200), nullable=False)
     file_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    analysis: Mapped[str] = mapped_column(Text, nullable=False)
+    legacy_analysis: Mapped[str | None] = mapped_column("analysis", Text, nullable=True)
+    report_key: Mapped[str | None] = mapped_column(String(64))
+    report_sha256: Mapped[str | None] = mapped_column(String(64))
+
+    @property
+    def analysis(self):
+        if self.report_key:
+            from app.services.analysis_report_storage import read_report
+            return read_report(self.report_key, self.report_sha256)
+        return self.legacy_analysis or ""
     text_truncated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     output_truncated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False,

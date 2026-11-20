@@ -267,7 +267,7 @@
     UI.refreshSelect(select);
   }
   async function loadDepartments() {
-    departments = await Api.get("/api/departments/");
+    departments = await Api.get("/api/departments");
     departmentsLoaded = true;
     const deptFilter = $("user-dept-filter");
     const previousFilter = deptFilter.value;
@@ -567,7 +567,7 @@
     try {
       const result = edit
         ? await Api.patch("/api/departments/" + encodeURIComponent(editingDeptId), data)
-        : await Api.post("/api/departments/", data);
+        : await Api.post("/api/departments", data);
       saved = true;
       (edit ? deptEdit : deptCreate).close();
       if (edit) editingDeptId = null;

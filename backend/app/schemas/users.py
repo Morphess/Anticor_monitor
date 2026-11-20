@@ -1,7 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
-# Дані для створення користувача
 class UserCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -22,7 +21,6 @@ class UserCreate(BaseModel):
     position: str | None = None
 
 
-# Дані для редагування користувача
 class UserUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -44,7 +42,6 @@ class UserUpdate(BaseModel):
     position: str | None = None
 
 
-# Дані, які API повертає клієнту
 class UserRead(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
