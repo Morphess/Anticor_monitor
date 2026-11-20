@@ -56,6 +56,8 @@ test('executor submits a pinned order, coordinator views and approves it', async
   expect(forbidden.status()).toBe(403);
   const forbiddenAnalysis = await request.post(`/api/executions/${execution.id}/analyze`, { headers: { Authorization: `Bearer ${access_token}` } });
   expect(forbiddenAnalysis.status()).toBe(403);
+  const forbiddenSaved = await request.get(`/api/executions/${execution.id}/analysis`, { headers: { Authorization: `Bearer ${access_token}` } });
+  expect(forbiddenSaved.status()).toBe(403);
 
   const coordinatorContext = await browser.newContext({ baseURL: 'http://api:8000', timezoneId: 'UTC' });
   try {
@@ -67,7 +69,7 @@ test('executor submits a pinned order, coordinator views and approves it', async
     await coord.getByRole('button', { name: /Playwright synthetic program/ }).click();
     await coord.getByRole('button', { name: /Synthetic training/ }).click();
     await coord.getByRole('button', { name: /Conduct one synthetic integrity training/ }).click();
-    await expect(coord.getByRole('button', { name: 'Проаналізувати наказ', exact: true })).toBeVisible();
+    await expect(coord.getByRole('button', { name: /^(Проаналізувати наказ|Повторити аналіз)$/ })).toBeVisible();
     const documentResponse = coord.waitForResponse(r => new URL(r.url()).pathname === `/api/executions/${execution.id}/document`);
     const popup = coord.waitForEvent('popup');
     await coord.getByRole('button', { name: 'Переглянути наказ', exact: true }).click();
@@ -108,11 +110,15 @@ async function openAnalysisCard(page: Page, request: APIRequestContext) {
   await page.clock.install();
   await login(page, 'pw_coord', '/coordinator');
   await page.locator('#period').selectOption(PERIOD);
+  return expandAnalysisCard(page);
+}
+
+async function expandAnalysisCard(page: Page) {
   await expect(page.locator('#coord-total')).toHaveText('1');
   await page.getByRole('button', { name: /Playwright synthetic program/ }).click();
   await page.getByRole('button', { name: /Synthetic training/ }).click();
   await page.getByRole('button', { name: /Conduct one synthetic integrity training/ }).click();
-  const button = page.getByRole('button', { name: 'Проаналізувати наказ', exact: true });
+  const button = page.getByRole('button', { name: /^(Проаналізувати наказ|Повторити аналіз)$/ });
   const result = page.locator('.analysis-result');
   return { button, result };
 }
@@ -183,4 +189,45 @@ test('analysis warns when the model reaches its output limit', async ({ page, re
   expect((await reply.json()).output_truncated).toBe(true);
   await expect(result).toContainText('Досягнуто ліміту відповіді моделі');
   await expect(result).toContainText('Висновок може бути неповним');
+});
+
+
+test('saved analysis survives reload without generating a new report', async ({ page, request }) => {
+  expect((await request.post('http://model-stub:11434/release')).ok()).toBeTruthy();
+  const { button, result } = await openAnalysisCard(page, request);
+  await expect(button).toBeEnabled();
+  if (await button.textContent() === 'Проаналізувати наказ') {
+    const response = page.waitForResponse(r => new URL(r.url()).pathname.endsWith('/analyze'));
+    await button.click();
+    expect((await response).status()).toBe(200);
+  }
+  await expect(result).toContainText('SYNTHETIC ANALYSIS');
+  await expect(result).toContainText('Збережено:');
+  const before = (await (await request.get('http://model-stub:11434/state')).json()).calls;
+  await page.reload();
+  await page.locator('#period').selectOption(PERIOD);
+  const savedResponse = page.waitForResponse(r => new URL(r.url()).pathname.endsWith('/analysis'));
+  const reloaded = await expandAnalysisCard(page);
+  const saved = await savedResponse;
+  expect(saved.status()).toBe(200);
+  const record = await saved.json();
+  expect(record.analysis_id).toBeGreaterThan(0);
+  await expect(reloaded.result).toContainText('SYNTHETIC ANALYSIS');
+  await expect(reloaded.button).toHaveText('Повторити аналіз');
+  expect((await (await request.get('http://model-stub:11434/state')).json()).calls).toBe(before);
+
+  const token = await request.post('/api/auth/token', { form: { username: 'pw_coord', password: PASSWORD } });
+  const { access_token } = await token.json();
+  const reused = await request.post(`/api/executions/${record.execution_id}/analyze`, {
+    headers: { Authorization: `Bearer ${access_token}` },
+  });
+  expect(reused.status()).toBe(200);
+  expect((await reused.json()).analysis_id).toBe(record.analysis_id);
+  const outsideToken = await request.post('/api/auth/token', { form: { username: 'pw_unrelated_coord', password: PASSWORD } });
+  const outsider = (await outsideToken.json()).access_token;
+  const denied = await request.get(`/api/executions/${record.execution_id}/analysis`, {
+    headers: { Authorization: `Bearer ${outsider}` },
+  });
+  expect(denied.status()).toBe(403);
+  expect((await (await request.get('http://model-stub:11434/state')).json()).calls).toBe(before);
 });

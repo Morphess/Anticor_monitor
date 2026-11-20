@@ -11,4 +11,4 @@ RUN mkdir -p /app/storage/orders /app/storage/reports && chown -R 10001:10001 /a
 WORKDIR /app/backend
 ENV PYTHONPATH=/app/backend
 USER 10001:10001
-CMD ["sh", "-ec", "alembic -c /app/alembic.ini upgrade head && alembic -c /app/alembic.ini check && python /app/e2e/seed.py && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+CMD ["sh", "-ec", "python /app/e2e/check_analysis_migration.py && uvicorn app.main:app --host 0.0.0.0 --port 8000"]

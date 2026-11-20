@@ -53,7 +53,7 @@ with SessionLocal.begin() as db:
     users = {}
     for login, role, dep in [('pw_admin','ADMIN',None),('pw_main','MAIN_KOORD','PW-HQ'),
                              ('pw_coord','KOORD','PW-TEAM'),('pw_executor','VYK','PW-TEAM'),
-                             ('pw_outside','VYK','PW-OTHER')]:
+                             ('pw_outside','VYK','PW-OTHER'),('pw_unrelated_coord','KOORD','PW-OTHER')]:
         row=User(login=login, role_id=role, department_id=dep, password_hash=hash_password(PASSWORD))
         db.add(row); users[login]=row
     db.flush()

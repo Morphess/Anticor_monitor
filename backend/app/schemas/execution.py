@@ -58,6 +58,8 @@ from app.schemas.orders import OrderAnalysisRead
 
 
 class ExecutionAnalysisRead(OrderAnalysisRead):
+    analysis_id: int | None = None
+    created_at: datetime | None = None
     execution_id: int
     order_version_id: int
     submitted_sha256: str

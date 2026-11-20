@@ -28,3 +28,19 @@ def analysis_input(db, actor, execution_id):
     if order is None:
         raise ExecutionError("Наказ подання не знайдено", 409)
     return order, measure, version.original_filename, content, version.id, row.submitted_sha256
+
+
+def saved_analysis_context(db, actor, execution_id):
+    """Authorize before cache lookup; no document read or model request on GET."""
+    from app.models.order_version import OrderVersion
+    from app.services.order_analysis_services import analysis_fingerprint
+    svc = ExecutionService(db)
+    row = svc.get(execution_id)
+    measure = require_visible_measure(db, actor, row.measure_id)
+    svc.require_read_access(row, actor)
+    version = db.get(OrderVersion, row.order_version_id) if row.order_version_id else None
+    order = db.get(Order, row.order_id) if row.order_id else None
+    if (version is None or order is None or version.order_id != row.order_id
+            or not row.submitted_sha256 or version.sha256 != row.submitted_sha256):
+        raise ExecutionError("Зафіксована версія наказу подання недоступна", 409)
+    return version.id, row.submitted_sha256, analysis_fingerprint(order, measure)
