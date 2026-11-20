@@ -38,6 +38,8 @@ services:
       APP_NAME: ${APP_NAME:-BorderGroup}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+      OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-600}
+      OLLAMA_NUM_PREDICT: ${OLLAMA_NUM_PREDICT:-768}
       DEBUG: ${DEBUG:-false}
       SQL_ECHO: ${SQL_ECHO:-false}
       ORDER_DOCUMENTS_DIR: /app/storage/orders

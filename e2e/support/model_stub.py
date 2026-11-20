@@ -11,6 +11,7 @@ release = threading.Event()
 release.set()
 started = threading.Event()
 fail_response = False
+completion_reason = "stop"
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -34,7 +35,7 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(404, {})
 
     def do_POST(self):
-        global fail_response
+        global fail_response, completion_reason
         length = int(self.headers.get("Content-Length", 0))
         if length > 1024 * 1024:
             self.reply(413, {})
@@ -42,8 +43,14 @@ class Handler(BaseHTTPRequestHandler):
         self.rfile.read(length)
         if self.path == "/hold":
             fail_response = False
+            completion_reason = "stop"
             started.clear()
             release.clear()
+            self.reply(200, {})
+        elif self.path == "/limit":
+            fail_response = False
+            completion_reason = "length"
+            release.set()
             self.reply(200, {})
         elif self.path == "/fail":
             fail_response = True
@@ -60,7 +67,7 @@ class Handler(BaseHTTPRequestHandler):
             if fail_response:
                 self.reply(503, {"error": "Synthetic model failure"})
                 return
-            self.reply(200, {"message": {"content": "SYNTHETIC ANALYSIS: training matches the measure"}})
+            self.reply(200, {"message": {"content": "SYNTHETIC ANALYSIS: training matches the measure"}, "done_reason": completion_reason})
         else:
             self.reply(404, {})
 
