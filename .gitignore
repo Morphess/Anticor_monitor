@@ -13,3 +13,10 @@ __pycache__/
 !.env.example
 .gitignore
 alembic.ini
+
+# Playwright: synthetic auth state, reports, dependencies and run lock
+node_modules/
+playwright-report/
+test-results/
+.e2e.lock
+e2e-artifacts/

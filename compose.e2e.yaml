@@ -1,0 +1,61 @@
+name: bordergroup-e2e-42
+services:
+  db:
+    image: postgres:17.12-bookworm
+    environment:
+      POSTGRES_DB: bordergroup_e2e
+      POSTGRES_USER: e2e_user
+      POSTGRES_PASSWORD: synthetic_e2e_only
+    volumes:
+      - e2e_database:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U e2e_user -d bordergroup_e2e"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    mem_limit: 512m
+  api:
+    build:
+      context: .
+      dockerfile: e2e/Dockerfile.api
+    environment:
+      BORDERGROUP_E2E: "1"
+      APP_NAME: BorderGroup E2E
+      DEBUG: "false"
+      SQL_ECHO: "false"
+      DATABASE_URL: postgresql+psycopg://e2e_user:synthetic_e2e_only@db:5432/bordergroup_e2e
+      JWT_SECRET_KEY: synthetic-e2e-only-key-at-least-32-bytes
+      ORDER_DOCUMENTS_DIR: /app/storage/orders
+      REPORT_EXPORT_DIR: /app/storage/reports
+      OLLAMA_BASE_URL: http://127.0.0.1:1
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=2)"]
+      interval: 2s
+      timeout: 3s
+      retries: 40
+      start_period: 10s
+    mem_limit: 768m
+  tests:
+    build:
+      context: .
+      dockerfile: e2e/Dockerfile.runner
+    user: "${E2E_UID:-1000}:${E2E_GID:-1000}"
+    environment:
+      BORDERGROUP_E2E: "1"
+      E2E_BASE_URL: http://api:8000
+      CI: "${CI:-}"
+      HOME: /tmp
+    init: true
+    ipc: private
+    shm_size: 512m
+    mem_limit: 1536m
+    volumes:
+      - ./e2e-artifacts:/artifacts:Z
+    depends_on:
+      api:
+        condition: service_healthy
+volumes:
+  e2e_database:
