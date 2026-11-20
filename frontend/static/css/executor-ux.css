@@ -78,3 +78,12 @@
 .executor-page .mrow .executor-order-actions .btn { margin-top: 0; flex: 1 1 140px; width: auto; }
 .executor-page .mrow .executor-order-actions .btn:disabled { opacity: .55; cursor: wait; }
 .executor-dialog .executor-form-note { margin-top: 8px; }
+
+/* Поля звіту НАЗК у формі підтвердження виконання */
+.executor-report-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 12px; }
+.executor-report-fields[hidden] { display: none; }
+.executor-report-fields .executor-result-field,
+.executor-report-fields > p { grid-column: 1 / -1; }
+.executor-report-fields .field select,
+.executor-report-fields .field input,
+.executor-report-fields .field textarea { width: 100%; }

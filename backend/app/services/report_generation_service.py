@@ -22,11 +22,13 @@ from sqlalchemy.orm import Session
 from app.models.report import Report
 from app.models.measure import Measure, MeasureCollaborator
 from app.models.program_workflow import MeasureAssignment
+from app.models.risk import Risk
 from app.models.user import User
 from app.repositories.report_data_repository import ReportDataRepository
 from app.schemas.report_portal import (
     PortalHalfYearReport,
     ReportMeasureRow,
+    ReportRisk,
     ReportSectionBlock,
     ReportSummary,
 )
@@ -42,6 +44,25 @@ STATUSES = {
 }
 NOT_COMPLETED = "Не виконано"
 NOT_DUE = "Строк виконання заходу не настав"
+
+
+def period_label(period: str) -> str:
+    """«2026-H1» → «Звіт за перше півріччя 2026 року» (формулювання Порталу НАЗК)."""
+    half = "перше" if period.endswith("H1") else "друге"
+    return f"Звіт за {half} півріччя {period[:4]} року"
+
+
+def planned_deadline(measure) -> str:
+    """«Запланований строк виконання заходу» у формі, як у звіті НАЗК."""
+    if measure.deadline_type == "date" and measure.deadline_on is not None:
+        text = measure.deadline_on.strftime("%d.%m.%Y")
+        desc = (measure.deadline_description or "").strip()
+        if not desc or desc in (text, measure.deadline_on.isoformat()):
+            return text
+        return desc if text in desc else f"{desc} ({text})"
+    if measure.deadline_type == "ongoing":
+        return (measure.deadline_description or "").strip() or "Постійно"
+    return (measure.deadline_description or "").strip() or "Періодично"
 
 
 def half_year_bounds(period: str) -> tuple[date, date]:
@@ -131,7 +152,27 @@ class ReportGenerationService:
         measures = self.repo.measures(ids)
         executions = self.repo.executions(ids, period, allowed_users=scoped_users)
         evidence_counts = self.repo.evidence_counts(ids, period, allowed_users=scoped_users)
-        dep_names = self.repo.departments({m.responsible_department_id for m in measures if m.responsible_department_id})
+
+        # Відповідальний підрозділ для НАЗК — це підрозділ, який реально виконує
+        # захід (підрозділи призначених виконавців). measure.responsible_department_id
+        # заповнюється підрозділом автора заходу, тож лишається лише запасним варіантом.
+        assigned_departments: dict[str, set[str]] = {}
+        if ids:
+            assignment_query = select(MeasureAssignment.measure_id, MeasureAssignment.department_id).where(
+                MeasureAssignment.measure_id.in_(ids))
+            if scope_departments is not None:
+                assignment_query = assignment_query.where(
+                    MeasureAssignment.department_id.in_(scope_departments))
+            for mid, dep_id in self.db.execute(assignment_query):
+                if dep_id:
+                    assigned_departments.setdefault(mid, set()).add(dep_id)
+        dep_names = self.repo.departments(
+            {m.responsible_department_id for m in measures if m.responsible_department_id}
+            | {d for deps in assigned_departments.values() for d in deps}
+        )
+        risk_ids = {m.risk_id for m in measures if m.risk_id}
+        risks = ({r.id: r for r in self.db.scalars(select(Risk).where(Risk.id.in_(risk_ids)))}
+                 if risk_ids else {})
 
         # У звіті Порталу доброчесності рівно три розділи.
         source_sections = self.repo.sections()
@@ -191,21 +232,45 @@ class ReportGenerationService:
                     warnings.append("Документ змінено — потрібне повторне подання")
             if status == NOT_COMPLETED and not description:
                 warnings.append("Не зазначено пояснення причин невиконання")
+            if status in ("Виконано", "Частково виконано") and not description:
+                warnings.append("Не зазначено опис результату виконання")
             if status == "Виконано" and factual_date is None:
                 warnings.append("Не зазначено фактичну дату виконання")
             if status in ("Виконано", "Частково виконано") and evidence_counts.get(measure.id, 0) == 0:
                 warnings.append("Відсутні підтвердні матеріали")
 
+            executing = sorted(assigned_departments.get(measure.id, set()))
+            if executing:
+                responsible_id = executing[0] if len(executing) == 1 else ", ".join(executing)
+                responsible_name = "; ".join(dep_names.get(d, d) for d in executing)
+            elif scope_departments is None or measure.responsible_department_id in scope_departments:
+                responsible_id = measure.responsible_department_id
+                responsible_name = dep_names.get(measure.responsible_department_id)
+            else:
+                responsible_id = responsible_name = None
+            if not executing:
+                warnings.append("Захід не призначено жодному виконавцю")
+
+            section_number = section_map[measure.section_id].number
+            participants = None
+            if section_number == 3 and execution is not None and execution.indicator_actual is not None:
+                participants = int(execution.indicator_actual)
+            risk = risks.get(measure.risk_id) if measure.risk_id else None
+
             row = ReportMeasureRow(
                 measure_id=measure.id,
                 sequence_number=measure.sequence_number,
                 measure_description=measure.description,
-                responsible_department_id=(measure.responsible_department_id
-                    if scope_departments is None or measure.responsible_department_id in scope_departments
-                    else None),
-                responsible_department=(dep_names.get(measure.responsible_department_id)
-                    if scope_departments is None or measure.responsible_department_id in scope_departments
-                    else None),
+                responsible_department_id=responsible_id,
+                responsible_department=responsible_name,
+                planned_deadline=planned_deadline(measure),
+                completion_indicator=measure.completion_indicator,
+                indicator_unit=measure.indicator_unit,
+                participants_count=participants,
+                risk=ReportRisk(
+                    risk_id=risk.id, sphere=risk.process_name, title=risk.title,
+                    description=risk.description, level=risk.level,
+                ) if risk is not None else None,
                 risk_id=measure.risk_id,
                 factual_date=factual_date,
                 execution_status=status,
@@ -231,6 +296,8 @@ class ReportGenerationService:
         return PortalHalfYearReport(
             program_id=program_id,
             program_title=program.title,
+            organization_name=program.organization_name,
+            period_label=period_label(period),
             period=period,
             period_start=start,
             period_end=end,
@@ -331,71 +398,150 @@ def _safe_csv(value: object) -> str:
     return value
 
 
+def _status_class(status: str) -> str:
+    return {"Виконано": "st-done", "Частково виконано": "st-partial",
+            "Не виконано": "st-not"}.get(status, "st-none")
+
+
+def _fmt_date(value) -> str:
+    return value.strftime("%d.%m.%Y") if value else ""
+
+
+def _risk_groups(rows):
+    """Групує заходи розділу 2 за ризиками, зберігаючи порядок першої появи."""
+    groups: list[tuple] = []
+    index: dict = {}
+    for row in rows:
+        key = row.risk.risk_id if row.risk else None
+        if key not in index:
+            index[key] = len(groups)
+            groups.append((row.risk, []))
+        groups[index[key]][1].append(row)
+    return groups
+
+
 def csv_export(report: PortalHalfYearReport) -> bytes:
     buffer = io.StringIO(newline="")
     writer = csv.writer(buffer, delimiter=";", lineterminator="\r\n")
     writer.writerow([
-        "Розділ", "№ заходу", "ID заходу", "Зміст заходу",
-        "Відповідальний підрозділ", "Фактичний строк виконання",
-        "Стан виконання", "Опис результату виконання заходу або пояснення причин невиконання",
-        "Корупційний ризик", "Індикатор (факт)", "Індикатор (ціль)",
-        "Погоджено", "Кількість підтвердних матеріалів",
+        "Розділ", "№ заходу", "ID заходу",
+        "Сфера ризику", "Назва ризику", "Опис ризику",
+        "Зміст заходу", "Відповідальний підрозділ", "Запланований строк виконання заходу",
+        "Індикатор виконання", "Фактичний строк виконання", "Стан виконання",
+        "Опис результату виконання заходу або пояснення причин невиконання",
+        "Кількість осіб, які взяли участь у навчанні",
+        "Індикатор (факт)", "Індикатор (ціль)",
+        "Погоджено координатором", "Кількість підтвердних документів", "Зауваження",
     ])
     for section in report.sections:
         for row in section.measures:
+            risk = row.risk
             writer.writerow([_safe_csv(val) for val in (
-                section.title,
+                f"{section.number}. {section.title}",
                 row.sequence_number,
                 row.measure_id,
+                risk.sphere if risk else "",
+                risk.title if risk else "",
+                risk.description if risk else "",
                 row.measure_description,
                 row.responsible_department or row.responsible_department_id,
-                row.factual_date.isoformat() if row.factual_date else "",
+                row.planned_deadline,
+                row.completion_indicator,
+                _fmt_date(row.factual_date),
                 row.execution_status,
                 row.result_description,
-                row.risk_id,
+                row.participants_count if row.participants_count is not None else "",
                 row.indicator_actual,
                 row.indicator_target,
                 "Так" if row.approved_by_coordinator else "Ні",
                 row.evidence_count,
+                "; ".join(row.warnings),
             )])
     return ("\ufeff" + buffer.getvalue()).encode("utf-8")
 
 
 def print_html(report: PortalHalfYearReport) -> str:
+    """Друкована форма у структурі звіту Порталу доброчесності НАЗК."""
     esc = lambda val: html.escape("" if val is None else str(val), quote=True)
-    scope = "Повна програма" if report.scope == "program" else f"Витяг підрозділу {esc(report.department_id)}"
-    preliminary = "Попередній стан, не підсумковий звіт" if report.is_preliminary else "Завершений звітний період"
+
+    def block(label, value):
+        return f"<div class='lbl'>{esc(label)}</div><div>{esc(value) or '—'}</div>" if value else ""
+
+    def measure_cell(row, section_number):
+        name_label = "Найменування заходу" if section_number == 2 else (
+            "Навчальний захід" if section_number == 3 else "Опис заходу")
+        parts = [block(name_label, row.measure_description),
+                 block("Найменування структурного підрозділу, відповідального за виконання заходу"
+                       if section_number != 2 else "Відповідальні виконавці",
+                       row.responsible_department or row.responsible_department_id),
+                 block("Запланований строк виконання заходу", row.planned_deadline)]
+        if section_number == 2:
+            parts.append(block("Індикатор виконання", row.completion_indicator))
+        return "".join(parts)
+
+    def row_markup(row, section_number):
+        last = (row.participants_count if row.participants_count is not None else "—") \
+            if section_number == 3 else row.result_description
+        warn = (f"<div class='warn'>Зауваження: {esc('; '.join(row.warnings))}</div>"
+                if row.warnings else "")
+        return ("<tr>"
+                f"<td class='num'>{esc(row.sequence_number)}</td>"
+                f"<td>{measure_cell(row, section_number)}</td>"
+                f"<td class='num'>{esc(_fmt_date(row.factual_date))}</td>"
+                f"<td class='{_status_class(row.execution_status)}'>{esc(row.execution_status)}</td>"
+                f"<td>{esc(last)}{warn}</td>"
+                "</tr>")
+
     sections_markup = []
     for section in report.sections:
-        data_rows = "".join(
-            "<tr>"
-            f"<td>{esc(row.sequence_number)}</td>"
-            f"<td>{esc(row.measure_description)}</td>"
-            f"<td>{esc(row.factual_date.isoformat() if row.factual_date else '')}</td>"
-            f"<td>{esc(row.execution_status)}</td>"
-            f"<td>{esc(row.result_description)}</td>"
-            "</tr>"
-            for row in section.measures
-        ) or '<tr><td colspan="5">Заходів немає</td></tr>'
-        sections_markup.append(
-            f"<h2>{esc(section.number)}. {esc(section.title)}</h2>"
-            "<table><thead><tr><th>№</th><th>Захід</th>"
-            "<th>Фактичний строк</th><th>Стан виконання</th>"
-            "<th>Результат або пояснення</th></tr></thead><tbody>"
-            f"{data_rows}</tbody></table>"
-        )
+        last_header = ("Кількість осіб, які взяли участь у навчанні" if section.number == 3
+                       else "Опис результату виконання заходу або пояснення причин невиконання")
+        head = ("<table><thead><tr><th class='c-num'>№</th>"
+                f"<th>{'Навчальний захід' if section.number == 3 else 'Захід'}</th>"
+                "<th class='c-date'>Фактичний строк виконання</th><th class='c-st'>Стан виконання</th>"
+                f"<th>{esc(last_header)}</th></tr></thead><tbody>")
+        body = []
+        if section.number == 2:
+            for risk, rows in _risk_groups(section.measures):
+                if risk is not None:
+                    body.append("<tr class='risk'><td colspan='5'>"
+                                + block("Сфера ризику", risk.sphere)
+                                + block("Назва ризику", risk.title)
+                                + block("Опис ризику", risk.description)
+                                + "</td></tr>")
+                body.extend(row_markup(r, 2) for r in rows)
+        else:
+            body.extend(row_markup(r, section.number) for r in section.measures)
+        if not body:
+            body.append('<tr><td colspan="5">Заходів немає</td></tr>')
+        sections_markup.append(f"<h2>{esc(section.title)}</h2>{head}{''.join(body)}</tbody></table>")
+
+    preliminary = ("Попередній стан на дату зрізу, не підсумковий звіт"
+                   if report.is_preliminary else "Завершений звітний період")
+    scope = "" if report.scope == "program" else f" · Витяг підрозділу {esc(report.department_id)}"
+    title = report.period_label or f"Звіт за період {report.period}"
     return ("<!DOCTYPE html><html lang='uk'><head><meta charset='utf-8'>"
-            "<title>Звіт антикорупційної програми</title>"
+            f"<title>{esc(title)}</title>"
             "<style>@page{size:A4 landscape;margin:12mm}"
             "body{font-family:Arial,sans-serif;font-size:11px;color:#111}"
-            "table{width:100%;border-collapse:collapse;table-layout:fixed;margin:12px 0 22px}"
-            "th,td{border:1px solid #888;padding:6px;word-wrap:break-word;vertical-align:top}"
+            "h1{font-size:18px;margin:0 0 4px}.org{font-size:13px;margin:0 0 6px}"
+            "h2{font-size:14px;margin:24px 0 8px}"
+            "table{width:100%;border-collapse:collapse;table-layout:fixed;margin:0 0 18px}"
+            "th,td{border:1px solid #b9c0c8;padding:6px;word-wrap:break-word;vertical-align:top}"
+            "th{background:#1f4e79;color:#fff;text-align:left}"
             "thead{display:table-header-group}tr{break-inside:avoid}"
-            "h1{font-size:20px}h2{font-size:15px;margin-top:28px}"
-            "small{color:#555}</style></head><body>"
-            f"<h1>Звіт про виконання антикорупційної програми</h1>"
-            f"<p><strong>{esc(report.program_title)}</strong> — {esc(report.period)}</p>"
-            f"<p><small>{scope} · {preliminary} · Дані станом на {esc(report.as_of)}"
-            " · Для друку: Ctrl+P → Зберегти як PDF</small></p>"
+            "tbody tr:nth-child(even){background:#f4f6f8}"
+            ".c-num{width:4%}.c-date{width:11%}.c-st{width:13%}.num{text-align:center}"
+            ".lbl{font-weight:bold;margin-top:4px}.lbl:first-child{margin-top:0}"
+            ".risk td{background:#e8eef5}"
+            ".st-done{background:#c6efce}.st-partial{background:#ffeb9c}.st-not{background:#ffc7ce}"
+            ".warn{margin-top:4px;color:#8a5a00;font-size:10px}"
+            "small{color:#555}"
+            "@media print{.st-done,.st-partial,.st-not,.risk td,th{-webkit-print-color-adjust:exact;print-color-adjust:exact}}"
+            "</style></head><body>"
+            f"<h1>{esc(title)}</h1>"
+            f"<p class='org'><strong>Орган:</strong> {esc(report.organization_name or '—')}</p>"
+            f"<p><small>{esc(report.program_title)} · {preliminary}{scope} · Дані станом на "
+            f"{esc(_fmt_date(report.as_of))} · Для друку: Ctrl+P → Зберегти як PDF</small></p>"
             + "".join(sections_markup)
             + "</body></html>")

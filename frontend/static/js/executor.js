@@ -437,6 +437,25 @@
     clearFormError();
     $('execution-title').textContent = canChange(ex) ? 'Змінити номер наказу' : 'Підтвердження виконання';
     form.elements.order_number.value = ex && ex.order_number || '';
+    // Поля звіту НАЗК. Під час заміни наказу (change-order) змінюється лише номер.
+    const today = new Date().toISOString().slice(0, 10);
+    const reportFields = $('executor-report-fields');
+    const changing = canChange(ex);
+    reportFields.hidden = changing;
+    ['outcome_status', 'completed_on', 'result_description', 'indicator_actual'].forEach((name) => {
+      form.elements[name].disabled = changing;
+    });
+    form.elements.outcome_status.value = ex && ex.outcome_status === 'partial' ? 'partial' : 'completed';
+    form.elements.completed_on.max = today;
+    form.elements.completed_on.value = ex && ex.completed_on || today;
+    form.elements.result_description.value = ex && ex.result_description || '';
+    form.elements.indicator_actual.value = ex && ex.indicator_actual != null ? ex.indicator_actual : '';
+    const section = state.sections[m.section_id];
+    const isTraining = section ? Number(section.number) === 3 : String(m.section_id) === 'R3';
+    $('executor-indicator-label').textContent = isTraining
+      ? 'Кількість осіб, які взяли участь у навчанні'
+      : 'Фактичне значення індикатора' + (m.indicator_unit ? ' (' + m.indicator_unit + ')' : '');
+    form.elements.indicator_actual.required = isTraining;
     // This status describes what is awaiting action. The definitive state is
     // always loaded from the backend, never inferred from clicking the button.
     const status = $('executor-approval-status');
@@ -472,6 +491,15 @@
     }
     const body = { measure_id: m.id, period: period.value, order_number: number };
     const isChange = canChange(ex);
+    if (!isChange) {
+      const description = String(form.elements.result_description.value || '').trim();
+      if (description.length < 10) { errorInForm('Опишіть результат виконання (щонайменше 10 символів).'); return; }
+      body.result_description = description;
+      body.outcome_status = form.elements.outcome_status.value;
+      body.completed_on = form.elements.completed_on.value || null;
+      const indicator = String(form.elements.indicator_actual.value || '').trim();
+      if (indicator !== '') body.indicator_actual = indicator;
+    }
     saveButton.disabled = true;
     saveButton.textContent = 'Надсилання…';
     clearFormError();

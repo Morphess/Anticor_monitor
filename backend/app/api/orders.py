@@ -20,7 +20,11 @@ from fastapi import (
 from sqlalchemy.orm import Session
 
 from app.database.db_connection import get_db
-from app.core.dependencies import require_admin
+from app.core.dependencies import get_current_user, require_admin, require_roles
+
+# Реєстр наказів ведуть адміністратор і головний координатор відомства.
+# Без цієї перевірки будь-хто міг підкинути наказ-«доказ» виконання.
+require_order_manager = require_roles("ADMIN", "MAIN_KOORD")
 from app.models.user import User
 from app.schemas.orders import OrderCreate, OrderRead, OrderUpdate
 from app.services.order_services import OrderError, OrderService
@@ -41,7 +45,8 @@ router = APIRouter(prefix="/orders", tags=["Orders"])
     status_code=status.HTTP_201_CREATED,
     summary="Створити наказ у реєстрі",
 )
-def create_order(data: OrderCreate, db: Session = Depends(get_db)):
+def create_order(data: OrderCreate, db: Session = Depends(get_db),
+                 _manager=Depends(require_order_manager)):
     try:
         return OrderService(db).create_order(data)
     except OrderError as exc:
@@ -62,6 +67,7 @@ def list_orders(
 def get_order(
     order_id: str,
     db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
 ):
     try:
         return OrderService(db).get_order(order_id)
@@ -70,7 +76,8 @@ def get_order(
 
 
 @router.patch("/{order_id}", response_model=OrderRead, summary="Змінити наказ")
-def update_order(order_id: str, data: OrderUpdate, db: Session = Depends(get_db)):
+def update_order(order_id: str, data: OrderUpdate, db: Session = Depends(get_db),
+                 _manager=Depends(require_order_manager)):
     try:
         return OrderService(db).update_order(order_id, data)
     except OrderError as exc:
@@ -80,7 +87,8 @@ def update_order(order_id: str, data: OrderUpdate, db: Session = Depends(get_db)
 @router.delete(
     "/{order_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Видалити наказ"
 )
-def delete_order(order_id: str, db: Session = Depends(get_db)):
+def delete_order(order_id: str, db: Session = Depends(get_db),
+                 _manager=Depends(require_order_manager)):
     try:
         OrderService(db).delete_order(order_id)
     except OrderError as exc:
@@ -99,6 +107,7 @@ def upload_order_version(
     file: UploadFile = File(...),
     change_reason: str = Form(...),
     db: Session = Depends(get_db),
+    _manager=Depends(require_order_manager),
 ):
     try:
         return OrderVersionService(db).upload(order_id, file, change_reason)
@@ -111,7 +120,8 @@ def upload_order_version(
     response_model=list[OrderVersionRead],
     summary="Історія версій наказу (без вмісту файлів)",
 )
-def list_order_versions(order_id: str, db: Session = Depends(get_db)):
+def list_order_versions(order_id: str, db: Session = Depends(get_db),
+                        _user=Depends(get_current_user)):
     try:
         return OrderVersionService(db).list_versions(order_id)
     except OrderError as exc:

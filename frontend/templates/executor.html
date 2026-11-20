@@ -3,7 +3,7 @@
 {% block who_label %}<span class="ident" id="ident">Виконавець</span>{% endblock %}
 {% block topbar_tools %}{% include "_bell.html" %}{% endblock %}
 {% block content %}
-<link rel="stylesheet" href="/static/css/executor-ux.css?v=order-edit1">
+<link rel="stylesheet" href="/static/css/executor-ux.css?v=nazk1">
 <div class="executor-page">
   <section class="unit executor-hero" aria-labelledby="executor-title">
     <div>
@@ -67,6 +67,25 @@
             <input name="order_number" type="text" maxlength="150" required autocomplete="off"
                    placeholder="Наприклад, 71/2026">
           </label>
+          <div class="executor-report-fields" id="executor-report-fields">
+            <label class="field">Стан виконання
+              <select name="outcome_status">
+                <option value="completed">Виконано</option>
+                <option value="partial">Частково виконано</option>
+              </select>
+            </label>
+            <label class="field">Фактична дата виконання
+              <input name="completed_on" type="date" required>
+            </label>
+            <label class="field"><span id="executor-indicator-label">Фактичне значення індикатора</span>
+              <input name="indicator_actual" type="number" min="0" step="any" inputmode="decimal">
+            </label>
+            <label class="field executor-result-field">Опис результату виконання
+              <textarea name="result_description" rows="4" minlength="10" maxlength="4000" required
+                        placeholder="Що саме зроблено і який вимірюваний результат: кількість, документ, дата. Не повторюйте зміст заходу."></textarea>
+            </label>
+            <p class="small muted">Ці дані потрапляють у звіт для НАЗК (Портал доброчесності) після погодження координатором.</p>
+          </div>
           <p class="executor-resubmission-hint" id="executor-approval-status" role="status" aria-live="polite"></p>
         </div>
         <div id="execution-message" class="msg" role="alert" aria-live="assertive"></div>
@@ -80,4 +99,4 @@
   <div class="executor-toast-stack" id="executor-toasts" aria-live="polite" aria-atomic="false"></div>
 </div>
 {% endblock %}
-{% block scripts %}<script src="/static/js/notify.js"></script><script src="/static/js/executor.js?v=order-modal3"></script>{% endblock %}
+{% block scripts %}<script src="/static/js/notify.js"></script><script src="/static/js/executor.js?v=nazk1"></script>{% endblock %}

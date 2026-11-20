@@ -133,7 +133,15 @@ class ExecutionService:
         row.reviewed_at = None
         row.rejection_reason = None
         row.approved_by_coordinator = False
-        row.outcome_status = 'completed'  # claim only; never considered approved yet
+        # Дані для звіту НАЗК; враховуються лише після погодження координатором.
+        completed_on = data.completed_on or utc_naive().date()
+        if completed_on > utc_naive().date():
+            self.db.rollback()
+            raise ExecutionError('Фактична дата виконання не може бути в майбутньому', 422)
+        row.outcome_status = data.outcome_status
+        row.completed_on = completed_on
+        row.result_description = data.result_description
+        row.indicator_actual = data.indicator_actual
         row.status_label = 'Очікує погодження'
         try:
             self.db.commit()
