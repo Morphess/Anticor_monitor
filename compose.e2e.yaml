@@ -14,6 +14,20 @@ services:
       timeout: 3s
       retries: 30
     mem_limit: 512m
+  model-stub:
+    image: python:3.13-slim-bookworm
+    user: "10001:10001"
+    environment:
+      BORDERGROUP_E2E: "1"
+    command: ["python", "/stub.py"]
+    volumes:
+      - ./e2e/support/model_stub.py:/stub.py:ro,Z
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:11434/health',timeout=2)"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    mem_limit: 128m
   api:
     build:
       context: .
@@ -27,9 +41,11 @@ services:
       JWT_SECRET_KEY: synthetic-e2e-only-key-at-least-32-bytes
       ORDER_DOCUMENTS_DIR: /app/storage/orders
       REPORT_EXPORT_DIR: /app/storage/reports
-      OLLAMA_BASE_URL: http://127.0.0.1:1
+      OLLAMA_BASE_URL: http://model-stub:11434
     depends_on:
       db:
+        condition: service_healthy
+      model-stub:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=2)"]

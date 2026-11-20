@@ -1,3 +1,4 @@
+import type { Page, APIRequestContext } from '@playwright/test';
 import { test, expect, login, PASSWORD, PERIOD, monitorContext } from './fixtures';
 
 test('incorrect credentials are rejected visibly', async ({ page }) => {
@@ -90,4 +91,83 @@ test('executor submits a pinned order, coordinator views and approves it', async
   await expect(page.locator('#executor-approved')).toHaveText('1');
   await expect(page.getByRole('button', { name: 'Підтвердити виконання', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Уточнити виконання', exact: true })).toHaveCount(0);
+});
+
+async function openAnalysisCard(page: Page, request: APIRequestContext) {
+  const token = await request.post('/api/auth/token', { form: { username: 'pw_executor', password: PASSWORD } });
+  const { access_token } = await token.json();
+  const headers = { Authorization: `Bearer ${access_token}` };
+  const rows = await request.get(`/api/executions/?period=${PERIOD}`, { headers });
+  expect(rows.status()).toBe(200);
+  if (!(await rows.json()).some((row: { measure_id: string }) => row.measure_id === 'PW000001')) {
+    const submitted = await request.post('/api/executions/submit', { headers, data: {
+      measure_id: 'PW000001', period: PERIOD, order_number: 'PW-ORDER-1',
+    } });
+    expect(submitted.status()).toBe(201);
+  }
+  await page.clock.install();
+  await login(page, 'pw_coord', '/coordinator');
+  await page.locator('#period').selectOption(PERIOD);
+  await expect(page.locator('#coord-total')).toHaveText('1');
+  await page.getByRole('button', { name: /Playwright synthetic program/ }).click();
+  await page.getByRole('button', { name: /Synthetic training/ }).click();
+  await page.getByRole('button', { name: /Conduct one synthetic integrity training/ }).click();
+  const button = page.getByRole('button', { name: 'Проаналізувати наказ', exact: true });
+  const result = page.locator('.analysis-result');
+  return { button, result };
+}
+
+test('analysis survives polling during the request and after completion', async ({ page, request }) => {
+  expect((await request.post('http://model-stub:11434/hold')).ok()).toBeTruthy();
+  const { button, result } = await openAnalysisCard(page, request);
+  const response = page.waitForResponse(r => new URL(r.url()).pathname.endsWith('/analyze'));
+  try {
+    await button.click();
+    await expect.poll(async () => (await (await request.get('http://model-stub:11434/state')).json()).started).toBe(true);
+    await expect(button).toBeDisabled();
+    await expect(result).toContainText('Порівнюємо наказ');
+    const poll = page.waitForResponse(r => r.request().method() === 'GET' && new URL(r.url()).pathname === '/api/executions/');
+    await page.clock.fastForward(46000);
+    await poll;
+    // The active request remains disabled and visible in the recreated card.
+    await expect(button).toBeDisabled();
+    await expect(result).toContainText('Порівнюємо наказ');
+    expect((await request.post('http://model-stub:11434/release')).ok()).toBeTruthy();
+    expect((await response).status()).toBe(200);
+    await expect(result).toContainText('SYNTHETIC ANALYSIS: training matches the measure');
+    await expect(button).toBeEnabled();
+    const afterCompletionPoll = page.waitForResponse(r => r.request().method() === 'GET' && new URL(r.url()).pathname === '/api/executions/');
+    await page.clock.fastForward(46000);
+    await afterCompletionPoll;
+    await expect(result).toContainText('SYNTHETIC ANALYSIS: training matches the measure');
+    await page.locator('#search').fill('Conduct');
+    await expect(result).toContainText('SYNTHETIC ANALYSIS: training matches the measure');
+  } finally {
+    await request.post('http://model-stub:11434/release');
+  }
+});
+
+// This negative case asserts the one expected HTTP failure explicitly; every
+// other API failure and browser exception still fails the test.
+const errorTest = test.extend({
+  browserErrors: [async ({ context }, use) => {
+    const errors = monitorContext(context);
+    await use();
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/^HTTP 502: POST \/api\/executions\/\d+\/analyze$/);
+  }, { auto: true }],
+});
+
+errorTest('analysis error remains visible after polling', async ({ page, request }) => {
+  expect((await request.post('http://model-stub:11434/fail')).ok()).toBeTruthy();
+  const { button, result } = await openAnalysisCard(page, request);
+  const response = page.waitForResponse(r => new URL(r.url()).pathname.endsWith('/analyze'));
+  await button.click();
+  expect((await response).status()).toBe(502);
+  await expect(result).toContainText('Помилка аналізу:');
+  await expect(button).toBeEnabled();
+  const poll = page.waitForResponse(r => r.request().method() === 'GET' && new URL(r.url()).pathname === '/api/executions/');
+  await page.clock.fastForward(46000);
+  await poll;
+  await expect(result).toContainText('Помилка аналізу:');
 });
