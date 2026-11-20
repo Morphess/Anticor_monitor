@@ -1,118 +1,94 @@
 {% extends "base.html" %}
-{% block title %}Програми — керівник{% endblock %}
+{% block title %}Кабінет керівника — моніторинг виконання{% endblock %}
 {% block role_name %}Керівник{% endblock %}
 {% block content %}
-<section class="unit">
-  <div>
-    <p class="label" id="ker-kind">Керівник</p>
-    <h1 id="dept-title">—</h1>
-    <p class="sub" id="dept-scope"></p>
-  </div>
-  <div class="unit-actions">
-    <label class="field">Звітний період <select id="period"></select></label>
-  </div>
-</section>
-<div class="tabs" role="tablist">
-  <button type="button" role="tab" aria-selected="true" data-tab="overview">Огляд</button>
-  <button type="button" role="tab" aria-selected="false" data-tab="programs">Програми <span class="muted" id="tab-programs-n"></span></button>
-  <button type="button" role="tab" aria-selected="false" data-tab="recs">Рекомендації <span class="muted" id="tab-recs-n"></span></button>
-  <button type="button" role="tab" aria-selected="false" data-tab="risk-flags">Risk Flags <span class="muted" id="tab-risk-flags-n"></span></button>
-  <button type="button" role="tab" aria-selected="false" data-tab="risks">Ризики <span class="muted" id="tab-risks-n"></span></button>
-  <button type="button" role="tab" aria-selected="false" data-tab="depts">За підрозділами <span class="muted" id="tab-depts-n"></span></button>
+<link rel="stylesheet" href="/static/css/manager-ux.css?v=ker-depts2">
+<div id="manager-dashboard" class="mgr-page">
+  <header class="mgr-heading-row">
+    <div>
+      <h1 id="mgr-position">Кабінет керівника</h1>
+      <p id="mgr-department" class="mgr-muted"></p>
+    </div>
+  </header>
+
+  <nav class="mgr-nav" aria-label="Розділи кабінету керівника" role="tablist">
+    <button type="button" role="tab" data-mgr-tab="programs" aria-selected="true">Програми та прогрес</button>
+    <button type="button" role="tab" data-mgr-tab="recommendations" aria-selected="false">Рекомендації <span id="mgr-rec-count"></span></button>
+    <button type="button" role="tab" data-mgr-tab="flags" aria-selected="false">Risk Flags <span id="mgr-flags-count"></span></button>
+    <button type="button" role="tab" data-mgr-tab="risks" aria-selected="false">Корупційні ризики</button>
+    <div class="mgr-nav-tools">
+      <label class="mgr-field" for="mgr-period">Звітний період
+        <select id="mgr-period" aria-label="Звітний період"></select>
+      </label>
+      <button id="mgr-refresh" type="button" class="mgr-button">Оновити дані</button>
+    </div>
+  </nav>
+
+  <div id="mgr-message" class="mgr-message" role="status" aria-live="polite" hidden></div>
+
+  <section data-mgr-panel="programs" role="tabpanel" class="mgr-panel">
+    <div class="mgr-stats" aria-label="Статистика виконання заходів">
+      <div class="mgr-stat"><span>Усього заходів</span><strong id="mgr-kpi-total">—</strong></div>
+      <div class="mgr-stat"><span>Виконано</span><strong id="mgr-kpi-completed">—</strong></div>
+      <div class="mgr-stat"><span>Очікують погодження</span><strong id="mgr-kpi-pending">—</strong></div>
+      <div class="mgr-stat"><span>Прострочені</span><strong id="mgr-kpi-overdue">—</strong></div>
+    </div>
+
+    <div class="mgr-scope-toolbar">
+      <label class="mgr-field mgr-search" for="mgr-program-search">Пошук програм і заходів
+        <input type="search" id="mgr-program-search" autocomplete="off" placeholder="Код, програма, розділ або захід">
+      </label>
+      <label class="mgr-field mgr-program-select" for="mgr-program">Показати
+        <select id="mgr-program"><option value="">Усі програми</option></select>
+      </label>
+    </div>
+
+    <section class="mgr-section" aria-label="Прогрес за підрозділами">
+      <div class="mgr-section-head"><h2>Прогрес за підрозділами</h2><span id="mgr-progress-period" class="mgr-muted"></span></div>
+      <p id="mgr-progress-caption" class="mgr-muted mgr-progress-caption"></p>
+      <label class="mgr-field mgr-department-search" for="mgr-department-search">Пошук підрозділу
+        <input type="search" id="mgr-department-search" autocomplete="off" placeholder="Назва або код підрозділу">
+      </label>
+      <div id="mgr-department-progress" class="mgr-department-grid"><p class="mgr-muted">Завантаження…</p></div>
+    </section>
+
+    <section class="mgr-section" aria-label="Доступні програми й заходи">
+      <div class="mgr-section-head"><h2>Програми та заходи</h2><span id="mgr-program-count" class="mgr-muted"></span></div>
+      <div id="mgr-program-tree" class="mgr-tree"><p class="mgr-muted">Завантаження…</p></div>
+    </section>
+  </section>
+
+  <section data-mgr-panel="recommendations" role="tabpanel" class="mgr-panel" hidden>
+    <div class="mgr-section-head"><h2>Рекомендації системи</h2><span class="mgr-muted">Інформація для управлінського контролю</span></div>
+    <div class="mgr-scope-toolbar">
+      <label class="mgr-field mgr-search" for="mgr-rec-search">Пошук
+        <input id="mgr-rec-search" type="search" autocomplete="off" placeholder="Захід, причина або рекомендація">
+      </label>
+      <label class="mgr-field mgr-program-select" for="mgr-rec-priority">Пріоритет
+        <select id="mgr-rec-priority">
+          <option value="">Усі пріоритети</option>
+          <option value="critical">Критичний</option>
+          <option value="high">Високий</option>
+          <option value="medium">Середній</option>
+          <option value="low">Низький</option>
+        </select>
+      </label>
+    </div>
+    <div id="mgr-recommendations" class="mgr-cards"></div>
+  </section>
+
+  <section data-mgr-panel="flags" role="tabpanel" class="mgr-panel" hidden>
+    <div class="mgr-section-head"><h2>Risk Flags</h2><span class="mgr-muted">Сигнали в межах доступних підрозділів</span></div>
+    <div id="mgr-flags" class="mgr-cards"></div>
+  </section>
+
+  <section data-mgr-panel="risks" role="tabpanel" class="mgr-panel" hidden>
+    <div class="mgr-section-head"><h2>Корупційні ризики</h2><span class="mgr-muted">Показники та динаміка</span></div>
+    <label class="mgr-field mgr-risk-search" for="mgr-risk-search">Пошук
+      <input type="search" id="mgr-risk-search" autocomplete="off" placeholder="Код або назва ризику">
+    </label>
+    <div id="mgr-risks" class="mgr-cards"></div>
+  </section>
 </div>
-
-<section data-panel="overview">
-  <div class="cards" id="cards"></div>
-  <div id="stack"></div>
-</section>
-
-<section data-panel="programs" class="hidden">
-  <div class="toolbar">
-    <label class="field grow">Пошук
-      <input id="programs-search" type="search" autocomplete="off" placeholder="Програма, розділ, захід або підрозділ">
-    </label>
-    <label class="field">Увага
-      <select id="programs-filter">
-        <option value="">Усі заходи</option>
-        <option value="flagged">Із зауваженнями</option>
-        <option value="overdue">Прострочені</option>
-        <option value="pending">Очікують погодження</option>
-      </select>
-    </label>
-  </div>
-  <div class="pager pager-top" id="programs-pager-top"></div>
-  <div id="programs"><p class="muted">Завантаження…</p></div>
-  <div class="pager" id="programs-pager"></div>
-</section>
-
-<section data-panel="recs" class="hidden">
-  <div class="toolbar">
-    <label class="field grow">Пошук
-      <input id="recs-search" type="search" autocomplete="off" placeholder="Назва, причина, захід, ризик або програма">
-    </label>
-    <label class="field">Пріоритет
-      <select id="recs-filter">
-        <option value="">Усі пріоритети</option>
-        <option value="critical">Критичний</option><option value="high">Високий</option>
-        <option value="medium">Середній</option><option value="low">Низький</option>
-      </select>
-    </label>
-  </div>
-  <div class="pager pager-top" id="recs-pager-top"></div>
-  <div id="recs"></div>
-  <div class="pager" id="recs-pager"></div>
-</section>
-
-<section data-panel="risk-flags" class="hidden" aria-label="Risk Flags для керівника">
-  <div class="role-card"><h2>Risk Flags і сигнали управлінського контролю</h2>
-    <p class="small muted">Керівник бачить тільки сигнали, включені сервером до /api/management/recommendations. Прямий доступ до /api/risk-flags/ для ролі KER відсутній.</p>
-    <div id="manager-risk-flags" class="role-risk-list"></div>
-  </div>
-</section>
-<section data-panel="risks" class="hidden">
-  <div class="toolbar">
-    <label class="field grow">Пошук
-      <input id="risks-search" type="search" autocomplete="off" placeholder="Ризик, код, індикатор або програма">
-    </label>
-    <label class="field">Рівень
-      <select id="risks-filter">
-        <option value="">Усі рівні</option>
-        <option value="critical">Критичний</option><option value="high">Високий</option>
-        <option value="medium">Середній</option><option value="low">Низький</option>
-      </select>
-    </label>
-  </div>
-  <div class="pager pager-top" id="risks-pager-top"></div>
-  <div class="table-wrap">
-    <table class="grid">
-      <thead><tr><th>Ризик</th><th>Рівень</th><th>Індикатор</th><th>Базове → ціль</th><th>Факт</th><th>Динаміка</th><th>Заходи реагування</th></tr></thead>
-      <tbody id="risks"></tbody>
-    </table>
-  </div>
-  <div class="pager" id="risks-pager"></div>
-</section>
-
-<section data-panel="depts" class="hidden">
-  <div class="toolbar">
-    <label class="field grow">Пошук
-      <input id="depts-search" type="search" autocomplete="off" placeholder="Назва підрозділу">
-    </label>
-    <label class="field">Стан
-      <select id="depts-filter">
-        <option value="">Усі підрозділи</option>
-        <option value="overdue">Є прострочені</option>
-        <option value="pending">Є неперевірені звіти</option>
-      </select>
-    </label>
-  </div>
-  <div class="pager pager-top" id="depts-pager-top"></div>
-  <div class="table-wrap">
-    <table class="grid">
-      <thead><tr><th>Підрозділ</th><th>Заходів</th><th style="width:30%">Виконано й погоджено</th><th>Прострочено</th><th>Очікують погодження</th></tr></thead>
-      <tbody id="by-dept"></tbody>
-    </table>
-  </div>
-  <div class="pager" id="depts-pager"></div>
-</section>
 {% endblock %}
-{% block scripts %}<script src="/static/js/manager.js?v=8"></script>{% endblock %}
+{% block scripts %}<script src="/static/js/manager.js?v=ker-depts2"></script>{% endblock %}

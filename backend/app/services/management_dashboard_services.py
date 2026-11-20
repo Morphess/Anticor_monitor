@@ -11,13 +11,21 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
+
+from app.models.execution import Execution
+from app.models.order_version import OrderVersion
+from app.models.program_workflow import MeasureAssignment
+from app.models.user import User
 
 from app.repositories.management_dashboard_repository import ManagementDashboardRepository
 from app.schemas.management_dashboard import (
     DepartmentKPI, ManagementDeadline, ManagementDispatch, ManagementMeasure,
     ManagementProgram, ManagementRecommendation, ManagementRecommendationsResponse,
     ManagementRisk, ManagementSummary, ManagementUnit,
+    ManagementDepartmentProgress, ManagementDepartmentProgressResponse,
+    ManagementMeasureAssignmentProgress,
 )
 from app.services.program_workflow_services import ProgramWorkflowService, WorkflowError
 from app.services.risk_flag_services import detect_risk_flags, period_bounds
@@ -130,20 +138,16 @@ class ManagementDashboardService:
         if not tree.exists(actor.department_id):
             raise ManagementDashboardError("Підрозділ керівника не знайдено в ієрархії", 403)
 
-        # Керівник відомства — KER підрозділу без батька: бачить усі створені програми
-        # і всі підрозділи. Керівник підрозділу — лише програми, координовані на його
-        # підрозділ (або вищий / розіслані окремо нащадку), і свою гілку.
-        agency = tree.parents.get(actor.department_id) is None
-        if agency:
-            branch = set(tree.parents)
-            ancestors = branch
-            dispatch = {pid: branch for pid in self.repo.all_program_ids()}
-        else:
-            branch = tree.descendants(actor.department_id)
-            ancestors = tree.ancestors(actor.department_id)
-            # A program may have been sent to the manager's department, an ancestor,
-            # or separately to a descendant. Never use all programs in the system.
-            dispatch = self.repo.dispatches(branch | ancestors)
+        # ЖОДНИХ ГЛОБАЛЬНИХ ВИНЯТКІВ ДЛЯ КОРЕНЕВОГО ПІДРОЗДІЛУ.
+        # parent_id IS NULL означає лише "немає батька", а не право
+        # бачити всі незалежні кореневі гілки організації.
+        # Навіть кореневий KER бачить ЛИШЕ свою гілку parent_id.
+        branch = tree.descendants(actor.department_id)
+        ancestors = tree.ancestors(actor.department_id)
+        # Направлення програми батьківському підрозділу може поширюватися
+        # на нащадків, але це НЕ розширює видимість на сусідні відділи.
+        dispatch = self.repo.dispatches(branch | ancestors)
+        agency = False
         if program_id is not None:
             if program_id not in dispatch:
                 raise ManagementDashboardError("Немає доступу до цієї програми", 403)
@@ -180,7 +184,7 @@ class ManagementDashboardService:
             risks=risks, measurements=self.repo.measurements(risk_ids, as_of),
             covered_risks=self.repo.all_covered_risks(set(programs)),
             department_names=names,
-            agency=agency, visible_departments=branch | ancestors,
+            agency=agency, visible_departments=branch,
         )
 
     @staticmethod
@@ -297,13 +301,105 @@ class ManagementDashboardService:
             scope="agency" if ctx.agency else "department",
         )
 
+    def department_progress(self, actor, *, program_id: str | None, period: str,
+                            as_of: date) -> ManagementDepartmentProgressResponse:
+        """KER-only: progress by *actual executor assignment department*.
+
+        Visibility comes exclusively from _context: the current KER's own
+        department and descendants, and measures of legitimately routed programs.
+        Each (measure, executor) contributes to exactly one department.
+        Revoked assignments and executors who moved departments do not count.
+        This endpoint is read-only and never exposes executor identities.
+        """
+        ctx = self._context(actor, program_id=program_id, period=period, as_of=as_of)
+        measure_ids = {m.id for m in ctx.measures}
+        groups: dict[str, dict[str, dict]] = {dept: {} for dept in ctx.branch}
+        assigned_measures: set[str] = set()
+
+        if measure_ids:
+            assignment_rows = self.db.execute(
+                select(MeasureAssignment.measure_id, MeasureAssignment.user_id,
+                       MeasureAssignment.department_id)
+                .join(User, User.id == MeasureAssignment.user_id)
+                .where(
+                    MeasureAssignment.measure_id.in_(measure_ids),
+                    MeasureAssignment.department_id.in_(ctx.branch),
+                    User.role_id == 'VYK',
+                    User.department_id == MeasureAssignment.department_id,
+                )
+            ).all()
+            submissions = {
+                (ex.measure_id, ex.submitted_by_user_id): ex
+                for ex in self.db.scalars(
+                    select(Execution).where(
+                        Execution.measure_id.in_(measure_ids),
+                        Execution.period == period,
+                    )
+                )
+            }
+            version_ids = {ex.order_version_id for ex in submissions.values()
+                           if ex.order_version_id is not None}
+            versions = ({v.id: v for v in self.db.scalars(
+                select(OrderVersion).where(OrderVersion.id.in_(version_ids))
+            )} if version_ids else {})
+
+            for mid, uid, dept in assignment_rows:
+                assigned_measures.add(mid)
+                bucket = groups[dept].setdefault(mid, {
+                    'measure_id': mid, 'assigned': 0, 'approved': 0,
+                    'pending': 0, 'rejected': 0, 'not_submitted': 0,
+                })
+                bucket['assigned'] += 1
+                ex = submissions.get((mid, uid))
+                if ex is None:
+                    bucket['not_submitted'] += 1
+                    continue
+                version = versions.get(ex.order_version_id)
+                if (ex.status == 'approved' and not ex.document_changed
+                        and version is not None
+                        and version.order_id == ex.order_id
+                        and version.sha256 == ex.submitted_sha256):
+                    bucket['approved'] += 1
+                elif ex.status == 'rejected' and not ex.document_changed:
+                    bucket['rejected'] += 1
+                else:
+                    # Includes pending, stale documents, and invalid approvals.
+                    bucket['pending'] += 1
+
+        rows = []
+        for dept in sorted(ctx.branch, key=lambda d: (d != ctx.department_id,
+                                                     ctx.department_names.get(d, d).casefold(), d)):
+            per_measure = [ManagementMeasureAssignmentProgress(**row)
+                           for row in sorted(groups[dept].values(), key=lambda r: r['measure_id'])]
+            rows.append(ManagementDepartmentProgress(
+                department_id=dept,
+                department_name=ctx.department_names.get(dept, dept),
+                is_own_department=(dept == ctx.department_id),
+                measures_total=len(per_measure),
+                measures_approved=sum(r.assigned > 0 and r.approved == r.assigned
+                                      for r in per_measure),
+                assigned=sum(r.assigned for r in per_measure),
+                approved=sum(r.approved for r in per_measure),
+                pending=sum(r.pending for r in per_measure),
+                rejected=sum(r.rejected for r in per_measure),
+                not_submitted=sum(r.not_submitted for r in per_measure),
+                measures=per_measure,
+            ))
+        return ManagementDepartmentProgressResponse(
+            department_id=ctx.department_id,
+            period=period,
+            program_id=program_id,
+            measures_total=len(measure_ids),
+            unassigned_measures=len(measure_ids - assigned_measures),
+            departments=rows,
+        )
+
     def programs(self, actor, *, period: str, as_of: date) -> list[ManagementProgram]:
         ctx = self._context(actor, program_id=None, period=period, as_of=as_of)
         sends = [row for row in self.repo.program_dispatch_rows(set(ctx.programs))
                  if row[1] in ctx.visible_departments]
         programs = self.repo.program_rows(set(ctx.programs))
-        names = self.repo.departments({row[1] for row in sends} | {
-            p.coordinator_department_id for p in programs if p.coordinator_department_id})
+        names = self.repo.departments(ctx.branch)
         counts = defaultdict(int)
         for measure in ctx.measures:
             counts[measure.program_id] += 1
@@ -315,7 +411,8 @@ class ManagementDashboardService:
                     seen.add(dep)
                     recipients.append(ManagementDispatch(
                         department_id=dep, department_name=names.get(dep, dep), sent_at=sent_at))
-            coord = program.coordinator_department_id
+            coord = (program.coordinator_department_id
+                     if program.coordinator_department_id in ctx.branch else None)
             result.append(ManagementProgram(
                 id=program.id, title=program.title,
                 start_date=program.start_date, end_date=program.end_date,

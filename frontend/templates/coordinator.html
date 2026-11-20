@@ -3,42 +3,45 @@
 {% block role_name %}Координатор{% endblock %}
 {% block topbar_tools %}{% include "_bell.html" %}{% endblock %}
 {% block content %}
-<link rel="stylesheet" href="/static/css/coordinator-ux.css?v=3">
+<link rel="stylesheet" href="/static/css/coordinator-ux.css?v=order-edit1">
 <div class="coord-page">
   <section class="unit coord-hero" aria-labelledby="unit-name">
     <div class="coord-heading">
-      <p class="label" id="coord-kind">Координатор</p>
       <h1 id="unit-name">Завантаження…</h1>
-      <p class="small muted coord-subtitle" id="coord-help">Завантажуємо доступні антикорупційні програми.</p>
-    </div>
-    <div class="unit-actions coord-main-actions">
-      <button class="btn btn-dark hidden" type="button" id="create-program">Створити програму</button>
-      <button class="btn btn-dark hidden" type="button" id="assign-open">Призначити виконавців</button>
-      <button class="btn" type="button" id="coord-refresh" title="Оновити стан виконання">Оновити дані</button>
     </div>
   </section>
 
-  <section class="coord-overview" aria-label="Показники виконання за звітний період">
+  <div class="coord-nav-row">
+  <nav class="coord-view-navigation" role="tablist" aria-label="Розділи координатора">
+    <button type="button" class="coord-view-tab active" data-coord-view="programs" id="coord-tab-programs" role="tab" aria-controls="coord-view-programs" aria-selected="true" tabindex="0">Програми та прогрес</button>
+    <button type="button" class="coord-view-tab" data-coord-view="risks" id="coord-tab-risks" role="tab" aria-controls="coord-view-risks" aria-selected="false" tabindex="-1">Risk Flags</button>
+    <button type="button" class="coord-view-tab" data-coord-view="reports" id="coord-tab-reports" role="tab" aria-controls="coord-view-reports" aria-selected="false" tabindex="-1">Піврічні звіти</button>
+    <button type="button" class="coord-view-tab" data-coord-view="documents" id="coord-tab-documents" role="tab" aria-controls="coord-view-documents" aria-selected="false" tabindex="-1">Зміни наказів <span id="coord-unread-badge" class="coord-unread-badge" hidden></span></button>
+  </nav>
+  <div class="unit-actions coord-main-actions">
+    <button class="btn btn-dark hidden" type="button" id="create-program">Створити програму</button>
+    <button class="btn btn-dark hidden" type="button" id="assign-open">Призначити виконавців</button>
+    <button class="btn" type="button" id="coord-refresh" title="Оновити стан виконання">Оновити дані</button>
+  </div>
+  </div>
+  <section id="coord-view-programs" class="coord-view-panel" role="tabpanel" aria-labelledby="coord-tab-programs">
+  <section class="coord-overview" aria-label="Статистика заходів за звітний період">
     <div class="coord-kpi">
-      <span class="coord-kpi-label">Заходів у доступних програмах</span>
+      <span class="coord-kpi-label">Усього заходів</span>
       <strong id="coord-total">—</strong>
-      <span class="coord-kpi-note" id="coord-program-total">— програм</span>
     </div>
-    <button class="coord-kpi coord-kpi-button" type="button" data-target-filter="approved" aria-label="Показати погоджені виконані заходи">
-      <span class="coord-kpi-label">Погоджено виконаних</span>
+    <div class="coord-kpi">
+      <span class="coord-kpi-label">Виконано</span>
       <strong id="coord-approved">—</strong>
-      <span class="coord-kpi-note">Погоджено KOORD</span>
-    </button>
-    <button class="coord-kpi coord-kpi-button" type="button" data-target-filter="review" aria-label="Показати заходи, виконання яких очікує погодження">
+    </div>
+    <div class="coord-kpi">
       <span class="coord-kpi-label">Очікують погодження</span>
       <strong id="coord-review-count">—</strong>
-      <span class="coord-kpi-note">Подано наказ; очікує рішення</span>
-    </button>
-    <button class="coord-kpi coord-kpi-button" type="button" data-target-filter="overdue" aria-label="Показати прострочені заходи">
+    </div>
+    <div class="coord-kpi">
       <span class="coord-kpi-label">Прострочені</span>
       <strong id="coord-overdue">—</strong>
-      <span class="coord-kpi-note">За календарним строком</span>
-    </button>
+    </div>
   </section>
 
   <section class="coord-workspace" aria-label="Пошук та огляд програм">
@@ -61,14 +64,10 @@
         <button type="button" class="coord-filter hidden" id="coord-unassigned-filter" data-coord-filter="unassigned" aria-pressed="false">Без виконавця <span id="coord-filter-unassigned">—</span></button>
       </div>
     </div>
-    <div class="coord-section-heading">
-      <div>
-        <h2 id="coord-section-title">Доступні програми</h2>
-        <p class="small muted" id="coord-results-caption">Програма → розділ → захід</p>
-      </div>
-    </div>
     <div id="flags-note" class="coord-flags-note" aria-live="polite"></div>
     <div id="programs" aria-live="polite"><p class="muted">Завантаження…</p></div>
+  </section>
+
   </section>
 
   <div id="coord-toast" class="coord-toast hidden" role="status" aria-live="polite" aria-atomic="true">
@@ -79,10 +78,8 @@
   <dialog id="assign-dialog" class="wide coord-dialog coord-assign-dialog" aria-labelledby="assign-title">
     <div class="coord-dialog-header">
       <h2 id="assign-title">Призначення виконавців</h2>
-      <p class="small muted">Оберіть конкретних користувачів із роллю VYK у своєму або підпорядкованих підрозділах. Призначення не змінює відповідальний підрозділ заходу.</p>
+      <button type="button" id="assign-close" class="coord-dialog-close" aria-label="Закрити вікно призначень">×</button>
     </div>
-    <label class="field coord-full-field">Пошук програми або заходу
-      <input id="assign-search" type="search" placeholder="Код, назва програми або опис заходу"></label>
     <div id="assign-body" class="assign-body"></div>
     <div id="assign-msg" class="msg" role="status" aria-live="polite"></div>
     <div class="dialog-actions coord-dialog-actions">
@@ -91,19 +88,44 @@
     </div>
   </dialog>
 
-  <section class="unit coord-support-panel" aria-label="Risk Flags">
-    <h2>Risk Flags · сигнали для координатора</h2>
-    <p class="small muted">Показуються тільки доступні сигнали програми. Для поточного незавершеного періоду — RF8.</p>
+  <section id="coord-view-risks" class="unit coord-support-panel coord-view-panel" role="tabpanel" aria-labelledby="coord-tab-risks" hidden>
+    <div class="coord-panel-heading">
+      <h2>Risk Flags</h2>
+      <label class="field coord-period-field">Звітний період
+        <select id="coord-risk-period" aria-label="Період Risk Flags"></select>
+      </label>
+    </div>
     <div id="coord-risk-panel"></div>
   </section>
-  <section class="unit coord-support-panel" aria-label="Піврічні звіти">
-    <h2>Піврічні звіти підрозділу</h2>
-    <p class="small muted">Доступні лише програми, направлені безпосередньо вашому підрозділу.</p>
+  <section id="coord-view-reports" class="unit coord-support-panel coord-view-panel" role="tabpanel" aria-labelledby="coord-tab-reports" hidden>
+    <div class="coord-panel-heading">
+      <h2>Піврічні звіти підрозділу</h2>
+      <label class="field coord-period-field">Звітний період
+        <select id="coord-report-period" aria-label="Період звітності підрозділу"></select>
+      </label>
+    </div>
+    <div class="coord-report-scope small muted" id="coord-report-scope">Звіт охоплює ваш підрозділ і підпорядковані підрозділи.</div>
     <div id="coord-report-panel"></div>
   </section>
-  <section class="unit coord-support-panel" aria-label="Повідомлення про зміни наказів">
-    <h2>Зміни наказів і SHA-256</h2>
-    <div id="coord-alert-panel"></div>
+  <section id="coord-view-documents" class="unit coord-support-panel coord-view-panel" role="tabpanel" aria-labelledby="coord-tab-documents" hidden>
+    <div class="coord-panel-heading">
+      <h2>Історія змін наказів і SHA-256</h2>
+      <div class="coord-document-tools">
+        <label class="field">Показати
+          <select id="coord-alert-filter" aria-label="Фільтр повідомлень">
+            <option value="all">Усі зміни</option>
+            <option value="unread">Непрочитані</option>
+          </select>
+        </label>
+        <button type="button" id="coord-alert-refresh" class="btn">Оновити історію</button>
+      </div>
+    </div>
+    <h3 class="coord-change-heading">Зміни номера наказу виконавцями</h3>
+    <div id="coord-number-changes" aria-live="polite"></div>
+    <h3 class="coord-change-heading">Історія версій документів (SHA-256)</h3>
+    <p class="small muted" id="coord-alert-count" role="status"></p>
+    <div id="coord-alert-panel" aria-live="polite"></div>
+    <div class="coord-alert-pagination" id="coord-alert-pagination"></div>
   </section>
   <dialog id="coord-review-dialog" class="role-dialog" aria-labelledby="coord-review-title">
     <form id="coord-review-form">
@@ -124,6 +146,6 @@
 {% block scripts %}
 <script src="/static/js/notify.js"></script>
 <script src="/static/js/risk-flags.js?v=1"></script>
-<script src="/static/js/reports-ui.js?v=1"></script>
-<script src="/static/js/coordinator.js?v=9"></script>
+<script src="/static/js/reports-ui.js?v=pdf1"></script>
+<script src="/static/js/coordinator.js?v=order-edit1"></script>
 {% endblock %}

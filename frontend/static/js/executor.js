@@ -1,448 +1,526 @@
-/* Кабінет VYK. Доступ визначає сервер, не поле measures.assigned_user_id. */
+/* VYK — one independent order submission per executor/measure/period.
+   Backend: POST /api/executions/submit (measure_id, period, order_number).
+   Pending orders may be replaced via POST /api/executions/{id}/change-order. */
 (function () {
-  "use strict";
-  const el = Api.el;
+  'use strict';
   const $ = (id) => document.getElementById(id);
-  const root = $("programs");
-  const search = $("search");
-  const filter = $("filter");
-  const programFilter = $("executor-program");
-  const period = $("period");
-  const dialog = $("execution-dialog");
-  const form = $("execution-form");
-  const saveButton = $("execution-save");
-  const formMessage = $("execution-message");
-  const openIds = new Set();
+  const make = Api.el;
+  const root = $('programs');
+  const search = $('search');
+  const filter = $('filter');
+  const programFilter = $('executor-program');
+  const period = $('period');
+  const dialog = $('execution-dialog');
+  const form = $('execution-form');
+  const saveButton = $('execution-save');
+  const message = $('execution-message');
+  const expanded = new Set();
   const state = {
-    programs: [], byProgram: {}, measures: [], sections: {}, executions: {}, evidences: {},
-    evidenceListAvailable: true, deadlineReminders: {}, notices: {}, edit: null, loading: false,
+    programs: [], byProgram: {}, measures: [], sections: {},
+    executions: {}, reminders: {}, edit: null, loading: false,
   };
-  const STATUS_LABELS = {
-    not_started: "Не розпочато", in_progress: "У процесі", partial: "Частково виконано",
-    completed: "Виконано", not_completed: "Не виконано",
-  };
-  const isApproved = (x) => !!(x && x.approved_by_coordinator && x.status === "completed");
-  const status = (m) => Api.statusOf(state.executions[m.id]);
-  const safeList = (x) => Array.isArray(x) ? x : [];
-  const getDays = (m) => {
-    if (m.deadline_type && m.deadline_type !== "date") return null;
-    const reminder = state.deadlineReminders[m.id];
+  const list = (v) => Array.isArray(v) ? v : [];
+  const groupBy = (rows, key) => rows.reduce((result, row) => {
+    (result[row[key]] ||= []).push(row);
+    return result;
+  }, {});
+  const submission = (m) => state.executions[m.id] || null;
+  const approved = (ex) => !!(ex && ex.status === 'approved' && !ex.document_changed);
+  const pending = (ex) => !!(ex && ex.status === 'pending' && !ex.document_changed);
+  const rework = (ex) => !!(ex && (ex.status === 'rejected' || ex.document_changed));
+  const statusOf = (ex) => Api.statusOf(ex);
+  const canSubmit = (ex) => !ex || rework(ex);
+  const canChange = (ex) => pending(ex);
+  const actionLabel = (ex) => canChange(ex) ? 'Підтвердити зміну наказу' :
+    ex ? 'Повторно підтвердити виконання' : 'Підтвердити виконання';
+
+  function daysLeft(m) {
+    if (m.deadline_type && m.deadline_type !== 'date') return null;
+    const reminder = state.reminders[m.id];
     if (reminder && Number.isFinite(Number(reminder.days_left))) return Number(reminder.days_left);
-    return Notify.daysLeft(m);
+    if (window.Notify && typeof Notify.daysLeft === 'function') return Notify.daysLeft(m);
+    if (!m.deadline_on) return null;
+    const due = new Date(m.deadline_on + 'T12:00:00');
+    const now = new Date();
+    now.setHours(12, 0, 0, 0);
+    return Math.round((due - now) / 86400000);
+  }
+  const attention = (m) => {
+    const days = daysLeft(m);
+    return !approved(submission(m)) && days !== null && days <= 7;
   };
-  function needsAttention(m) {
-    const days = getDays(m);
-    return !isApproved(state.executions[m.id]) && days !== null && days <= 7;
+
+  function toast(text, kind) {
+    const host = $('executor-toasts');
+    if (!host) return;
+    const node = make('div', { class: 'executor-toast', 'data-kind': kind || 'success', role: kind === 'error' ? 'alert' : 'status' });
+    node.appendChild(make('span', { text: text }));
+    const close = make('button', { type: 'button', text: '×', 'aria-label': 'Закрити сповіщення' });
+    close.addEventListener('click', () => node.remove());
+    node.appendChild(close);
+    host.appendChild(node);
+    setTimeout(() => node.remove(), kind === 'error' ? 7000 : 4200);
   }
-  function toast(message, kind) {
-    const wrap = $("executor-toasts");
-    const item = el("div", { class: "executor-toast", "data-kind": kind || "success", role: kind === "error" ? "alert" : "status" }, [
-      el("span", { text: message }),
-      el("button", { type: "button", "aria-label": "Закрити сповіщення", text: "×", onclick: () => item.remove() }),
+  function showError(err) {
+    const text = err && err.message || 'Не вдалося завантажити дані';
+    root.replaceChildren(make('div', { class: 'executor-inline-error', text }));
+    const retry = make('button', { type: 'button', class: 'btn', text: 'Повторити' });
+    retry.addEventListener('click', () => refresh(true));
+    root.appendChild(retry);
+    toast(text, 'error');
+  }
+  function errorInForm(text) {
+    message.className = 'msg err';
+    message.textContent = text;
+  }
+  function clearFormError() {
+    message.className = 'msg';
+    message.textContent = '';
+  }
+  function spanText(label, value, cls) {
+    return make('div', { class: cls || '' }, [
+      make('span', { class: 'm-label', text: label + ': ' }),
+      make('span', { text: String(value == null ? '—' : value) }),
     ]);
-    wrap.appendChild(item);
-    setTimeout(() => item.remove(), kind === "error" ? 6500 : 4200);
   }
-  function errorText(err) { return (err && err.message) || "Не вдалося отримати дані"; }
-  function noticeError(err) {
-    root.innerHTML = "";
-    root.appendChild(el("div", { class: "executor-inline-error", text: errorText(err) }));
-    root.appendChild(el("button", { type: "button", class: "btn", text: "Спробувати знову", onclick: () => refresh(true) }));
+  function deadlineText(m) {
+    if (m.deadline_on) return Api.fmtDate(m.deadline_on);
+    if (m.deadline_type === 'ongoing') return 'Постійно';
+    return m.deadline_description || 'Не вказано';
   }
-  function textCell(name, value, klass) {
-    return el("div", { class: klass || "" }, [
-      el("span", { class: "m-label", text: name + ": " }),
-      el("span", { text: String(value || "—") }),
+  function deadlineChip(m) {
+    if (approved(submission(m))) return null;
+    const days = daysLeft(m);
+    if (days === null) return null;
+    if (days < 0) return make('span', { class: 'chip late', text: 'Прострочено на ' + (-days) + ' дн.' });
+    if (days === 0) return make('span', { class: 'chip soon', text: 'Строк сьогодні' });
+    if (days <= 7) return make('span', { class: 'chip soon', text: 'Залишилося ' + days + ' дн.' });
+    return null;
+  }
+
+  async function loadMeasures() {
+    // Routing API restricts VYK to personal, active assignments.
+    const [mine, available] = await Promise.all([
+      Api.get('/api/program-routing/my/measures'),
+      Api.get('/api/program-routing/my/programs'),
     ]);
-  }
-  function groupBy(list, key) {
-    return list.reduce((acc, m) => {
-      (acc[m[key]] = acc[m[key]] || []).push(m);
-      return acc;
-    }, {});
-  }
-  async function fetchMeasures() {
-    // Не використовуємо глобальні /api/programs та /api/measures списки.
-    const [assigned, programs] = await Promise.all([
-      Api.get("/api/program-routing/my/measures"),
-      Api.get("/api/program-routing/my/programs"),
-    ]);
-    const mine = safeList(assigned);
-    const allowedPrograms = new Set(safeList(programs).map((p) => p.id));
-    const chosen = mine.filter((m) => allowedPrograms.has(m.program_id));
-    // Кожна повна картка заходу запитується ВИКЛЮЧНО за своїм ID.
-    // Якщо GET /api/measures/{id} недоступний, показуємо короткі відомості
-    // та не вигадуємо ні строків, ні показників.
-    const enriched = [];
-    for (let i = 0; i < chosen.length; i += 6) {
-      const batch = chosen.slice(i, i + 6);
-      const detail = await Promise.all(batch.map(async (m) => {
+    const allowed = new Set(list(available).map((p) => p.id));
+    const short = list(mine).filter((m) => allowed.has(m.program_id));
+    const full = [];
+    for (let i = 0; i < short.length; i += 6) {
+      const batch = await Promise.all(short.slice(i, i + 6).map(async (m) => {
         try {
-          const full = await Api.get("/api/measures/" + encodeURIComponent(m.id), { noRedirect: true });
-          return Object.assign({}, m, full && full.id === m.id ? full : {});
+          const detail = await Api.get('/api/measures/' + encodeURIComponent(m.id), { noRedirect: true });
+          return Object.assign({}, m, detail && detail.id === m.id ? detail : {});
         } catch (err) {
           if (err.status === 401) throw err;
-          return m;
+          return m; // Some roles may see only MeasureBriefRead.
         }
       }));
-      enriched.push(...detail);
+      full.push(...batch);
     }
-    const actualPrograms = safeList(programs).filter((p) => enriched.some((m) => m.program_id === p.id));
-    const meta = await Promise.all(actualPrograms.map(async (p) => {
-      let full = {}, sec = [];
-      try { full = await Api.get("/api/program-routing/programs/" + encodeURIComponent(p.id), { noRedirect: true }); }
+    const programs = list(available).filter((p) => full.some((m) => m.program_id === p.id));
+    const meta = await Promise.all(programs.map(async (p) => {
+      let detail = {}, sections = [];
+      try { detail = await Api.get('/api/program-routing/programs/' + encodeURIComponent(p.id), { noRedirect: true }); }
       catch (err) { if (err.status === 401) throw err; }
-      try { sec = await Api.get("/api/program-routing/programs/" + encodeURIComponent(p.id) + "/sections", { noRedirect: true }); }
+      try { sections = await Api.get('/api/program-routing/programs/' + encodeURIComponent(p.id) + '/sections', { noRedirect: true }); }
       catch (err) { if (err.status === 401) throw err; }
-      return { program: Object.assign({}, p, full || {}), sections: safeList(sec) };
+      return { program: Object.assign({}, p, detail || {}), sections: list(sections) };
     }));
-    state.programs = meta.map((x) => x.program);
-    state.sections = {};
-    meta.forEach((x) => x.sections.forEach((s) => { state.sections[s.id] = s; }));
-    state.measures = enriched.sort(Api.byMeasureOrder);
-    state.byProgram = groupBy(state.measures, "program_id");
-    state.programs.sort((a, b) => String(a.title || a.id).localeCompare(String(b.title || b.id), "uk"));
-    programFilter.innerHTML = "";
-    programFilter.appendChild(el("option", { value: "", text: "Усі мої програми" }));
-    state.programs.forEach((p) => programFilter.appendChild(el("option", { value: p.id, text: p.title || p.id })));
+    state.programs = meta.map((x) => x.program).sort((a, b) => String(a.title || a.id).localeCompare(String(b.title || b.id), 'uk'));
+    state.measures = full.sort(Api.byMeasureOrder);
+    state.sections = Object.fromEntries(meta.flatMap((x) => x.sections.map((s) => [s.id, s])));
+    state.byProgram = groupBy(state.measures, 'program_id');
+    const selectedProgram = programFilter.value;
+    programFilter.replaceChildren(make('option', { value: '', text: 'Усі мої програми' }));
+    state.programs.forEach((p) => programFilter.appendChild(make('option', { value: p.id, text: p.title || p.id })));
+    programFilter.value = state.programs.some((p) => p.id === selectedProgram) ? selectedProgram : '';
+    const oldPeriod = period.value;
     Api.fillPeriods(period, state.programs);
-    if (state.programs.length === 1) openIds.add("p:" + state.programs[0].id);
-    if (state.measures.length === 1) openIds.add("s:" + state.measures[0].program_id + ":" + state.measures[0].section_id);
+    if (Array.from(period.options).some((o) => o.value === oldPeriod)) period.value = oldPeriod;
+    if (state.programs.length === 1) expanded.add('p:' + state.programs[0].id);
+    if (state.measures.length === 1) expanded.add('s:' + state.measures[0].program_id + ':' + state.measures[0].section_id);
   }
-  async function fetchReportData() {
-    const [execs, evidenceResult, deadlineResult] = await Promise.all([
+
+  async function loadSubmissions() {
+    const [rows, reminderResult] = await Promise.all([
       Api.executions(period.value),
-      Api.optional(Api.evidences()),
-      // Нагадування з сервера — додатковий, необов'язковий модуль.
-      // За відсутності API працює локальна індикація за датою з картки заходу.
-      Api.optional(Api.get("/api/deadline-reminders/?limit=100&offset=0", { noRedirect: true })),
+      Api.optional(Api.get('/api/deadline-reminders/?limit=100&offset=0', { noRedirect: true })),
     ]);
-    const mineIds = new Set(state.measures.map((m) => m.id));
+    const assignedIds = new Set(state.measures.map((m) => m.id));
+    const actorId = Number(Api.userId());
     state.executions = {};
-    safeList(execs).forEach((x) => {
-      if (mineIds.has(x.measure_id)) state.executions[x.measure_id] = x;
+    // Defense in depth; the server already filters submissions by JWT user.
+    list(rows).forEach((row) => {
+      if (assignedIds.has(row.measure_id) && Number(row.submitted_by_user_id) === actorId) {
+        state.executions[row.measure_id] = row;
+      }
     });
-    state.deadlineReminders = {};
-    if (deadlineResult.ok && deadlineResult.data && Array.isArray(deadlineResult.data.reminders)) {
-      safeList(deadlineResult.data.reminders).forEach((reminder) => {
-        if (mineIds.has(reminder.measure_id)) state.deadlineReminders[reminder.measure_id] = reminder;
+    state.reminders = {};
+    if (reminderResult.ok) {
+      list(reminderResult.data && reminderResult.data.reminders).forEach((r) => {
+        if (assignedIds.has(r.measure_id)) state.reminders[r.measure_id] = r;
       });
     }
-    state.evidences = {};
-    state.evidenceListAvailable = evidenceResult.ok;
-    safeList(evidenceResult.data).forEach((e) => {
-      if (mineIds.has(e.measure_id) && e.order_number) state.evidences[e.measure_id] = e;
-    });
   }
-  function contextInfo() {
-    const me = Api.me || {};
-    const box = $("ident");
-    box.textContent = [me.department_id || "", me.position || ""].filter(Boolean).join(" · ") || me.login || "Виконавець";
-    box.title = box.textContent;
-  }
+
   async function refresh(full) {
     if (state.loading) return;
     state.loading = true;
-    const button = $("executor-refresh");
+    const button = $('executor-refresh');
     button.disabled = true;
-    button.textContent = "Оновлення…";
-    root.setAttribute("aria-busy", "true");
+    button.textContent = 'Оновлення…';
+    root.setAttribute('aria-busy', 'true');
     try {
-      if (full || !state.programs.length) await fetchMeasures();
-      await fetchReportData();
+      if (full || !state.programs.length) await loadMeasures();
+      await loadSubmissions();
       render();
-      if (full) toast("Дані кабінету оновлено");
+      if (full) toast('Дані кабінету оновлено');
     } catch (err) {
-      noticeError(err);
-      toast(errorText(err), "error");
+      showError(err);
     } finally {
       state.loading = false;
-      root.setAttribute("aria-busy", "false");
+      root.setAttribute('aria-busy', 'false');
       button.disabled = false;
-      button.textContent = "Оновити дані";
+      button.textContent = 'Оновити дані';
     }
   }
+
   function matches(m, p, q) {
-    const sec = state.sections[m.section_id];
-    const ev = state.evidences[m.id];
+    const section = state.sections[m.section_id];
+    const ex = submission(m);
     return [p.id, p.title, m.id, m.description, m.sequence_number,
-      sec && sec.title, ev && ev.order_number].some((v) => String(v || "").toLocaleLowerCase("uk").includes(q));
+      section && section.title, ex && ex.order_number].some((v) => String(v || '').toLocaleLowerCase('uk').includes(q));
   }
   function matchesFilter(m, f) {
+    const ex = submission(m);
     if (!f) return true;
-    const ex = state.executions[m.id];
-    if (f === "todo") return !ex;
-    if (f === "deadline") return needsAttention(m);
-    if (f === "work") return !!ex && ex.status === "in_progress";
-    return status(m) === f;
+    if (f === 'todo') return !ex;
+    if (f === 'deadline') return attention(m);
+    if (f === 'review') return pending(ex);
+    if (f === 'rejected') return !!ex && ex.status === 'rejected' && !ex.document_changed;
+    if (f === 'document-changed') return !!ex && ex.document_changed;
+    if (f === 'done') return approved(ex);
+    return true;
   }
   function updateCounters() {
-    const all = state.measures;
-    const counts = {
-      "executor-total": all.length,
-      "executor-attention": all.filter(needsAttention).length,
-      "executor-review": all.filter((m) => status(m) === "review").length,
-      "executor-approved": all.filter((m) => isApproved(state.executions[m.id])).length,
+    const rows = state.measures;
+    const numbers = {
+      'executor-total': rows.length,
+      'executor-attention': rows.filter(attention).length,
+      'executor-review': rows.filter((m) => pending(submission(m))).length,
+      'executor-approved': rows.filter((m) => approved(submission(m))).length,
     };
-    Object.entries(counts).forEach(([id, number]) => { $(id).textContent = String(number); });
-    $("executor-program-count").textContent = state.programs.length + " програм";
-    document.querySelectorAll(".executor-stat[data-stat-filter]").forEach((button) => {
-      button.setAttribute("aria-pressed", String(button.dataset.statFilter === filter.value));
+    Object.entries(numbers).forEach(([id, n]) => { const node = $(id); if (node) node.textContent = String(n); });
+    document.querySelectorAll('.executor-stat[data-stat-filter]').forEach((button) => {
+      button.setAttribute('aria-pressed', String(button.dataset.statFilter === filter.value));
     });
   }
-  function empty(title, hint, reset) {
-    const content = el("div", { class: "executor-empty" }, [
-      el("h3", { text: title }), el("p", { text: hint }),
+  function empty(title, desc, reset) {
+    const node = make('div', { class: 'executor-empty' }, [
+      make('h3', { text: title }), make('p', { text: desc }),
     ]);
-    if (reset) content.appendChild(el("button", {
-      type: "button", class: "btn", style: "margin-top:12px", text: "Скинути фільтри",
-      onclick: () => { search.value = ""; filter.value = ""; programFilter.value = ""; render(); },
-    }));
-    return content;
+    if (reset) {
+      const btn = make('button', { type: 'button', class: 'btn', text: 'Скинути фільтри' });
+      btn.addEventListener('click', () => {
+        search.value = ''; filter.value = ''; programFilter.value = ''; render();
+      });
+      node.appendChild(btn);
+    }
+    return node;
   }
   function render() {
     updateCounters();
-    root.innerHTML = "";
-    const q = search.value.trim().toLocaleLowerCase("uk");
+    root.replaceChildren();
+    const q = search.value.trim().toLocaleLowerCase('uk');
     const f = filter.value;
     const pId = programFilter.value;
-    const active = !!(q || f || pId);
+    const forced = !!(q || f || pId);
     if (!state.measures.length) {
-      root.appendChild(empty("Поки немає призначених заходів", "Координатор підрозділу призначає заходи через кабінет KOORD.", false));
-      $("executor-result-count").textContent = "0 заходів";
-      Notify.render([], "Немає термінових повідомлень");
+      root.appendChild(empty('Поки немає призначених заходів', 'Зверніться до координатора підрозділу для призначення.', false));
+      if (window.Notify) Notify.render([], 'Немає термінових повідомлень');
       return;
     }
-    let totalShown = 0;
+    let count = 0;
     state.programs.forEach((p) => {
       if (pId && p.id !== pId) return;
       const all = state.byProgram[p.id] || [];
       const shown = all.filter((m) => matchesFilter(m, f) && (!q || matches(m, p, q)));
       if (!shown.length) return;
-      totalShown += shown.length;
-      root.appendChild(programNode(p, all, shown, active));
+      count += shown.length;
+      root.appendChild(programNode(p, all, shown, forced));
     });
-    $("executor-result-count").textContent = "Показано " + totalShown + " із " + state.measures.length;
-    if (!totalShown) root.appendChild(empty("Заходів не знайдено", "Спробуйте інший пошуковий запит або фільтр.", true));
-    renderNotifications();
+    if (!count) root.appendChild(empty('Заходів не знайдено', 'Змініть пошук або фільтр.', true));
+    notifications();
   }
-  function toggle(key) { openIds.has(key) ? openIds.delete(key) : openIds.add(key); render(); }
-  function counter(ms) {
-    const completed = ms.filter((m) => isApproved(state.executions[m.id])).length;
-    return el("span", { class: "count", text: "Погоджено " + completed + " / " + ms.length });
+  function toggle(key) {
+    expanded.has(key) ? expanded.delete(key) : expanded.add(key);
+    render();
   }
-  function programNode(p, all, shown, active) {
-    const key = "p:" + p.id;
-    const visible = active || openIds.has(key);
-    const node = el("article", { class: "prog" }, [
-      el("button", { type: "button", class: "row-head", "aria-expanded": String(visible), onclick: () => toggle(key) }, [
-        el("span", { class: "title" }, [el("span", { class: "code", text: p.id }), p.title || p.id,
-          p.organization_name ? el("span", { class: "sub", text: p.organization_name }) : null]),
+  function counter(rows) {
+    return make('span', { class: 'count', text: 'Погоджено ' + rows.filter((m) => approved(submission(m))).length + ' / ' + rows.length });
+  }
+  function programNode(p, all, shown, forced) {
+    const key = 'p:' + p.id;
+    const visible = forced || expanded.has(key);
+    const node = make('article', { class: 'prog' }, [
+      make('button', { type: 'button', class: 'row-head', 'aria-expanded': String(visible), onclick: () => toggle(key) }, [
+        make('span', { class: 'title' }, [make('span', { class: 'code', text: p.id }), p.title || p.id,
+          p.organization_name ? make('span', { class: 'sub', text: p.organization_name }) : null]),
         counter(all),
       ]),
     ]);
     if (!visible) return node;
-    const body = el("div", { class: "prog-body" });
-    const groups = groupBy(shown, "section_id");
-    Object.keys(groups).sort(Api.compareSections).forEach((sid) => {
-      body.appendChild(sectionNode(p, sid, all.filter((m) => m.section_id === sid), groups[sid], active));
+    const body = make('div', { class: 'prog-body' });
+    const bySection = groupBy(shown, 'section_id');
+    Object.keys(bySection).sort(Api.compareSections).forEach((sid) => {
+      body.appendChild(sectionNode(p, sid, all.filter((m) => m.section_id === sid), bySection[sid], forced));
     });
     node.appendChild(body);
     return node;
   }
-  function sectionNode(p, sid, all, shown, active) {
-    const key = "s:" + p.id + ":" + sid;
-    const visible = active || openIds.has(key);
-    const node = el("section", { class: "sec" }, [
-      el("button", { type: "button", class: "row-head", "aria-expanded": String(visible), onclick: () => toggle(key) }, [
-        el("span", { class: "title", text: Api.sectionTitle(state.sections, sid) }), counter(all),
+  function sectionNode(p, sid, all, shown, forced) {
+    const key = 's:' + p.id + ':' + sid;
+    const visible = forced || expanded.has(key);
+    const node = make('section', { class: 'sec' }, [
+      make('button', { type: 'button', class: 'row-head', 'aria-expanded': String(visible), onclick: () => toggle(key) }, [
+        make('span', { class: 'title', text: Api.sectionTitle(state.sections, sid) }), counter(all),
       ]),
     ]);
     if (!visible) return node;
-    node.appendChild(el("div", { class: "mrow head", "aria-hidden": "true" }, [
-      el("span", { text: "Захід" }), el("span", { text: "Контрольний строк" }),
-      el("span", { text: "Підтвердження" }), el("span", { text: "Виконання" }),
+    node.appendChild(make('div', { class: 'mrow head', 'aria-hidden': 'true' }, [
+      make('span', { text: 'Захід' }), make('span', { text: 'Контрольний строк' }),
+      make('span', { text: 'Наказ' }), make('span', { text: 'Погодження' }),
     ]));
     shown.forEach((m) => node.appendChild(measureRow(m)));
     return node;
   }
-  function deadlineText(m) {
-    if (m.deadline_on) return Api.fmtDate(m.deadline_on);
-    if (m.deadline_type === "ongoing") return "Постійно";
-    return m.deadline_description || "Не вказано";
-  }
-  function deadlineChip(m) {
-    const d = getDays(m);
-    if (d === null || isApproved(state.executions[m.id])) return null;
-    if (d < 0) return el("span", { class: "chip late", text: "Прострочено на " + (-d) + " дн." });
-    if (d === 0) return el("span", { class: "chip soon", text: "Строк сьогодні" });
-    if (d <= 3) return el("span", { class: "chip soon", text: "Залишилося " + d + " дн. · D3" });
-    if (d <= 7) return el("span", { class: "chip soon", text: "Залишилося " + d + " дн. · D7" });
-    return null;
-  }
+
   function measureRow(m) {
-    const ex = state.executions[m.id];
-    const ev = state.evidences[m.id];
-    const st = status(m);
-    const done = isApproved(ex);
-    const statusText = done ? "Погоджено координатором. Редагування заблоковане." :
-      st === "review" ? "Результат подано, очікується перевірка KOORD." :
-      st === "rework" ? "Перевірте зауваження координатора та уточніть результат." :
-      ex ? "Результат можна уточнити до погодження." : "Звіт ще не подано.";
-    const info = el("div", {}, [
-      el("div", { class: "executor-measure-name" }, [
-        el("span", { class: "num", text: Api.measureNo(m) }), document.createTextNode(m.description || m.id),
+    const ex = submission(m);
+    const status = statusOf(ex);
+    const stateText = !ex ? 'Підтвердження ще не подано.' :
+      ex.document_changed ? 'Версія наказу змінилася. Подайте підтвердження повторно.' :
+      ex.status === 'pending' ? 'Очікує погодження координатора.' :
+      ex.status === 'approved' ? 'Координатор погодив саме ваше подання.' :
+      'Координатор відхилив подання; перегляньте причину та виправте номер наказу.';
+    const name = make('div', {}, [
+      make('div', { class: 'executor-measure-name' }, [
+        make('span', { class: 'num', text: Api.measureNo(m) }),
+        document.createTextNode(m.description || m.id),
       ]),
-      el("div", { class: "executor-measure-meta" }, [
-        el("span", { text: "Код: " + m.id }),
-        m.completion_indicator ? el("span", { text: "Очікуваний результат: " + m.completion_indicator }) : null,
+      make('div', { class: 'executor-measure-meta' }, [
+        make('span', { text: 'Код: ' + m.id }),
+        m.completion_indicator ? make('span', { text: 'Індикатор: ' + m.completion_indicator }) : null,
       ]),
     ]);
-    const deadline = el("div", {}, [textCell("Строк", deadlineText(m), "executor-deadline-label"), deadlineChip(m)]);
-    const evidence = el("div", {}, [
-      el("span", { class: "m-label", text: "Наказ: " }),
-      el("span", { class: "executor-evidence-label", text: ev ? "№ " + ev.order_number : state.evidenceListAvailable ? "Ще не додано" : "Дані недоступні" }),
-      ev && ev.order_version_is_current === false ? el("div", { class: "chip soon", text: "Наказ оновлено — перевірте" }) : null,
+    const deadline = make('div', {}, [spanText('Строк', deadlineText(m), 'executor-deadline-label'), deadlineChip(m)]);
+    const order = make('div', {}, [
+      make('span', { class: 'm-label', text: 'Наказ: ' }),
+      make('span', { class: 'executor-evidence-label', text: ex && ex.order_number ? '№ ' + ex.order_number : 'Не подано' }),
+      ex && ex.order_version_id ? make('span', { class: 'executor-order-meta', text: 'Версія документа #' + ex.order_version_id }) : null,
+      ex && ex.document_changed ? make('span', { class: 'chip soon', text: 'Наказ оновлено' }) : null,
     ]);
-    const action = el("div", {}, [
-      Api.statusBadge(st), el("span", { class: "executor-status-hint", text: statusText }),
-      !done ? el("button", { type: "button", class: "btn", text: ex ? "Уточнити виконання" : "Внести виконання", onclick: () => openForm(m) }) : null,
-      state.notices[m.id] ? el("div", { class: "msg", text: state.notices[m.id] }) : null,
+    const controls = make('div', {}, [
+      Api.statusBadge(status),
+      make('span', { class: 'executor-status-hint', text: stateText }),
     ]);
-    return el("div", { class: "mrow", id: "executor-measure-" + m.id }, [info, deadline, evidence, action]);
+    if (ex && ex.rejection_reason && ex.status === 'rejected') {
+      controls.appendChild(make('div', { class: 'executor-rejection', text: 'Причина відхилення: ' + ex.rejection_reason }));
+    }
+    const actions = make('div', { class: 'executor-order-actions' });
+    if (ex && ex.document_api_path) {
+      const download = make('button', { class: 'btn', type: 'button', text: 'Переглянути наказ' });
+      download.addEventListener('click', async () => {
+        download.disabled = true;
+        try { await downloadOrder(ex); }
+        catch (err) { toast(err.message || 'Не вдалося завантажити наказ', 'error'); }
+        finally { download.disabled = false; }
+      });
+      actions.appendChild(download);
+    }
+    if (canSubmit(ex) || canChange(ex)) {
+      const submit = make('button', { class: 'btn btn-dark', type: 'button', text: canChange(ex) ? 'Змінити наказ' : (ex ? 'Подати повторно' : 'Підтвердити виконання') });
+      submit.addEventListener('click', () => openForm(m));
+      actions.appendChild(submit);
+    }
+    if (actions.childNodes.length) controls.appendChild(actions);
+    return make('div', { class: 'mrow', id: 'executor-measure-' + m.id }, [name, deadline, order, controls]);
   }
-  function renderNotifications() {
-    const notices = [];
-    state.measures.forEach((m) => {
-      if (isApproved(state.executions[m.id])) return;
-      const ex = state.executions[m.id];
-      const st = status(m);
-      const p = state.programs.find((p) => p.id === m.program_id);
-      const which = (p ? p.title : m.program_id) + " · " + m.id;
-      const go = () => {
-        search.value = ""; filter.value = ""; programFilter.value = "";
-        openIds.add("p:" + m.program_id); openIds.add("s:" + m.program_id + ":" + m.section_id);
-        render(); const row = $("executor-measure-" + m.id); if (row) Notify.flash(row);
-      };
-      if (st === "rework") notices.push({ lvl: "rework", rank: 1, what: "Потрібне доопрацювання", which, go });
-      if (st === "review") return;
-      const d = getDays(m);
-      if (d === null) return;
-      if (d < 0) notices.push({ lvl: "late", rank: 0, what: "Прострочення: " + (-d) + " днів", which, go });
-      else if (d <= 7) notices.push({ lvl: "soon", rank: 2, what: d === 0 ? "Строк спливає сьогодні" : "До строку: " + d + " днів", which, go });
+
+  // Download the original file using Bearer JWT, without opening a new tab.
+  // The backend FileResponse carries the original name in Content-Disposition.
+  async function downloadOrder(ex) {
+    const path = ex && ex.document_api_path;
+    if (!path || !path.startsWith('/api/')) throw new Error('Некоректний маршрут наказу');
+    const token = Api.token();
+    if (!token) throw new Error('Сесію завершено. Увійдіть повторно.');
+
+    const response = await fetch(path, {
+      credentials: 'same-origin',
+      headers: { Authorization: 'Bearer ' + token },
     });
-    notices.sort((a, b) => a.rank - b.rank);
-    Notify.render(notices, "Немає заходів із терміновими нагадуваннями.");
-  }
-  function formError(text) {
-    formMessage.textContent = text;
-    formMessage.className = "msg err";
-  }
-  function openForm(m) {
-    if (isApproved(state.executions[m.id])) return;
-    state.edit = m;
-    const ex = state.executions[m.id];
-    const p = state.programs.find((x) => x.id === m.program_id);
-    form.reset();
-    $("execution-title").textContent = "Захід " + Api.measureNo(m);
-    $("execution-context").textContent = (p ? p.title : m.program_id) + " · " + Api.sectionTitle(state.sections, m.section_id) + " · " + Api.periodLabel(period.value);
-    $("execution-description").textContent = m.description || m.id;
-    $("execution-deadline").textContent = deadlineText(m);
-    $("execution-target").textContent = m.indicator_target !== null && m.indicator_target !== undefined ?
-      String(m.indicator_target) + (m.indicator_unit ? " " + m.indicator_unit : "") : m.completion_indicator || "Не визначено";
-    const required = String(m.required_evidence || "").trim();
-    $("execution-evidence-req").hidden = !required;
-    $("execution-evidence-text").textContent = required;
-    form.elements.status.value = ex ? ex.status : "in_progress";
-    form.elements.completed_on.value = ex && ex.completed_on ? ex.completed_on.slice(0, 10) : "";
-    form.elements.indicator_actual.value = ex && ex.indicator_actual != null ? ex.indicator_actual : "";
-    form.elements.result_description.value = ex ? Api.noteOf(ex) : "";
-    form.elements.order_number.value = (state.evidences[m.id] || {}).order_number || "";
-    formMessage.textContent = "";
-    formMessage.className = "msg";
-    saveButton.textContent = ex ? "Оновити виконання" : "Зберегти виконання";
-    dialog.showModal();
-  }
-  async function saveEvidence(m, number) {
-    const existing = state.evidences[m.id];
-    if (!number || (existing && Api.normNumber(existing.order_number) === Api.normNumber(number))) return;
-    const evidenceData = { document_type: "Наказ", title: "Наказ № " + number, order_number: number };
+    if (!response.ok) {
+      let reason = 'Не вдалося завантажити наказ (HTTP ' + response.status + ')';
+      try {
+        const body = await response.json();
+        if (typeof body.detail === 'string') reason = body.detail;
+      } catch (_) { /* Keep HTTP fallback. */ }
+      throw new Error(reason);
+    }
+
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const utfName = disposition.match(/filename\*\s*=\s*(?:UTF-8'')?([^;]+)/i);
+    const plainName = disposition.match(/filename\s*=\s*(?:"([^"]+)"|([^;]+))/i);
+    let original = utfName ? utfName[1].trim() : (plainName ? (plainName[1] || plainName[2]).trim() : '');
+    if (utfName) {
+      try { original = decodeURIComponent(original); } catch (_) { /* Keep encoded name. */ }
+    }
+    original = original.replace(/^["']|["']$/g, '').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').trim();
+    const mime = (response.headers.get('Content-Type') || '').toLowerCase();
+    const ext = mime.includes('pdf') ? '.pdf' :
+      mime.includes('wordprocessingml') ? '.docx' :
+      mime.includes('msword') ? '.doc' :
+      mime.includes('image/png') ? '.png' :
+      mime.includes('image/jpeg') ? '.jpg' : '';
+    const number = String(ex.order_number || ex.id || 'document')
+      .replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_');
+    const filename = original && original !== '.' && original !== '..'
+      ? original : ('nakaz-' + number + ext);
+
+    const blobUrl = URL.createObjectURL(await response.blob());
     try {
-      state.evidences[m.id] = existing
-        ? await Api.patch("/api/evidences/" + encodeURIComponent(existing.id), evidenceData)
-        : await Api.post("/api/evidences/", Object.assign({
-            id: ("E" + Date.now().toString(36) + Math.random().toString(36).slice(2)).slice(0, 12),
-            measure_id: m.id,
-          }, evidenceData));
-    } catch (err) {
-      // Якщо наказ відсутній у orders або у нього немає версії — не повідомляємо про успішне підтвердження.
-      throw new Error("Наказ не збережено: " + errorText(err) + ". Перевірте номер і наявність файла наказу в реєстрі.");
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } finally {
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
     }
   }
+
+  function notifications() {
+    if (!window.Notify) return;
+    const rows = [];
+    state.measures.forEach((m) => {
+      const ex = submission(m);
+      if (approved(ex)) return;
+      const p = state.programs.find((x) => x.id === m.program_id);
+      const which = (p ? p.title : m.program_id) + ' · ' + m.id;
+      const go = () => {
+        search.value = ''; filter.value = ''; programFilter.value = '';
+        expanded.add('p:' + m.program_id);
+        expanded.add('s:' + m.program_id + ':' + m.section_id);
+        render();
+        const row = $('executor-measure-' + m.id);
+        if (row && Notify.flash) Notify.flash(row);
+      };
+      if (rework(ex)) rows.push({ lvl: 'rework', rank: 1, what: ex.document_changed ? 'Документ змінено' : 'Потрібне доопрацювання', which, go });
+      if (pending(ex)) return;
+      const days = daysLeft(m);
+      if (days === null) return;
+      if (days < 0) rows.push({ lvl: 'late', rank: 0, what: 'Строк прострочено на ' + (-days) + ' дн.', which, go });
+      else if (days <= 7) rows.push({ lvl: 'soon', rank: 2, what: days === 0 ? 'Строк спливає сьогодні' : 'До строку: ' + days + ' дн.', which, go });
+    });
+    rows.sort((a, b) => a.rank - b.rank);
+    Notify.render(rows, 'Немає заходів із терміновими нагадуваннями.');
+  }
+
+  function openForm(m) {
+    const ex = submission(m);
+    if (!(canSubmit(ex) || canChange(ex))) return;
+    state.edit = m;
+    form.reset();
+    clearFormError();
+    $('execution-title').textContent = canChange(ex) ? 'Змінити номер наказу' : 'Підтвердження виконання';
+    form.elements.order_number.value = ex && ex.order_number || '';
+    // This status describes what is awaiting action. The definitive state is
+    // always loaded from the backend, never inferred from clicking the button.
+    const status = $('executor-approval-status');
+    if (canChange(ex)) {
+      status.textContent = 'Очікує погодження координатора. До його рішення можна змінити номер наказу.';
+    } else if (ex && ex.document_changed) {
+      status.textContent = 'Файл наказу змінено. Очікується повторне підтвердження.';
+    } else if (ex && ex.status === 'rejected') {
+      status.textContent = 'Координатор відхилив подання.' + (ex.rejection_reason ? ' Причина: ' + ex.rejection_reason : '') + ' Очікується повторне підтвердження.';
+    } else {
+      status.textContent = 'Після подання наказ очікуватиме погодження координатора.';
+    }
+    saveButton.textContent = actionLabel(ex);
+    dialog.showModal();
+    form.elements.order_number.focus();
+  }
+
   async function submit(event) {
     event.preventDefault();
     const m = state.edit;
     if (!m) return;
-    const prev = state.executions[m.id];
-    if (prev && prev.approved_by_coordinator) { formError("Погоджене виконання заблоковане."); return; }
-    if (!form.reportValidity()) return;
-    const s = form.elements.status.value;
-    const desc = form.elements.result_description.value.trim();
-    const completed = form.elements.completed_on.value || null;
-    const number = form.elements.order_number.value.trim();
-    if (s === "completed" && !completed) { formError("Укажіть фактичну дату виконання."); return; }
-    if (!desc) { formError("Додайте опис результату або причину невиконання."); return; }
-    if (number && !state.evidenceListAvailable) {
-      formError("Список підтверджень недоступний. Щоб не створити дублікат, перевірте доступ до /api/evidences/ і повторіть спробу.");
+    const ex = submission(m);
+    if (!(canSubmit(ex) || canChange(ex))) {
+      errorInForm('Це виконання вже погоджено. Оновіть дані.');
       return;
     }
-    const body = {
-      status: s, status_label: STATUS_LABELS[s],
-      completed_on: completed, result_description: desc,
-      indicator_actual: form.elements.indicator_actual.value.trim() === "" ? null : Number(form.elements.indicator_actual.value),
-    };
+    if (!form.reportValidity()) return;
+    const number = String(form.elements.order_number.value || '').trim();
+    if (!number) { errorInForm('Вкажіть номер зареєстрованого наказу.'); return; }
+    if (canChange(ex) && number === ex.order_number) {
+      errorInForm('Ви вже подали цей номер. Для зміни введіть інший наказ.');
+      return;
+    }
+    const body = { measure_id: m.id, period: period.value, order_number: number };
+    const isChange = canChange(ex);
     saveButton.disabled = true;
-    saveButton.textContent = "Збереження…";
-    formMessage.textContent = "";
-    let evidenceSaved = false;
+    saveButton.textContent = 'Надсилання…';
+    clearFormError();
     try {
-      const oldEvidence = state.evidences[m.id];
-      if (number && (!oldEvidence || Api.normNumber(oldEvidence.order_number) !== Api.normNumber(number))) {
-        await saveEvidence(m, number);
-        evidenceSaved = true;
+      // The backend pins the current immutable order_version and verifies its SHA-256.
+      if (isChange) {
+        await Api.post('/api/executions/' + encodeURIComponent(ex.id) + '/change-order', { order_number: number });
+      } else {
+        await Api.post('/api/executions/submit', body);
       }
-      state.executions[m.id] = prev
-        ? await Api.patch(Api.executionUrl(m.id, period.value), body)
-        : await Api.post("/api/executions/", Object.assign({ measure_id: m.id, period: period.value }, body));
       dialog.close();
-      toast("Виконання збережено. Погодження координатором — окремий крок.");
-      render();
-      // Перечитати стан із сервера, не покладаючись лише на локальну відповідь PATCH/POST.
+      toast(isChange
+        ? 'Номер наказу змінено. Координатору надіслано повідомлення, очікується погодження.'
+        : 'Номер наказу подано. Очікує погодження координатора.');
       await refresh(false);
     } catch (err) {
-      formError("Не вдалося завершити збереження: " + errorText(err) +
-        (evidenceSaved ? " Підтвердження вже додано, але запис виконання не збережено. Виправте помилку й повторіть спробу." : ""));
+      const detail = err && err.message || 'Не вдалося подати наказ';
+      errorInForm(detail);
+      // A duplicate or changed submission may need reloading current server state.
+      if (err && err.status === 409) toast('Подання не прийнято. Перевірте повідомлення у формі.', 'error');
     } finally {
       saveButton.disabled = false;
-      saveButton.textContent = prev ? "Оновити виконання" : "Зберегти виконання";
+      saveButton.textContent = actionLabel(ex);
     }
   }
+
   async function init() {
-    if (!await Api.requireRole("VYK")) return;
-    contextInfo();
+    if (!await Api.requireRole('VYK')) return;
+    const me = Api.me || {};
+    const id = $('ident');
+    if (id) { id.textContent = 'Виконавець'; id.title = 'Роль: Виконавець'; }
+    $('executor-title').textContent = String(me.position || 'Мої призначені заходи').trim();
     await refresh(false);
   }
-  search.addEventListener("input", render);
-  filter.addEventListener("change", render);
-  programFilter.addEventListener("change", render);
-  period.addEventListener("change", () => refresh(false));
-  $("executor-refresh").addEventListener("click", () => refresh(true));
-  document.querySelectorAll(".executor-stat[data-stat-filter]").forEach((b) => {
-    b.addEventListener("click", () => { filter.value = b.dataset.statFilter; render(); $("executor-list-title").scrollIntoView({ behavior: "smooth", block: "start" }); });
+  search.addEventListener('input', render);
+  filter.addEventListener('change', render);
+  programFilter.addEventListener('change', render);
+  period.addEventListener('change', () => refresh(false));
+  $('executor-refresh').addEventListener('click', () => refresh(true));
+  document.querySelectorAll('.executor-stat[data-stat-filter]').forEach((b) => {
+    b.addEventListener('click', () => {
+      filter.value = b.dataset.statFilter;
+      render();
+      document.querySelector('.executor-toolbar')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   });
-  form.addEventListener("submit", submit);
-  $("execution-close").addEventListener("click", () => dialog.close());
-  $("execution-cancel").addEventListener("click", () => dialog.close());
-  dialog.addEventListener("close", () => { state.edit = null; });
+  form.addEventListener('submit', submit);
+  $('execution-close').addEventListener('click', () => dialog.close());
+  $('execution-cancel').addEventListener('click', () => dialog.close());
+  dialog.addEventListener('close', () => { state.edit = null; });
   init();
 })();
