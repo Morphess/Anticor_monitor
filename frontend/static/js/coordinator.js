@@ -7,6 +7,9 @@
   let currentView='programs',alertPage=0,alertTotal=0,alertUnread=0;
   let knownOrderChangeIds=null;
   const alertLimit=50;
+  // Keep analysis state outside DOM: polling and filters recreate the cards.
+  const analysisStates = new Map();
+  const analysisKey = ex => JSON.stringify([ex.id, ex.order_version_id, ex.submitted_sha256]);
   const expanded = new Set(); // Старе дерево: програма → розділ → захід
   const notice=(text,isError)=>{ const box=$('coord-toast');if(!box)return;
     $('coord-toast-message').textContent=text;box.classList.remove('hidden');box.dataset.kind=isError?'error':'success';setTimeout(()=>box.classList.add('hidden'),6500);
@@ -234,18 +237,28 @@
                     };
                     if(ex&&ex.document_api_path){
                       action('Переглянути наказ',()=>Api.openProtected(ex.document_api_path).catch(fail),'btn-outline-secondary');
-                      const result=make('pre',{class:'analysis-result',role:'status'});
+                      const key=analysisKey(ex);
+                      const state=analysisStates.get(key);
+                      const result=make('pre',{class:'analysis-result',role:'status',
+                        text:state?.message||'',hidden:!state});
                       result.style.whiteSpace='pre-wrap';result.style.overflowWrap='anywhere';
                       line.appendChild(result);
-                      const analyze=make('button',{type:'button',class:'btn',text:'Проаналізувати наказ'});
+                      const analyze=make('button',{type:'button',class:'btn',text:'Проаналізувати наказ',
+                        disabled:state?.pending||false});
                       analyze.addEventListener('click',async()=>{
-                        analyze.disabled=true;result.textContent='Порівнюємо наказ зі змістом заходу…';
+                        if(analysisStates.get(key)?.pending)return;
+                        analysisStates.set(key,{pending:true,message:'Порівнюємо наказ зі змістом заходу…'});
+                        render();
                         try{
                           const data=await Api.post('/api/executions/'+encodeURIComponent(ex.id)+'/analyze');
-                          result.textContent=data.analysis+(data.text_truncated?'\nПроаналізовано частину документа.':'')+
-                            '\nВерсія наказу: '+data.order_version_id+'. Рішення про погодження приймає координатор.';
-                        }catch(err){result.textContent='Помилка аналізу: '+err.message;}
-                        finally{analyze.disabled=false;}
+                          analysisStates.set(key,{pending:false,message:data.analysis+
+                            (data.text_truncated?'\nПроаналізовано частину документа.':'')+
+                            '\nВерсія наказу: '+data.order_version_id+'. Рішення про погодження приймає координатор.'});
+                        }catch(err){
+                          analysisStates.set(key,{pending:false,message:'Помилка аналізу: '+err.message});
+                        }
+                        // Paint the currently attached card, never the element that started the request.
+                        render();
                       });
                       rowActions.appendChild(analyze);
                     }
