@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.models.execution import Execution
+from app.models.action_log import ActionLog
 from app.models.invalid_order_reference import InvalidOrderReference
 from app.models.order import Order
 from app.models.order_version import OrderVersion
@@ -142,6 +143,73 @@ class ExecutionService:
         self.db.refresh(row)
         return row
 
+    def change_order(self, execution_id: int, number: str, actor) -> Execution:
+        """Replace own pending order; preserve execution id and append audit event.
+
+        Only pending, unmodified submissions can be edited here. Rejected or
+        invalidated submissions use the normal /submit workflow.
+        """
+        if actor.role_id != 'VYK' or not actor.department_id:
+            raise ExecutionError('Змінювати наказ може тільки виконавець', 403)
+        preliminary = self.get(execution_id)
+        if preliminary.submitted_by_user_id != actor.id:
+            raise ExecutionError('Чуже подання змінювати заборонено', 403)
+        if preliminary.status != 'pending' or preliminary.document_changed:
+            raise ExecutionError('Редагувати можна лише подання, що очікує погодження', 409)
+        from app.services.measure_access import require_visible_measure
+        require_visible_measure(self.db, actor, preliminary.measure_id)
+        assignment = self.db.get(MeasureAssignment, (preliminary.measure_id, actor.id))
+        if assignment is None or assignment.department_id != actor.department_id:
+            raise ExecutionError('Призначення більше не чинне', 403)
+        number = number.strip()
+        if not number:
+            raise ExecutionError('Вкажіть номер наказу', 422)
+        try:
+            order, version = self._order_and_version(number)
+        except ExecutionError as exc:
+            if exc.status_code == 404:
+                self.db.rollback()
+                self.db.add(InvalidOrderReference(
+                    id=str(uuid4()), measure_id=preliminary.measure_id,
+                    actor_user_id=actor.id, order_number=number, action='update',
+                ))
+                self.db.commit()
+            else:
+                self.db.rollback()
+            raise
+
+        row = self.repo.by_id(execution_id, lock=True)
+        if (row is None or row.submitted_by_user_id != actor.id
+                or row.status != 'pending' or row.document_changed):
+            self.db.rollback()
+            raise ExecutionError('Подання вже змінилося. Оновіть сторінку.', 409)
+        if row.order_id == order.id:
+            self.db.rollback()
+            raise ExecutionError('Цей номер наказу вже вказано. Для зміни оберіть інший наказ.', 409)
+        previous_order = self.db.get(Order, row.order_id) if row.order_id else None
+        previous_number = previous_order.number if previous_order else '—'
+        row.order_id = order.id
+        row.order_version_id = version.id
+        row.submitted_sha256 = version.sha256
+        row.document_changed = False
+        row.status = 'pending'  # The new order always needs a new review.
+        row.submitted_at = utc_naive()
+        row.submitted_department_id = assignment.department_id
+        row.approved_by_coordinator = False
+        row.reviewed_by_user_id = None
+        row.reviewed_at = None
+        row.rejection_reason = None
+        row.status_label = 'Замінено наказ — очікує погодження'
+        self.db.add(ActionLog(
+            id=str(uuid4()), occurred_at=utc_naive(), actor_user_id=actor.id,
+            action='change_order_number', entity_type='execution',
+            entity_id=str(row.id), field_name='order_number',
+            old_value=previous_number, new_value=order.number,
+        ))
+        self.db.commit()
+        self.db.refresh(row)
+        return row
+
     def _is_modified(self, row: Execution, *, latest: OrderVersion) -> bool:
         if row.order_version_id != latest.id or row.submitted_sha256 != latest.sha256:
             return True
@@ -166,7 +234,8 @@ class ExecutionService:
             row.status_label = 'Наказ змінено — потрібне повторне подання'
         return changed
 
-    def review(self, execution_id: int, actor, *, approve: bool, reason: str | None = None) -> Execution:
+    def review(self, execution_id: int, actor, *, approve: bool, reason: str | None = None,
+               expected_order_version_id: int | None = None, expected_submitted_at: datetime | None = None) -> Execution:
         preliminary = self.get(execution_id)
         if preliminary.order_id is None:
             raise ExecutionError('У поданні немає наказу', 409)
@@ -176,6 +245,12 @@ class ExecutionService:
         if row is None or row.order_id != preliminary.order_id:
             raise ExecutionError('Подання було змінено; оновіть сторінку', 409)
         self._require_coordinator(row, actor)
+        # Prevent the coordinator from approving a newly substituted order using
+        # an old, still-open review dialog.
+        if ((expected_order_version_id is not None and row.order_version_id != expected_order_version_id)
+                or (expected_submitted_at is not None and row.submitted_at != expected_submitted_at)):
+            self.db.rollback()
+            raise ExecutionError('Виконавець змінив подання. Перевірте новий наказ перед рішенням.', 409)
         assignment = self.db.get(MeasureAssignment, (row.measure_id, row.submitted_by_user_id))
         if assignment is None or assignment.department_id != row.submitted_department_id:
             raise ExecutionError('Призначення цього виконавця вже відкликано', 409)

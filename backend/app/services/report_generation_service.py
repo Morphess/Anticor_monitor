@@ -15,11 +15,14 @@ import uuid
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.report import Report
+from app.models.measure import Measure, MeasureCollaborator
+from app.models.program_workflow import MeasureAssignment
+from app.models.user import User
 from app.repositories.report_data_repository import ReportDataRepository
 from app.schemas.report_portal import (
     PortalHalfYearReport,
@@ -88,16 +91,46 @@ class ReportGenerationService:
             raise ReportError("Недостатньо прав на формування звіту", 403)
 
         try:
-            # Головний координатор бачить всі заходи ВЛАСНОЇ програми.
-            # Підрозділовий KOORD — лише заходи, видимі його гілці.
-            visible = ProgramWorkflowService(self.db).program_measures(program_id, actor)
+            workflow = ProgramWorkflowService(self.db)
+            visible = workflow.program_measures(program_id, actor)
+            ids = {row["id"] for row in visible}
+            scoped_users = None
+            scope_departments = None
+            if actor.role_id == "KOORD":
+                if not actor.department_id or not workflow.tree.exists(actor.department_id):
+                    raise ReportError("Координатору не призначено коректний підрозділ", 403)
+                scope_departments = workflow.tree.descendants(actor.department_id)
+                # Directly dispatched program, but only the coordinator's subtree
+                # belongs in the generated snapshot. An assigned executor's
+                # department is the source of truth for delegated measures.
+                assigned = self.db.execute(
+                    select(MeasureAssignment.measure_id, MeasureAssignment.user_id)
+                    .join(User, User.id == MeasureAssignment.user_id)
+                    .where(MeasureAssignment.measure_id.in_(ids),
+                           MeasureAssignment.department_id.in_(scope_departments),
+                           User.department_id == MeasureAssignment.department_id,
+                           User.role_id == "VYK")
+                ).all() if ids else []
+                scoped_users = {}
+                for mid, uid in assigned:
+                    scoped_users.setdefault(mid, set()).add(uid)
+                # A measure can be the responsibility of this department even
+                # before any executor is assigned. Do not include foreign units.
+                in_branch = set(self.db.scalars(
+                    select(Measure.id)
+                    .outerjoin(MeasureCollaborator, MeasureCollaborator.measure_id == Measure.id)
+                    .where(Measure.id.in_(ids), or_(
+                        Measure.responsible_department_id.in_(scope_departments),
+                        MeasureCollaborator.department_id.in_(scope_departments),
+                    )).distinct()
+                )) if ids else set()
+                ids = (in_branch | set(scoped_users)) & ids
         except WorkflowError as exc:
             raise ReportError(exc.detail, exc.status_code) from exc
 
-        ids = {row["id"] for row in visible}
         measures = self.repo.measures(ids)
-        executions = self.repo.executions(ids, period)
-        evidence_counts = self.repo.evidence_counts(ids, period)
+        executions = self.repo.executions(ids, period, allowed_users=scoped_users)
+        evidence_counts = self.repo.evidence_counts(ids, period, allowed_users=scoped_users)
         dep_names = self.repo.departments({m.responsible_department_id for m in measures if m.responsible_department_id})
 
         # У звіті Порталу доброчесності рівно три розділи.
@@ -167,8 +200,12 @@ class ReportGenerationService:
                 measure_id=measure.id,
                 sequence_number=measure.sequence_number,
                 measure_description=measure.description,
-                responsible_department_id=measure.responsible_department_id,
-                responsible_department=dep_names.get(measure.responsible_department_id),
+                responsible_department_id=(measure.responsible_department_id
+                    if scope_departments is None or measure.responsible_department_id in scope_departments
+                    else None),
+                responsible_department=(dep_names.get(measure.responsible_department_id)
+                    if scope_departments is None or measure.responsible_department_id in scope_departments
+                    else None),
                 risk_id=measure.risk_id,
                 factual_date=factual_date,
                 execution_status=status,
@@ -214,7 +251,12 @@ class ReportGenerationService:
         tmp = path.with_suffix(".tmp")
         try:
             with tmp.open("x", encoding="utf-8") as stream:
-                stream.write(snapshot.model_dump_json(indent=2))
+                # Mark newly restricted KOORD snapshots. Older files may include
+                # all program measures and must not be exposed as subtree reports.
+                document = snapshot.model_dump(mode="json")
+                if actor.role_id == "KOORD":
+                    document["_koord_subtree_scope_v1"] = actor.department_id
+                stream.write(json.dumps(document, ensure_ascii=False, indent=2))
             tmp.replace(path)
             report.status = "generated"
             report.generated_at = snapshot.generated_at
@@ -265,7 +307,16 @@ class ReportGenerationService:
         if report.status not in ("generated", "submitted"):
             raise ReportError("Звіт ще не сформовано", 409)
         try:
-            return PortalHalfYearReport.model_validate_json(path.read_text(encoding="utf-8"))
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            author = self.db.get(User, report.generated_by_user_id) if report.generated_by_user_id else None
+            if author is not None and author.role_id == "KOORD":
+                if (not isinstance(raw, dict) or
+                        raw.get("_koord_subtree_scope_v1") != author.department_id):
+                    raise ReportError(
+                        "Стару версію звіту створено до обмеження підрозділів. "
+                        "Задля конфіденційності сформуйте нову версію.", 409
+                    )
+            return PortalHalfYearReport.model_validate(raw)
         except FileNotFoundError as exc:
             raise ReportError("Файл версії звіту відсутній на сервері", 404) from exc
         except ValueError as exc:

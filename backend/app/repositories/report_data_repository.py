@@ -10,7 +10,7 @@ from app.models.measure import Measure
 from app.models.order_version import OrderVersion
 from app.models.program import Program
 from app.models.section import Section
-from app.services.execution_summary import summaries, assignments_for
+from app.services.execution_summary import summaries, assignments_for, summary_for
 
 
 class ReportDataRepository:
@@ -28,15 +28,21 @@ class ReportDataRepository:
             return []
         return list(self.db.scalars(select(Measure).where(Measure.id.in_(ids))))
 
-    def executions(self, ids: set[str], period: str) -> dict:
+    def executions(self, ids: set[str], period: str,
+                   allowed_users: dict[str, set[int]] | None = None) -> dict:
+        """The KOORD scope is fixed server-side, never supplied by the browser."""
         if not ids:
             return {}
         rows = list(self.db.scalars(select(Execution).where(
             Execution.measure_id.in_(ids), Execution.period == period
         )))
-        return summaries(self.db, ids, period, rows)
+        if allowed_users is None:
+            return summaries(self.db, ids, period, rows)
+        return {mid: result for mid in ids
+                if (result := summary_for(mid, period, rows, allowed_users.get(mid, set()))) is not None}
 
-    def evidence_counts(self, ids: set[str], period: str) -> dict[str, int]:
+    def evidence_counts(self, ids: set[str], period: str,
+                        allowed_users: dict[str, set[int]] | None = None) -> dict[str, int]:
         """Legacy schema field: count linked order documents, NOT removed Evidence rows.
 
         Count approved, pinned documents belonging to currently assigned executors.
@@ -45,7 +51,7 @@ class ReportDataRepository:
         """
         if not ids:
             return {}
-        active = assignments_for(self.db, ids)
+        active = allowed_users if allowed_users is not None else assignments_for(self.db, ids)
         # Count exact current assignments, not old/revoked executor submissions.
         matched = list(self.db.scalars(select(Execution).where(
             Execution.measure_id.in_(ids), Execution.period == period,
