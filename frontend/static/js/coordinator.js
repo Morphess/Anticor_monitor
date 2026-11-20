@@ -9,7 +9,32 @@
   const alertLimit=50;
   // Keep analysis state outside DOM: polling and filters recreate the cards.
   const analysisStates = new Map();
-  const analysisKey = ex => JSON.stringify([ex.id, ex.order_version_id, ex.submitted_sha256]);
+  const analysisLoading = new Set(), analysisCheckedAt = new Map();
+  const analysisKey = (ex,m) => JSON.stringify([ex.id, ex.order_version_id, ex.submitted_sha256,
+    ex.order_number,m.description,m.deadline_on,m.deadline_description,m.completion_indicator,m.required_evidence]);
+  function analysisMessage(data){
+    return data.analysis+(data.text_truncated?'\nПроаналізовано частину документа.':'')+
+      (data.output_truncated?'\nДосягнуто ліміту відповіді моделі. Висновок може бути неповним.':'')+
+      '\nВерсія наказу: '+data.order_version_id+'. Модель: '+data.model+
+      (data.created_at?' · Збережено: '+new Date(data.created_at).toLocaleString('uk-UA'):'')+
+      '\nРішення про погодження приймає координатор.';
+  }
+  function loadSavedAnalysis(ex,key){
+    const previous=analysisStates.get(key);
+    if(previous?.pending||analysisLoading.has(key)||Date.now()-(analysisCheckedAt.get(key)||0)<40000)return;
+    analysisLoading.add(key);
+    Api.get('/api/executions/'+encodeURIComponent(ex.id)+'/analysis').then(data=>{
+      if(analysisStates.get(key)!==previous)return;
+      if(data&&data.analysis_id!==previous?.record?.analysis_id)
+        analysisStates.set(key,{pending:false,record:data,message:analysisMessage(data)});
+      else if(!data&&previous?.record)analysisStates.delete(key);
+    }).catch(err=>{
+      if(analysisStates.get(key)===previous&&!previous?.record)
+        analysisStates.set(key,{pending:false,message:'Не вдалося завантажити збережений аналіз: '+err.message});
+    }).finally(()=>{
+      analysisLoading.delete(key);analysisCheckedAt.set(key,Date.now());render();
+    });
+  }
   const expanded = new Set(); // Старе дерево: програма → розділ → захід
   const notice=(text,isError)=>{ const box=$('coord-toast');if(!box)return;
     $('coord-toast-message').textContent=text;box.classList.remove('hidden');box.dataset.kind=isError?'error':'success';setTimeout(()=>box.classList.add('hidden'),6500);
@@ -237,28 +262,30 @@
                     };
                     if(ex&&ex.document_api_path){
                       action('Переглянути наказ',()=>Api.openProtected(ex.document_api_path).catch(fail),'btn-outline-secondary');
-                      const key=analysisKey(ex);
-                      const state=analysisStates.get(key);
+                      const key=analysisKey(ex,m);
+                      loadSavedAnalysis(ex,key);
+                      const state=analysisStates.get(key),loading=analysisLoading.has(key);
                       const result=make('pre',{class:'analysis-result',role:'status',
-                        text:state?.message||'',hidden:!state});
+                        text:state?.message||(loading?'Завантажуємо збережений аналіз…':''),hidden:!state&&!loading});
                       result.style.whiteSpace='pre-wrap';result.style.overflowWrap='anywhere';
                       line.appendChild(result);
-                      const analyze=make('button',{type:'button',class:'btn',text:'Проаналізувати наказ',
-                        disabled:state?.pending||false});
+                      const analyze=make('button',{type:'button',class:'btn',
+                        text:state?.record?'Повторити аналіз':'Проаналізувати наказ',
+                        disabled:state?.pending||loading});
                       analyze.addEventListener('click',async()=>{
-                        if(analysisStates.get(key)?.pending)return;
-                        analysisStates.set(key,{pending:true,message:'Порівнюємо наказ зі змістом заходу… На CPU це може тривати кілька хвилин.'});
+                        if(analysisStates.get(key)?.pending||analysisLoading.has(key))return;
+                        const previous=analysisStates.get(key)||{};
+                        analysisStates.set(key,{...previous,pending:true,message:'Порівнюємо наказ зі змістом заходу… На CPU це може тривати кілька хвилин.'});
                         render();
                         try{
-                          const data=await Api.post('/api/executions/'+encodeURIComponent(ex.id)+'/analyze');
-                          analysisStates.set(key,{pending:false,message:data.analysis+
-                            (data.text_truncated?'\nПроаналізовано частину документа.':'')+
-                            (data.output_truncated?'\nДосягнуто ліміту відповіді моделі. Висновок може бути неповним.':'')+
-                            '\nВерсія наказу: '+data.order_version_id+'. Рішення про погодження приймає координатор.'});
+                          const data=await Api.post('/api/executions/'+encodeURIComponent(ex.id)+'/analyze'+
+                            (previous.record?'?force=true':''));
+                          analysisStates.set(key,{pending:false,record:data,message:analysisMessage(data)});
+                          analysisCheckedAt.set(key,Date.now());
                         }catch(err){
-                          analysisStates.set(key,{pending:false,message:'Помилка аналізу: '+err.message});
+                          analysisStates.set(key,{...previous,pending:false,message:'Помилка аналізу: '+err.message+
+                            (previous.record?'\nПопередній збережений висновок:\n'+analysisMessage(previous.record):'')});
                         }
-                        // Paint the currently attached card, never the element that started the request.
                         render();
                       });
                       rowActions.appendChild(analyze);

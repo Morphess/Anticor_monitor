@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from io import BytesIO
 from pathlib import PurePosixPath
 import zipfile
@@ -167,15 +169,8 @@ def _analysis_prompt(order: Order, measure: Measure, document_text: str) -> str:
 </document>"""
 
 
-async def analyze_order_document(
-    order: Order,
-    measure: Measure,
-    file_name: str,
-    file_bytes: bytes,
-) -> OrderAnalysisRead:
-    document_text, truncated, safe_name = extract_order_document(file_name, file_bytes)
-    url = settings.OLLAMA_BASE_URL.rstrip("/") + "/api/chat"
-    payload = {
+def _analysis_payload(order, measure, document_text):
+    return {
         "model": settings.OLLAMA_MODEL,
         "messages": [
             {
@@ -188,6 +183,23 @@ async def analyze_order_document(
         "keep_alive": "5m",
         "options": {"temperature": 0.1, "num_ctx": 8192, "num_predict": settings.OLLAMA_NUM_PREDICT},
     }
+
+
+def analysis_fingerprint(order, measure):
+    payload = _analysis_payload(order, measure, "")
+    payload.pop("keep_alive", None)  # Lifetime in RAM does not change the report's meaning.
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
+async def analyze_order_document(
+    order: Order,
+    measure: Measure,
+    file_name: str,
+    file_bytes: bytes,
+) -> OrderAnalysisRead:
+    document_text, truncated, safe_name = extract_order_document(file_name, file_bytes)
+    url = settings.OLLAMA_BASE_URL.rstrip("/") + "/api/chat"
+    payload = _analysis_payload(order, measure, document_text)
 
     try:
         timeout = httpx.Timeout(settings.OLLAMA_TIMEOUT_SECONDS, connect=5.0)
