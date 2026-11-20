@@ -1,0 +1,381 @@
+/* Coordinator UX v2 — only .coord-page and its dialogs; compatible with the existing Border Group tokens. */
+.coord-page { min-width: 0; }
+.coord-page [hidden] { display: none !important; }
+.coord-hero { align-items: center; }
+.coord-heading { min-width: 0; }
+.coord-page .coord-subtitle { max-width: 760px; margin: 8px 0 0; line-height: 1.5; }
+.coord-main-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.coord-overview { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0 0 22px; }
+.coord-kpi { display: flex; flex-direction: column; gap: 8px; min-height: 122px; border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; background: var(--surface); color: var(--ink); text-align: left; }
+.coord-kpi strong { font-size: clamp(23px, 2vw, 33px); line-height: 1.1; font-variant-numeric: tabular-nums; font-weight: 700; }
+.coord-kpi-label { font-size: 12px; color: var(--muted); font-weight: 600; }
+.coord-kpi-note { font-size: 11.5px; color: var(--faint); }
+.coord-kpi-button { cursor: pointer; font: inherit; }
+.coord-kpi-button:hover { border-color: var(--focus); background: var(--sunken); }
+.coord-kpi-button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.coord-toolbar { align-items: flex-end; margin: 0 0 12px; }
+.coord-clear-search { margin-bottom: 0; align-self: flex-end; }
+.coord-filter-row { display: flex; align-items: center; gap: 12px; justify-content: space-between; border-bottom: 1px solid var(--line); margin-bottom: 20px; }
+.coord-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.coord-filter { border: 0; border-bottom: 2px solid transparent; background: none; padding: 10px 12px 12px; color: var(--muted); cursor: pointer; font: inherit; font-size: 13px; font-weight: 600; }
+.coord-filter:hover { color: var(--ink); }
+.coord-filter:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.coord-filter.active { color: var(--ink); border-bottom-color: var(--accent); }
+.coord-filter span { padding-left: 3px; font-variant-numeric: tabular-nums; font-size: 12px; color: var(--muted); }
+.coord-section-heading { display: flex; align-items: flex-start; justify-content: space-between; margin: 0 0 12px; }
+.coord-section-heading h2 { margin: 0; }
+.coord-section-heading p { margin: 5px 0 0; }
+.coord-flags-note p { margin: 0 0 12px; }
+.coord-required { display: inline; color: var(--bad); font-weight: 700; white-space: nowrap; }
+.coord-dialog { max-height: min(92dvh, 920px); overflow-y: auto; overscroll-behavior: contain; }
+.coord-dialog-header { padding-bottom: 10px; margin-bottom: 15px; border-bottom: 1px solid var(--line); }
+.coord-dialog-header h2 { margin: 0 0 8px; }
+.coord-dialog-header p { margin: 0; line-height: 1.45; }
+.coord-full-field { display: block; margin: 0 0 14px; }
+.coord-full-field input, .coord-full-field textarea { width: 100%; }
+.coord-dialog-actions { padding-top: 12px; margin-top: 16px; border-top: 1px solid var(--line); background: var(--surface); }
+.coord-confirm-dialog { max-width: 510px; }
+.coord-confirm-dialog p { line-height: 1.6; }
+.coord-dialog button[disabled] { opacity: .6; cursor: progress; }
+.coord-toast { position: fixed; z-index: 1900; inset: 78px 18px auto auto; width: min(440px, calc(100vw - 28px)); display: flex; gap: 12px; justify-content: space-between; align-items: flex-start; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line-strong); border-left: 3px solid var(--ok); border-radius: var(--radius); box-shadow: 0 14px 44px rgba(0,0,0,.22); color: var(--ink); font-size: 13px; }
+.coord-toast[data-kind="error"] { border-left-color: var(--bad); }
+.coord-toast[data-kind="info"] { border-left-color: var(--focus); }
+.coord-toast.hidden { display: none !important; }
+.coord-toast-close { cursor: pointer; color: var(--muted); background: none; border: 0; font-size: 20px; line-height: 1; }
+.coord-toast-close:hover { color: var(--ink); }
+.coord-page .assign-body { max-height: min(58dvh, 570px); overflow-y: auto; }
+.coord-page .assign-row .mpick-list { max-height: 220px; }
+.coord-page .coord-kpi-note, .coord-page .coord-subtitle { overflow-wrap: anywhere; }
+.coord-page .coord-empty { display: grid; gap: 8px; border: 1px dashed var(--line-strong); border-radius: var(--radius); padding: 25px; text-align: center; color: var(--muted); background: var(--surface); }
+.coord-page .coord-empty strong { color: var(--ink); }
+@media (max-width: 950px) {
+  .coord-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .coord-hero { align-items: stretch; }
+  .coord-main-actions { justify-content: flex-start; }
+}
+@media (max-width: 600px) {
+  .coord-overview { gap: 8px; }
+  .coord-kpi { min-height: 105px; padding: 12px; }
+  .coord-kpi strong { font-size: 26px; }
+  .coord-filter { padding: 9px 8px; font-size: 12px; }
+  .coord-page .toolbar > .field { width: 100%; }
+  .coord-main-actions .btn { flex: 1 1 auto; }
+  .coord-dialog { width: calc(100% - 14px); padding: 16px; max-height: calc(100dvh - 14px); }
+  .coord-dialog-actions { display: flex; flex-wrap: wrap; }
+  .coord-dialog-actions .btn { flex: 1; }
+  .coord-page .assign-body { max-height: 50dvh; }
+  .coord-toast { top: 66px; right: 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .coord-page *, .coord-page *::before, .coord-page *::after { scroll-behavior: auto; animation-duration: 0.01ms !important; }
+}
+
+/* Individual approval rows, keeping the original program → section → measure tree. */
+.coord-executor-line { border: 1px solid var(--line, #414141); border-radius: .45rem; padding: .85rem 1rem; margin: .65rem 0; }
+.coord-executor-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: .45rem; }
+.coord-executor-heading strong { font-size: .93rem; }
+.coord-executor-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
+.coord-executor-actions .btn { font-size: .85rem; }
+@media(max-width: 650px) { .coord-executor-actions .btn { width: 100%; } }
+
+
+/* Координатор: розділи як у головного координатора, без зміни старого дерева. */
+.coord-view-navigation{display:flex;flex-wrap:wrap;gap:.65rem;border-bottom:1px solid var(--line);padding:.15rem 0 .95rem;margin:0 0 1.2rem}
+.coord-view-tab{appearance:none;border:1px solid var(--line-strong);border-radius:4px;background:var(--surface);color:var(--ink);min-height:45px;padding:.65rem 1.05rem;font:inherit;font-size:.91rem;font-weight:600;cursor:pointer}
+.coord-view-tab:hover{background:var(--sunken)}
+.coord-view-tab.active{border-color:var(--brand);box-shadow:inset 0 -3px 0 var(--brand)}
+.coord-view-tab:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
+.coord-page .coord-view-panel[hidden]{display:none!important}
+.coord-page #coord-view-programs{display:block;min-width:0}
+.coord-page .coord-support-panel{display:block;min-width:0;padding:1.2rem;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.coord-panel-heading{display:flex;align-items:end;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1.1rem}
+.coord-panel-heading h2{margin:0;font-size:1.2rem}
+.coord-panel-heading .field{min-width:210px;margin:0}
+.coord-panel-heading .field select{display:block;width:100%;min-height:44px;margin-top:.4rem}
+.coord-period-field{width:min(280px,100%)}
+.coord-unread-badge{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;background:var(--brand);color:white;min-width:1.35rem;height:1.35rem;font-size:.72rem;margin-left:.25rem;padding:0 .3rem}
+.coord-unread-badge[hidden]{display:none!important}
+.coord-page .coord-support-panel .role-toolbar{display:flex;flex-wrap:wrap;align-items:end;gap:.75rem;margin-bottom:1rem}
+.coord-page .coord-support-panel .role-toolbar>label{flex:1 1 240px;min-width:0}
+.coord-page .coord-support-panel .role-form-label{display:block;margin-bottom:.4rem;color:var(--muted);font-size:.88rem}
+.coord-page .coord-support-panel .role-field{width:100%;min-height:44px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);padding:.55rem .7rem;border-radius:4px}
+.coord-page .coord-support-panel .role-toolbar>button{min-height:44px}
+.coord-page .report-toolbar{display:grid!important;grid-template-columns:minmax(230px,1fr) auto;gap:1rem}
+.coord-page .report-toolbar-actions{display:flex;gap:.65rem;flex-wrap:wrap;justify-content:flex-end}
+.coord-page .report-toolbar-actions>.btn{min-height:44px}
+.coord-page .report-version-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:1rem;border-bottom:1px solid var(--line);padding:1rem 0}
+.coord-page .report-version-actions{display:flex;flex-wrap:wrap;gap:.5rem;justify-content:flex-end}
+.coord-report-scope{margin:-.3rem 0 1rem}
+.coord-measure-bottom-actions{display:flex;justify-content:flex-end;gap:.65rem;margin:1rem 0 0}
+.coord-dept-progress{padding:1rem;border-top:1px solid var(--line)}
+.coord-dept-progress h3{font-size:.96rem;margin:0 0 .85rem}
+.coord-dept-progress-list{display:grid;gap:.6rem}
+.coord-dept-progress-row{display:grid;grid-template-columns:minmax(170px,1fr) minmax(220px,1.25fr);align-items:center;gap:1rem;border:1px solid var(--line);border-radius:5px;padding:.75rem}
+.coord-dept-progress-row strong{overflow-wrap:anywhere}
+.coord-progress-meta{display:block;font-size:.82rem;color:var(--muted);margin-top:.2rem}
+.coord-progress-data{min-width:0}
+.coord-progress-track{height:7px;border-radius:10px;border:1px solid var(--line);background:var(--sunken);overflow:hidden;margin:.5rem 0 .25rem}
+.coord-progress-track>span{display:block;height:100%;background:var(--brand);transition:width .2s ease}
+.coord-progress-details{font-size:.82rem;color:var(--muted)}
+.coord-progress-empty{margin:.6rem 0;color:var(--muted);font-size:.85rem}
+.coord-measure-progress{margin:.55rem 0;padding:.65rem .75rem;border:1px solid var(--line);border-radius:5px}
+.coord-measure-progress strong{font-size:.88rem}
+.coord-alert-list{display:grid;gap:.8rem}
+.coord-alert-item{border:1px solid var(--line);border-radius:6px;padding:1rem;min-width:0}
+.coord-alert-item[data-unread="true"]{border-left:3px solid var(--brand)}
+.coord-alert-item-head{display:flex;align-items:start;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+.coord-alert-hashes{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin:.8rem 0}
+.coord-alert-hashes code{display:block;white-space:normal;overflow-wrap:anywhere;font-size:.78rem;color:var(--ink);margin-top:.25rem}
+.coord-alert-actions{display:flex;flex-wrap:wrap;gap:.6rem}
+.coord-document-tools{display:flex;flex-wrap:wrap;align-items:end;gap:.65rem}
+.coord-document-tools .field{min-width:180px}
+.coord-document-tools>.btn{min-height:44px}
+.coord-alert-pagination{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:.65rem;margin-top:1rem}
+@media(max-width:900px){.coord-page .report-toolbar{grid-template-columns:1fr!important}.coord-page .report-toolbar-actions{justify-content:flex-start}.coord-page .report-version-row{grid-template-columns:1fr}}
+@media(max-width:650px){.coord-view-tab{flex:1 1 46%;text-align:center}.coord-dept-progress-row,.coord-alert-hashes{grid-template-columns:1fr}.coord-panel-heading .field{width:100%}.coord-measure-bottom-actions .btn{flex:1}.coord-alert-item{padding:.75rem}}
+
+/* Risk Flags are consistent with MAIN_KOORD cards in both themes. */
+.coord-page .role-risk-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,290px),1fr));gap:.75rem}
+.coord-page .role-risk-item{display:flex;flex-direction:column;align-items:start;gap:.45rem;padding:1rem;background:var(--sunken);border:1px solid var(--line);border-left:3px solid var(--brand);border-radius:5px}
+.coord-page .role-risk-item p{overflow-wrap:anywhere;margin:0}
+.coord-page .role-risk-item .role-muted{font-size:.83rem;color:var(--muted)}
+
+/* KOORD statistics and assignment UX — 2026-11-20. */
+.coord-hero{padding-bottom:.75rem}
+.coord-nav-row{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:.9rem;margin-bottom:1.2rem}
+.coord-nav-row .coord-view-navigation{margin:0;border:0;padding:0;flex:1 1 530px}
+.coord-nav-row .coord-main-actions{flex:0 1 auto;margin-left:auto}
+.coord-nav-row .coord-main-actions .btn{min-height:45px;white-space:nowrap}
+.coord-kpi-button.is-active{border-color:var(--brand);box-shadow:inset 0 -3px 0 var(--brand);background:var(--sunken)}
+.coord-kpi-button:active{transform:translateY(1px)}
+.coord-page .coord-section-heading{scroll-margin-top:90px}
+.coord-assign-dialog{box-sizing:border-box;width:min(860px,calc(100vw - 28px));max-width:860px;max-height:min(92dvh,920px);padding:clamp(16px,2.2vw,28px);border:1px solid var(--line-strong);border-radius:10px;color:var(--ink);background:var(--surface)}
+.coord-assign-dialog .coord-assign-measure-title{font-size:1rem;line-height:1.5;overflow-wrap:anywhere;margin:0 0 1rem}
+.coord-assign-dialog .coord-assign-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;align-items:end;margin:1rem 0 .4rem}
+.coord-assign-dialog .coord-assign-field{display:flex;flex-direction:column;gap:.45rem;min-width:0;color:var(--muted);font-size:.9rem}
+.coord-assign-dialog .coord-assign-full{grid-column:1/-1}
+.coord-assign-dialog .coord-assign-field select,
+.coord-assign-dialog .coord-full-field input{box-sizing:border-box;display:block;width:100%;min-width:0;min-height:46px;border:1px solid var(--line-strong);border-radius:4px;background:var(--surface);color:var(--ink);padding:.55rem .7rem;font:inherit;font-size:.94rem}
+.coord-assign-dialog .coord-assign-field select:disabled{opacity:.65;cursor:not-allowed}
+.coord-assign-dialog .coord-assign-hint{margin:0 0 .8rem;min-height:1.4rem;line-height:1.5}
+.coord-assign-dialog .coord-current-assignments{margin-top:1.4rem;border-top:1px solid var(--line);padding-top:1rem}
+.coord-assign-dialog .coord-current-assignments h3{font-size:1rem;margin:0 0 .5rem}
+.coord-assign-dialog .coord-current-assignment{display:flex;justify-content:space-between;align-items:center;gap:.7rem;flex-wrap:wrap;padding:.65rem 0;border-bottom:1px solid var(--line)}
+.coord-assign-dialog .coord-current-assignment span{overflow-wrap:anywhere}
+.coord-assign-dialog .coord-dialog-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:.7rem}
+.coord-assign-dialog .coord-dialog-actions .btn{min-height:43px}
+@media (max-width:1100px){.coord-nav-row .coord-main-actions{margin-left:0}}
+@media (max-width:650px){.coord-assign-dialog .coord-assign-fields{grid-template-columns:1fr}.coord-assign-dialog .coord-assign-full{grid-column:auto}.coord-nav-row .coord-main-actions{width:100%;justify-content:flex-start}.coord-nav-row .coord-main-actions .btn{flex:1 1 180px}}
+
+/* Призначення виконавців: окремі пошукові списки замість повторного загального пошуку. */
+.coord-assign-dialog .coord-assign-fields{align-items:start;row-gap:1rem}
+.coord-assign-dialog .coord-assign-field{gap:.4rem}
+.coord-assign-dialog .coord-assign-field input.coord-assign-search,
+.coord-assign-dialog .coord-assign-field select.coord-assign-select{
+  box-sizing:border-box;display:block;width:100%;min-width:0;min-height:44px;
+  border:1px solid var(--line-strong);border-radius:4px;
+  background:var(--surface);color:var(--ink);padding:.55rem .75rem;
+  font:inherit;font-size:.93rem;
+}
+.coord-assign-dialog .coord-assign-field input.coord-assign-search::placeholder{color:var(--muted)}
+.coord-assign-dialog .coord-assign-field input.coord-assign-search:focus-visible,
+.coord-assign-dialog .coord-assign-field select.coord-assign-select:focus-visible{
+  outline:2px solid var(--focus);outline-offset:1px
+}
+.coord-assign-dialog .coord-assign-field input.coord-assign-search:disabled,
+.coord-assign-dialog .coord-assign-field select.coord-assign-select:disabled{opacity:.6;cursor:not-allowed}
+.coord-assign-dialog .coord-current-assignments{margin-top:1rem}
+.coord-assign-dialog .coord-assign-hint{margin:.4rem 0 .75rem}
+
+/* KOORD v5: neutral statistics, searchable single-field pickers and scrollable dialog. */
+.coord-page .coord-kpi { min-height: 94px; justify-content: space-between; }
+.coord-page .coord-kpi strong { font-size: clamp(26px, 2.3vw, 34px); }
+.coord-page .coord-kpi:not(button) { cursor: default; }
+.coord-page .coord-workspace #programs { margin-top: .85rem; }
+
+/* The dialog uses the same layout principles as ADMIN: one scroll area and a fixed footer. */
+.coord-page .coord-assign-dialog[open] {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: min(920px, calc(100vw - 26px));
+  max-width: 920px;
+  height: fit-content;
+  max-height: min(86dvh, 840px);
+  padding: 0;
+  overflow: hidden;
+  background: var(--surface);
+}
+.coord-page .coord-assign-dialog .coord-dialog-header {
+  flex: 0 0 auto;
+  padding: 22px 26px 17px;
+  margin: 0;
+  background: var(--surface);
+}
+.coord-page .coord-assign-dialog .assign-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 18px 26px 28px;
+  scrollbar-gutter: stable;
+}
+.coord-page .coord-assign-dialog #assign-msg {
+  flex: 0 0 auto;
+  max-height: 90px;
+  overflow: auto;
+  margin: 0;
+  padding: 0 26px;
+}
+.coord-page .coord-assign-dialog .coord-dialog-actions {
+  position: relative;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 16px 26px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  z-index: 1;
+}
+.coord-page .coord-assign-dialog .coord-assign-fields { align-items: start; margin: 0 0 14px; gap: 18px; }
+.coord-page .coord-assign-dialog .coord-assign-field { min-width: 0; gap: 8px; }
+.coord-page .coord-assign-dialog .coord-assign-field > label { color: var(--muted); font-size: .92rem; }
+.coord-page .coord-assign-dialog .coord-combo { position: relative; width: 100%; min-width: 0; }
+.coord-page .coord-assign-dialog input.coord-combo-input {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 48px;
+  padding: .67rem 45px .67rem .85rem;
+  color: var(--ink);
+  font: inherit;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  text-overflow: ellipsis;
+}
+.coord-page .coord-assign-dialog input.coord-combo-input::placeholder { color: var(--muted); }
+.coord-page .coord-assign-dialog input.coord-combo-input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+.coord-page .coord-assign-dialog input.coord-combo-input:disabled { opacity: .6; cursor: not-allowed; }
+.coord-page .coord-assign-dialog .coord-combo-toggle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 43px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-left: 1px solid var(--line);
+  border-radius: 0 5px 5px 0;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+}
+.coord-page .coord-assign-dialog .coord-combo-toggle:hover:not(:disabled) { background: var(--sunken); }
+.coord-page .coord-assign-dialog .coord-combo-toggle:disabled { opacity: .45; cursor: not-allowed; }
+.coord-page .coord-assign-dialog .coord-combo-list {
+  box-sizing: border-box;
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  right: 0;
+  max-height: min(250px, 36dvh);
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, .3);
+  z-index: 20;
+}
+.coord-page .coord-assign-dialog .coord-combo-list.is-above {
+  top: auto;
+  bottom: calc(100% + 5px);
+}
+.coord-page .coord-assign-dialog .coord-combo-list[hidden] { display: none !important; }
+.coord-page .coord-assign-dialog .coord-combo-option {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  padding: 12px 14px;
+  text-align: left;
+  color: var(--ink);
+  background: var(--surface);
+  line-height: 1.4;
+  font: inherit;
+  font-size: .91rem;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.coord-page .coord-assign-dialog .coord-combo-option:last-child { border-bottom: none; }
+.coord-page .coord-assign-dialog .coord-combo-option:hover,
+.coord-page .coord-assign-dialog .coord-combo-option.is-highlighted {
+  background: var(--sunken);
+  box-shadow: inset 3px 0 0 var(--brand);
+}
+.coord-page .coord-assign-dialog .coord-combo-empty { padding: 13px 14px; color: var(--muted); font-size: .87rem; }
+.coord-page .coord-assign-dialog .coord-current-assignments { margin-top: 18px; }
+@media (max-width: 680px) {
+  .coord-page .coord-assign-dialog[open] { max-height: calc(100dvh - 14px); width: calc(100vw - 14px); }
+  .coord-page .coord-assign-dialog .coord-dialog-header { padding: 17px 16px 13px; }
+  .coord-page .coord-assign-dialog .assign-body { padding: 14px 16px 24px; }
+  .coord-page .coord-assign-dialog #assign-msg { padding: 0 16px; }
+  .coord-page .coord-assign-dialog .coord-dialog-actions { padding: 12px 16px; }
+  .coord-page .coord-assign-dialog .coord-assign-fields { grid-template-columns: minmax(0, 1fr); }
+}
+
+.coord-page .coord-assign-dialog .coord-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.coord-page .coord-assign-dialog .coord-dialog-header h2 { margin: 0; }
+.coord-page .coord-dialog-close {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  font: inherit;
+  font-size: 23px;
+  line-height: 1;
+  cursor: pointer;
+}
+.coord-page .coord-dialog-close:hover { background: var(--sunken); }
+.coord-page .coord-dialog-close:focus-visible { outline: 2px solid var(--focus); }
+
+/* KOORD v6: Виправлення випадання списку заходів після вибору програми.
+   Список іде ПІД пошуком у звичайному потоці, не перекриває інші поля
+   і прокручується всередині діалогу. */
+.coord-page .coord-assign-dialog .coord-combo-list,
+.coord-page .coord-assign-dialog .coord-combo-list.is-above {
+  position: relative;
+  top: auto;
+  bottom: auto;
+  left: auto;
+  right: auto;
+  display: block;
+  width: 100%;
+  max-height: min(210px, 32dvh);
+  margin-top: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  z-index: auto;
+}
+.coord-page .coord-assign-dialog .coord-combo-list[hidden] {
+  display: none !important;
+}
+.coord-page .coord-assign-dialog .coord-assign-hint[hidden] {
+  display: none !important;
+}

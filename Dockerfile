@@ -9,7 +9,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/app/ ./backend/app/
 COPY frontend/ ./frontend/
 # StaticFiles needs this directory even before assets are added.
-RUN mkdir -p /app/frontend/static
+RUN mkdir -p /app/frontend/static /app/storage/orders /app/storage/reports \
+    && chown -R 10001:10001 /app/storage
 
 WORKDIR /app/backend
 USER 10001:10001

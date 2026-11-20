@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+{% block title %}Керування антикорупційними програмами — головний координатор{% endblock %}
+{% block role_name %}Головний координатор{% endblock %}
+{% block topbar_tools %}{% include "_bell.html" %}{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="/static/css/main-coordinator.css?v=report-pdf1">
+<div class="mc-shell">
+  <h1 class="mc-sr-only">Кабінет головного координатора</h1>
+  <nav class="mc-view-navigation" role="tablist" aria-label="Розділи головного координатора">
+    <button type="button" class="mc-view-tab active" id="mc-tab-programs" data-mc-view="programs"
+            role="tab" aria-selected="true" aria-controls="mc-view-programs" tabindex="0">Програми</button>
+    <button type="button" class="mc-view-tab" id="mc-tab-catalog" data-mc-view="catalog"
+            role="tab" aria-selected="false" aria-controls="mc-view-catalog" tabindex="-1">Корупційні ризики</button>
+    <button type="button" class="mc-view-tab" id="mc-tab-risk" data-mc-view="risk"
+            role="tab" aria-selected="false" aria-controls="mc-view-risk" tabindex="-1">Risk Flags</button>
+    <button type="button" class="mc-view-tab" id="mc-tab-reports" data-mc-view="reports"
+            role="tab" aria-selected="false" aria-controls="mc-view-reports" tabindex="-1">Піврічні звіти</button>
+  </nav>
+  <section id="mc-view-programs" class="mc-view-panel" role="tabpanel" aria-labelledby="mc-tab-programs">
+    <div class="mc-program-actions" aria-label="Дії з програмами">
+      <button type="button" class="btn btn-dark" id="mc-create">+ Створити програму</button>
+      <button type="button" class="btn" id="mc-import-open">↑ Завантажити JSON</button>
+      <button type="button" class="btn" id="mc-reload">↻ Оновити</button>
+    </div>
+    <section class="mc-metrics" aria-label="Огляд програм">
+      <div class="mc-metric"><span>Мої програми</span><strong id="mc-count-programs">—</strong></div>
+      <div class="mc-metric"><span>Заплановані заходи</span><strong id="mc-count-measures">—</strong></div>
+      <div class="mc-metric"><span>Направлені програми</span><strong id="mc-count-dispatched">—</strong></div>
+      <div class="mc-metric" title="Повністю погоджені заходи за вибраний звітний період"><span>Виконано</span><strong id="mc-count-completed">—</strong></div>
+    </section>
+    <section class="mc-workspace">
+      <div class="mc-toolbar">
+        <label class="field grow">Пошук програм і заходів
+          <input id="mc-search" type="search" placeholder="Код програми, назва, розділ або захід">
+        </label>
+        <label class="field mc-progress-period-field">Прогрес за період
+          <select id="mc-progress-period" aria-label="Звітний період для прогресу"></select>
+        </label>
+        <label class="field">Показати
+          <select id="mc-filter">
+            <option value="all">Усі програми</option>
+            <option value="draft">Без направлень</option>
+            <option value="sent">Направлені підрозділам</option>
+            <option value="empty">Без заходів</option>
+          </select>
+        </label>
+      </div>
+      <div class="mc-section-title">
+        <h2>Мої програми</h2>
+        <span class="small muted" id="mc-list-caption">Завантаження…</span>
+      </div>
+      <div id="mc-programs" aria-live="polite"><p class="muted">Завантаження…</p></div>
+    </section>
+  </section>
+  <section id="mc-view-catalog" class="mc-view-panel" role="tabpanel" aria-labelledby="mc-tab-catalog" hidden>
+    <section class="mc-workspace mc-support-panel" aria-label="Реєстр корупційних ризиків">
+      <div class="mc-support-heading">
+        <div><h2>Корупційні ризики</h2></div>
+        <button type="button" class="btn btn-dark" id="mc-risk-create">+ Створити ризик</button>
+      </div>
+      <div class="mc-risk-catalog-toolbar">
+        <label class="field mc-risk-search">Пошук<input id="mc-risk-search" type="search" placeholder="Код, назва або процес" autocomplete="off"></label>
+        <button type="button" class="btn" id="mc-risk-reload">Оновити</button>
+      </div>
+      <div id="mc-risk-catalog-message" class="small muted" role="status"></div>
+      <div id="mc-risk-catalog-list" class="mc-risk-catalog-list" aria-live="polite"></div>
+    </section>
+  </section>
+  <section id="mc-view-risk" class="mc-view-panel" role="tabpanel" aria-labelledby="mc-tab-risk" hidden>
+    <section class="mc-workspace mc-support-panel" aria-label="Risk Flags">
+      <div class="mc-support-heading">
+        <div>
+          <h2>Risk Flags</h2>
+          <p class="small muted">Сигнали ризиків за доступними програмами. Для незавершеного періоду доступний RF8.</p>
+        </div>
+        <label class="field">Звітний період
+          <select id="mc-risk-period" aria-label="Період Risk Flags"></select>
+        </label>
+      </div>
+      <div id="mc-risk-panel"></div>
+    </section>
+  </section>
+  <section id="mc-view-reports" class="mc-view-panel" role="tabpanel" aria-labelledby="mc-tab-reports" hidden>
+    <section class="mc-workspace mc-support-panel" aria-label="Піврічні звіти">
+      <div class="mc-support-heading mc-reports-heading">
+        <h2>Піврічні звіти програми</h2>
+        <label class="field">Звітний період
+          <select id="mc-report-period" aria-label="Період піврічних звітів"></select>
+        </label>
+      </div>
+      <div id="mc-report-panel"></div>
+    </section>
+  </section>
+</div>
+
+<div id="mc-toasts" class="mc-toasts" aria-live="polite" aria-atomic="true"></div>
+
+<dialog id="mc-builder" class="mc-dialog mc-large" aria-labelledby="mc-builder-title">
+  <form id="mc-program-form">
+    <header class="mc-dialog-header">
+      <div>
+        <h2 id="mc-builder-title">Створення антикорупційної програми</h2>
+      </div>
+      <button type="button" class="mc-icon-close" data-dialog-close="mc-builder" aria-label="Закрити">×</button>
+    </header>
+    <div class="mc-steps" role="group" aria-label="Етапи створення">
+      <button type="button" class="mc-step active" data-step="1" aria-current="step">1. Паспорт програми</button>
+      <button type="button" class="mc-step" data-step="2">2. Розділи та заходи <span id="mc-draft-count">0</span></button>
+    </div>
+    <section id="mc-step-1" class="mc-dialog-content">
+      <div class="mc-grid">
+        <label class="field">Код програми <input name="id" maxlength="50" required placeholder="AKP-2027"></label>
+        <label class="field">Організація <input name="organization_name" required placeholder="Назва органу / установи"></label>
+        <label class="field">Дата початку <input name="start_date" type="date" required></label>
+        <label class="field">Дата завершення <input name="end_date" type="date" required></label>
+        <label class="field">Реквізити затвердження <input name="approval_reference" required placeholder="Наказ № … від …"></label>
+        <label class="field mc-full">Назва <input name="title" required placeholder="Антикорупційна програма на …"></label>
+        <label class="field mc-full">Мета програми <textarea name="goals" rows="3" required placeholder="Яких результатів має досягти програма"></textarea></label>
+        <label class="field mc-full">Примітки <textarea name="notes" rows="2" placeholder="Необов’язково"></textarea></label>
+        <label class="mc-checkbox mc-full"><input type="checkbox" name="has_restricted_information"> Програма містить інформацію з обмеженим доступом</label>
+      </div>
+    </section>
+    <section id="mc-step-2" class="mc-dialog-content hidden">
+      <div id="mc-draft-sections"></div>
+    </section>
+    <div id="mc-builder-error" class="mc-error hidden" role="alert"></div>
+    <footer class="mc-dialog-footer">
+      <button type="button" class="btn hidden" id="mc-back">← Назад</button>
+      <span class="mc-footer-spacer"></span>
+      <button type="button" class="btn" data-dialog-close="mc-builder">Скасувати</button>
+      <button type="button" class="btn btn-dark" id="mc-next">До розділів →</button>
+      <button type="submit" class="btn btn-dark hidden" id="mc-submit">Створити програму із заходами</button>
+    </footer>
+  </form>
+</dialog>
+
+
+<dialog id="mc-edit-program-dialog" class="mc-dialog mc-medium" aria-labelledby="mc-edit-title">
+  <form id="mc-edit-program-form">
+    <header class="mc-dialog-header"><div><h2 id="mc-edit-title">Редагувати паспорт програми</h2></div><button type="button" class="mc-icon-close" data-dialog-close="mc-edit-program-dialog" aria-label="Закрити">×</button></header>
+    <div class="mc-dialog-content mc-grid">
+      <label class="field mc-full">Назва <input name="title" required></label>
+      <label class="field mc-full">Організація <input name="organization_name" required></label>
+      <label class="field">Дата початку <input name="start_date" type="date" required></label>
+      <label class="field">Дата завершення <input name="end_date" type="date" required></label>
+      <label class="field">Реквізити затвердження <input name="approval_reference" required></label>
+      <label class="field mc-full">Мета <textarea name="goals" rows="3" required></textarea></label>
+      <label class="field mc-full">Примітки <textarea name="notes" rows="2"></textarea></label>
+    </div>
+    <div id="mc-edit-error" class="mc-error hidden" role="alert"></div>
+    <footer class="mc-dialog-footer"><button type="button" class="btn" data-dialog-close="mc-edit-program-dialog">Скасувати</button><button type="submit" class="btn btn-dark" id="mc-edit-submit">Зберегти паспорт</button></footer>
+  </form>
+</dialog>
+
+<dialog id="mc-measure-dialog" class="mc-dialog mc-medium" aria-labelledby="mc-measure-title">
+  <form id="mc-measure-form">
+    <header class="mc-dialog-header">
+      <div><h2 id="mc-measure-title">Новий захід</h2></div>
+      <button type="button" class="mc-icon-close" data-dialog-close="mc-measure-dialog" aria-label="Закрити">×</button>
+    </header>
+    <div class="mc-dialog-content mc-grid">
+      <label class="field">Код заходу <input name="id" maxlength="8" required placeholder="AM270101"></label>
+      <label class="field"><span id="mc-measure-sequence-label">Номер у розділі</span><input name="sequence_number" type="number" min="1" step="1" required aria-describedby="mc-measure-sequence-hint"><small id="mc-measure-sequence-hint" class="muted" aria-live="polite">Номер має бути унікальним у цьому розділі програми.</small></label>
+      <label class="field mc-full">Опис заходу <textarea name="description" required rows="3"></textarea></label>
+      <label class="field">Тип строку <select name="deadline_type" required><option value="date">Конкретна дата</option><option value="ongoing">Постійний</option><option value="recurring">Періодичний</option></select></label>
+      <label class="field" id="mc-deadline-date-row">Виконати до <input name="deadline_on" type="date"></label>
+      <label class="field">Формулювання строку <input name="deadline_description" required placeholder="До 31.12.2027 / Постійно"></label>
+      <label class="field mc-full">Індикатор виконання <input name="completion_indicator" required placeholder="Наприклад, проведено 10 перевірок"></label>
+      <label class="field">Цільове значення <input name="indicator_target" type="number" step="0.001"></label>
+      <label class="field">Одиниця виміру <input name="indicator_unit" maxlength="20" placeholder="шт., %, од."></label>
+      <label class="field mc-full">Необхідне підтвердження <input name="required_evidence" required placeholder="Наказ, протокол, звіт"></label>
+      <label class="field mc-full">Ресурси <input name="resources" required value="У межах кошторису"></label>
+      <div class="mc-full mc-risk-picker">
+        <label class="field" for="mc-measure-risk-search">Корупційний ризик (за наявності)</label>
+        <input id="mc-measure-risk-search" type="search" placeholder="Пошук за кодом або назвою ризику" autocomplete="off">
+        <select id="mc-measure-risk-select" name="risk_id" aria-label="Вибрати корупційний ризик">
+          <option value="">Без прив’язки до ризику</option>
+        </select>
+        <small id="mc-measure-risk-hint" class="muted">Ризики вибираються з окремого реєстру підрозділу.</small>
+      </div>
+    </div>
+    <div id="mc-measure-error" class="mc-error hidden" role="alert"></div>
+    <footer class="mc-dialog-footer">
+      <button type="button" class="btn" data-dialog-close="mc-measure-dialog">Скасувати</button>
+      <button type="submit" class="btn btn-dark" id="mc-measure-submit">Додати захід</button>
+    </footer>
+  </form>
+</dialog>
+
+<dialog id="mc-risk-dialog" class="mc-dialog mc-large" aria-labelledby="mc-risk-dialog-title">
+  <form id="mc-risk-form">
+    <header class="mc-dialog-header">
+      <h2 id="mc-risk-dialog-title">Створити корупційний ризик</h2>
+      <button type="button" class="mc-icon-close" data-dialog-close="mc-risk-dialog" aria-label="Закрити">×</button>
+    </header>
+    <div class="mc-dialog-content mc-grid">
+      <label class="field">Код ризику<input name="id" maxlength="8" required placeholder="KR01"></label>
+      <label class="field mc-full">Назва ризику<input name="title" required></label>
+      <label class="field mc-full">Функція або процес<input name="process_name" required placeholder="Назва процесу"></label>
+      <label class="field mc-full">Опис ризику<textarea name="description" rows="3" required></textarea></label>
+      <label class="field mc-full">Джерела ризику<textarea name="risk_sources" rows="2" required></textarea></label>
+      <label class="field mc-full">Наявні заходи контролю<textarea name="existing_controls" rows="2" required></textarea></label>
+      <label class="field">Імовірність (1–4)<select name="probability_score" required><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label>
+      <label class="field">Наслідки (1–4)<select name="impact_score" required><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label>
+      <label class="field">Загальний бал<input name="score" type="number" readonly required></label>
+      <label class="field">Рівень ризику<select name="level" required><option value="low">Низький</option><option value="medium">Середній</option><option value="high">Високий</option><option value="critical">Критичний</option></select></label>
+      <label class="field mc-full">Назва індикатора ризику<input name="indicator_name" required></label>
+      <label class="field">Одиниця вимірювання<input name="indicator_unit" required maxlength="20" placeholder="%, шт."></label>
+      <label class="field">Бажаний напрям<select name="indicator_direction" required><option value="decrease">Зменшення</option><option value="increase">Збільшення</option></select></label>
+      <label class="field">Початкове значення<input name="indicator_baseline_value" type="number" step="0.001" required></label>
+      <label class="field">Цільове значення<input name="indicator_target_value" type="number" step="0.001" required></label>
+      <label class="field mc-full">Цільова дата<input name="target_date" type="date" required></label>
+    </div>
+    <div id="mc-risk-form-error" class="mc-error hidden" role="alert"></div>
+    <footer class="mc-dialog-footer">
+      <button type="button" class="btn" data-dialog-close="mc-risk-dialog">Скасувати</button>
+      <button type="submit" class="btn btn-dark" id="mc-risk-save">Створити ризик</button>
+    </footer>
+  </form>
+</dialog>
+
+<dialog id="mc-import-dialog" class="mc-dialog mc-medium" aria-labelledby="mc-import-title">
+  <form id="mc-import-form">
+    <header class="mc-dialog-header"><div><h2 id="mc-import-title">Імпорт антикорупційної програми</h2><p class="small muted">Один JSON-файл: програма, розділи та заходи.</p></div><button type="button" class="mc-icon-close" data-dialog-close="mc-import-dialog" aria-label="Закрити">×</button></header>
+    <div class="mc-dialog-content">
+      <label class="field">JSON-файл <input id="mc-json-file" name="file" type="file" accept=".json,application/json" required></label>
+      <div id="mc-json-preview" class="mc-import-preview muted">Оберіть файл для попереднього перегляду.</div>
+    </div>
+    <div id="mc-import-error" class="mc-error hidden" role="alert"></div>
+    <footer class="mc-dialog-footer"><button type="button" class="btn" data-dialog-close="mc-import-dialog">Скасувати</button><button type="submit" class="btn btn-dark" id="mc-import-submit">Імпортувати програму</button></footer>
+  </form>
+</dialog>
+
+<dialog id="mc-dispatch-dialog" class="mc-dialog mc-medium" aria-labelledby="mc-dispatch-title">
+  <form id="mc-dispatch-form">
+    <header class="mc-dialog-header"><div><h2 id="mc-dispatch-title">Направлення програми</h2></div><button type="button" class="mc-icon-close" data-dialog-close="mc-dispatch-dialog" aria-label="Закрити">×</button></header>
+    <div class="mc-dialog-content">
+      <label class="field">Пошук підрозділу<input id="mc-dept-search" type="search" placeholder="Назва або код підрозділу"></label>
+      <div class="mc-dept-list" id="mc-dept-list" role="group" aria-label="Підрозділи з координатором"></div>
+    </div>
+    <div id="mc-dispatch-error" class="mc-error hidden" role="alert"></div>
+    <footer class="mc-dialog-footer"><button type="button" class="btn" data-dialog-close="mc-dispatch-dialog">Закрити</button><button type="submit" class="btn btn-dark" id="mc-dispatch-submit">Направити програму</button></footer>
+  </form>
+</dialog>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/notify.js"></script>
+<script src="/static/js/risk-flags.js?v=1"></script>
+<script src="/static/js/reports-ui.js?v=pdf1"></script>
+<script src="/static/js/main-coordinator.js?v=measure-ui3"></script>
+{% endblock %}

@@ -1,39 +1,83 @@
 {% extends "base.html" %}
-{% block title %}Заходи підрозділу — виконавець{% endblock %}
-{% block role_name %}Виконавець{% endblock %}
+{% block title %}Мої заходи — виконавець{% endblock %}
+{% block who_label %}<span class="ident" id="ident">Виконавець</span>{% endblock %}
+{% block topbar_tools %}{% include "_bell.html" %}{% endblock %}
 {% block content %}
-<section class="unit">
-  <div>
-    <p class="label">Назва підрозділу</p>
-    <h1 id="unit-name">—</h1>
-  </div>
-  <p class="hint">Введіть номер наказу й натисніть Enter — система перевірить його, статус оновиться сам.</p>
-</section>
-<div class="toolbar">
-  <label class="field hidden" id="dept-field">Підрозділ
-    <select id="dept"></select>
-  </label>
-  <label class="field">Звітний період
-    <select id="period"></select>
-  </label>
-</div>
-<p class="stub hidden" id="dept-stub">За вашим обліковим записом не закріплено жодного заходу, тому підрозділ обирається вручну. Накази чужих заходів сервер не показує.</p>
-<div class="table-wrap">
-  <table class="grid executor-table">
-    <thead>
-      <tr>
-        <th style="width:17%">Назва наказу</th>
-        <th style="width:10%">Орган, що видав</th>
-        <th style="width:8%">Поч. дата</th>
-        <th style="width:8%">Кін. дата</th>
-        <th style="width:14%">№ наказу</th>
-        <th style="width:10%">Статус</th>
-        <th style="width:19%">Ціль</th>
-        <th>Примітка</th>
-      </tr>
-    </thead>
-    <tbody id="rows"><tr><td colspan="8" class="muted">Завантаження…</td></tr></tbody>
-  </table>
+<link rel="stylesheet" href="/static/css/executor-ux.css?v=order-edit1">
+<div class="executor-page">
+  <section class="unit executor-hero" aria-labelledby="executor-title">
+    <div>
+      <p class="label">Посада виконавця</p>
+      <h1 id="executor-title">Завантаження…</h1>
+    </div>
+    <button type="button" class="btn" id="executor-refresh">Оновити дані</button>
+  </section>
+
+  <section class="executor-overview" aria-label="Стан виконання призначених заходів">
+    <button type="button" class="executor-stat" data-stat-filter="" aria-pressed="true">
+      <span>Мої заходи</span><strong id="executor-total">—</strong>
+    </button>
+    <button type="button" class="executor-stat" data-stat-filter="deadline" aria-pressed="false">
+      <span>Потребують уваги</span><strong id="executor-attention">—</strong>
+    </button>
+    <button type="button" class="executor-stat" data-stat-filter="review" aria-pressed="false">
+      <span>Очікують погодження</span><strong id="executor-review">—</strong>
+    </button>
+    <button type="button" class="executor-stat" data-stat-filter="done" aria-pressed="false">
+      <span>Погоджено</span><strong id="executor-approved">—</strong>
+    </button>
+  </section>
+
+  <section class="executor-panel" aria-label="Заходи виконавця">
+    <div class="toolbar executor-toolbar">
+      <label class="field grow">Пошук
+        <input id="search" type="search" autocomplete="off" placeholder="Програма, розділ, захід або № наказу">
+      </label>
+      <label class="field">Програма
+        <select id="executor-program" aria-label="Фільтр за програмою"><option value="">Усі мої програми</option></select>
+      </label>
+      <label class="field">Стан
+        <select id="filter" aria-label="Фільтр заходів">
+          <option value="">Усі заходи</option>
+          <option value="todo">Ще не подано</option>
+          <option value="deadline">Строк минає або минув</option>
+          <option value="review">Очікують погодження</option>
+          <option value="rejected">Відхилено координатором</option>
+          <option value="document-changed">Змінено файл наказу</option>
+          <option value="done">Погоджено</option>
+        </select>
+      </label>
+      <label class="field">Звітний період
+        <select id="period" aria-label="Звітний період"></select>
+      </label>
+    </div>
+    <div class="executor-period-note small muted" id="executor-period-note" role="note">Дані виконання відображаються за вибраний звітний період.</div>
+    <div id="programs" aria-live="polite" aria-busy="true"><p class="muted">Завантажуємо ваші призначення…</p></div>
+  </section>
+
+  <dialog id="execution-dialog" class="executor-dialog" aria-labelledby="execution-title">
+    <form id="execution-form" novalidate>
+      <div class="executor-dialog-header">
+        <h2 id="execution-title">Підтвердження виконання</h2>
+        <button type="button" class="executor-dialog-close" id="execution-close" aria-label="Закрити форму">×</button>
+      </div>
+      <div class="executor-dialog-scroll">
+        <div class="role-card executor-form-fields">
+          <label class="field executor-order-field">Номер наказу
+            <input name="order_number" type="text" maxlength="150" required autocomplete="off"
+                   placeholder="Наприклад, 71/2026">
+          </label>
+          <p class="executor-resubmission-hint" id="executor-approval-status" role="status" aria-live="polite"></p>
+        </div>
+        <div id="execution-message" class="msg" role="alert" aria-live="assertive"></div>
+      </div>
+      <div class="dialog-actions executor-dialog-actions">
+        <button class="btn btn-dark" id="execution-save" type="submit">Підтвердити виконання</button>
+        <button class="btn" id="execution-cancel" type="button">Скасувати</button>
+      </div>
+    </form>
+  </dialog>
+  <div class="executor-toast-stack" id="executor-toasts" aria-live="polite" aria-atomic="false"></div>
 </div>
 {% endblock %}
-{% block scripts %}<script src="/static/js/executor.js"></script>{% endblock %}
+{% block scripts %}<script src="/static/js/notify.js"></script><script src="/static/js/executor.js?v=order-modal3"></script>{% endblock %}

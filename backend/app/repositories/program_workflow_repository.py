@@ -35,6 +35,13 @@ class ProgramWorkflowRepository:
             .order_by(User.id)
         ))
 
+    def coordinator_department_ids(self) -> set[str]:
+        """Для списку одержувачів MAIN_KOORD без N+1 SQL-запитів."""
+        stmt = select(User.department_id).where(
+            User.role_id == "KOORD", User.department_id.is_not(None)
+        ).distinct()
+        return set(self.db.scalars(stmt))
+
     def executors(self, department_id: str):
         return list(self.db.scalars(
             select(User).where(User.department_id == department_id, User.role_id == "VYK")

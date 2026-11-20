@@ -1,7 +1,9 @@
 """Вхідні та вихідні схеми передачі програми / призначення заходів."""
+
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
+from typing import Literal
 
 
 class DispatchDepartmentsIn(BaseModel):
@@ -37,7 +39,7 @@ class DispatchDepartmentsOut(BaseModel):
 class ProgramAccessRead(BaseModel):
     id: str
     title: str
-    access_type: str   # admin | owner | department_coordinator | executor
+    access_type: Literal["owner", "department_coordinator", "executor"]
 
 
 class SectionBriefRead(BaseModel):

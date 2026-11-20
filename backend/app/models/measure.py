@@ -140,17 +140,9 @@ class Measure(Base):
         "MeasureCollaborator", back_populates="measure", cascade="all, delete-orphan"
     )
 
-    # Накази, пов'язані із заходом.
-    orders: Mapped[list["Order"]] = relationship("Order", back_populates="measure")
-
     # Звіти про виконання.
     executions: Mapped[list["Execution"]] = relationship(
         "Execution", back_populates="measure"
-    )
-
-    # Підтвердні документи.
-    evidences: Mapped[list["Evidence"]] = relationship(
-        "Evidence", back_populates="measure"
     )
 
     # Рішення про перенесення строків.

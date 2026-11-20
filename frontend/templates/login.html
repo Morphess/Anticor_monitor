@@ -1,10 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Вхід — моніторинг антикорупційної програми{% endblock %}
 {% block header %}
-<header class="topbar"><span class="brand">Антикорупційна програма</span></header>
+<header class="topbar">
+  <span class="brand" aria-label="Border Group — антикорупційна програма">{{ brand_logo() }}{{ brand_text() }}</span>
+  <div class="who">{{ theme_toggle() }}</div>
+</header>
 {% endblock %}
 {% block content %}
 <form class="login" id="login-form" novalidate>
+  <div class="login-brand">{{ brand_logo() }}<span class="brand-text"><span class="brand-word"><b>BORDER</b> <span>GROUP</span></span><span class="brand-sub">Group of companies</span></span></div>
   <h1>Вхід до системи</h1>
   <p class="muted small">Моніторинг виконання антикорупційної програми</p>
   <div id="login-error" class="alert hidden" role="alert"></div>

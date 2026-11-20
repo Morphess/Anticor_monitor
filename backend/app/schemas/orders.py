@@ -1,90 +1,58 @@
+"""Registry schemas; keep existing title/date fields to preserve compatibility."""
 from datetime import date, datetime
-
+from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+OrderCheckStatus = Literal["found", "not_found", "not_provided"]
 
-# Основні поля наказу
 class OrderBase(BaseModel):
-
-    # Реєстраційний номер наказу
     number: str = Field(min_length=1, max_length=150)
-
-    # Назва або тема наказу
     title: str = Field(min_length=1)
-
-    # Дата видання
     issued_on: date | None = None
+    document_url: str | None = None
 
-    # Посилання або шлях до документа
-    document_url: str | None = Field(default=None, min_length=1)
-
-    # ID заходу, до якого належить наказ
-    measure_id: str = Field(min_length=1, max_length=8)
-
-    @field_validator("number", "title", "measure_id")
+    @field_validator("number", "title")
     @classmethod
-    def nonempty_text(cls, value: str) -> str:
-
+    def trim_required(cls, value: str) -> str:
         value = value.strip()
-
         if not value:
-            raise ValueError("Поле не може містити лише пробіли")
-
+            raise ValueError("Поле не може бути порожнім")
         return value
 
-
-# CREATE — створення наказу
 class OrderCreate(OrderBase):
-
     id: str = Field(min_length=1, max_length=50)
 
     @field_validator("id")
     @classmethod
-    def nonempty_id(cls, value: str) -> str:
-
+    def trim_id(cls, value: str) -> str:
         value = value.strip()
-
         if not value:
-            raise ValueError("ID не може містити лише пробіли")
-
+            raise ValueError("Потрібен ID")
         return value
 
-
-# UPDATE — часткове редагування
 class OrderUpdate(BaseModel):
-
     number: str | None = Field(default=None, min_length=1, max_length=150)
-
     title: str | None = Field(default=None, min_length=1)
-
     issued_on: date | None = None
+    document_url: str | None = None
 
-    document_url: str | None = Field(default=None, min_length=1)
-
-    measure_id: str | None = Field(default=None, min_length=1, max_length=8)
-
-    @field_validator("number", "title", "measure_id")
+    @field_validator("number", "title")
     @classmethod
-    def nonempty_text(cls, value: str | None) -> str | None:
-
+    def trim_nonnull(cls, value: str | None) -> str | None:
         if value is None:
             return None
+        if not value.strip():
+            raise ValueError("Поле не може бути порожнім")
+        return value.strip()
 
-        value = value.strip()
-
-        if not value:
-            raise ValueError("Поле не може містити лише пробіли")
-
-        return value
-
-
-# READ — відповідь API
 class OrderRead(OrderBase):
-
     model_config = ConfigDict(from_attributes=True)
-
     id: str
     created_at: datetime
+
+class OrderCheckRead(BaseModel):
+    number: str | None
+    status: OrderCheckStatus
 
 class OrderAnalysisRead(BaseModel):
     order_id: str
