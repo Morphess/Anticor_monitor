@@ -1,11 +1,9 @@
-"""Схеми для CRUD наказів і для внутрішнього статусу перевірки номера."""
+"""Registry schemas; keep existing title/date fields to preserve compatibility."""
 from datetime import date, datetime
 from typing import Literal
-
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 OrderCheckStatus = Literal["found", "not_found", "not_provided"]
-
 
 class OrderBase(BaseModel):
     number: str = Field(min_length=1, max_length=150)
@@ -21,7 +19,6 @@ class OrderBase(BaseModel):
             raise ValueError("Поле не може бути порожнім")
         return value
 
-
 class OrderCreate(OrderBase):
     id: str = Field(min_length=1, max_length=50)
 
@@ -30,9 +27,8 @@ class OrderCreate(OrderBase):
     def trim_id(cls, value: str) -> str:
         value = value.strip()
         if not value:
-            raise ValueError("ID не може бути порожнім")
+            raise ValueError("Потрібен ID")
         return value
-
 
 class OrderUpdate(BaseModel):
     number: str | None = Field(default=None, min_length=1, max_length=150)
@@ -45,19 +41,22 @@ class OrderUpdate(BaseModel):
     def trim_nonnull(cls, value: str | None) -> str | None:
         if value is None:
             return None
-        value = value.strip()
-        if not value:
+        if not value.strip():
             raise ValueError("Поле не може бути порожнім")
-        return value
-
+        return value.strip()
 
 class OrderRead(OrderBase):
     model_config = ConfigDict(from_attributes=True)
-
     id: str
     created_at: datetime
-
 
 class OrderCheckRead(BaseModel):
     number: str | None
     status: OrderCheckStatus
+
+class OrderAnalysisRead(BaseModel):
+    order_id: str
+    file_name: str
+    model: str
+    analysis: str
+    text_truncated: bool

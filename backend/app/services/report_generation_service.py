@@ -97,7 +97,7 @@ class ReportGenerationService:
         ids = {row["id"] for row in visible}
         measures = self.repo.measures(ids)
         executions = self.repo.executions(ids, period)
-        evidence_counts = self.repo.evidence_counts(ids)
+        evidence_counts = self.repo.evidence_counts(ids, period)
         dep_names = self.repo.departments({m.responsible_department_id for m in measures if m.responsible_department_id})
 
         # У звіті Порталу доброчесності рівно три розділи.
@@ -119,7 +119,16 @@ class ReportGenerationService:
                 # Не губимо захід, якщо довідник пошкоджено: це помилка даних.
                 raise ReportError(f"Для заходу {measure.id} немає розділу {measure.section_id}", 409)
             execution = executions.get(measure.id)
-            raw_status = (execution.status or "").lower() if execution else ""
+            # `status` is coordinator review state, not the old outcome status.
+            # A submitted or rejected claim must NOT count as completed.
+            approved = bool(
+                execution and execution.status == "approved"
+                and not execution.document_changed
+            )
+            raw_status = (
+                (execution.outcome_status or "completed").lower()
+                if approved else ""
+            )
             is_not_due = (
                 measure.deadline_type == "date"
                 and measure.deadline_on is not None
@@ -138,10 +147,15 @@ class ReportGenerationService:
             else:
                 factual_date = execution.completed_on if execution else None
 
-            approved = bool(execution and execution.approved_by_coordinator)
             warnings = []
             if execution is not None and not approved:
                 warnings.append("Виконання ще не погоджено координатором")
+                if execution.status == "rejected":
+                    reason = (execution.rejection_reason or "").strip()
+                    warnings.append("Виконання відхилено координатором" +
+                                    (f": {reason}" if reason else ""))
+                if execution.document_changed:
+                    warnings.append("Документ змінено — потрібне повторне подання")
             if status == NOT_COMPLETED and not description:
                 warnings.append("Не зазначено пояснення причин невиконання")
             if status == "Виконано" and factual_date is None:

@@ -10,12 +10,23 @@ from app.core.main_coordinator import require_main_coordinator
 from app.database.db_connection import get_db
 from app.models.measure import Measure
 from app.models.program import Program
+from app.models.risk import Risk
 from app.models.user import User
 from app.schemas.measures import MeasureCreate, MeasureRead, MeasureUpdate
 from app.services.measure_services import MeasureError, MeasureService
 from app.services.program_workflow_services import ProgramWorkflowService, WorkflowError
 
 router = APIRouter(prefix="/measures", tags=["Measures"])
+
+
+def _risk_allowed(db: Session, risk_id: str | None, actor: User) -> None:
+    if not risk_id:
+        return
+    risk = db.get(Risk, risk_id)
+    if risk is None:
+        raise HTTPException(422, detail="Ризик відсутній у реєстрі")
+    if not actor.department_id or risk.owner_department_id != actor.department_id:
+        raise HTTPException(403, detail="Можна обирати лише ризики свого підрозділу")
 
 
 def _owner(db: Session, program_id: str, actor: User) -> None:
@@ -52,6 +63,12 @@ def create_measure(
     actor: User = Depends(require_main_coordinator),
 ):
     _owner(db, data.program_id, actor)
+    _risk_allowed(db, data.risk_id, actor)
+    if not actor.department_id:
+        raise HTTPException(status_code=403, detail="Головному координатору не призначено підрозділ")
+    # Не довіряємо responsible_department_id від клієнта:
+    # відповідальним автоматично стає підрозділ головного координатора.
+    data = data.model_copy(update={"responsible_department_id": actor.department_id})
     if getattr(data, "assigned_user_id", None) is not None:
         raise HTTPException(status_code=422, detail="Виконавця призначають тільки через program-routing")
     try:
@@ -110,6 +127,11 @@ def update_measure(
     measure = _existing_measure(db, measure_id)
     _owner(db, measure.program_id, actor)
     changes = data.model_dump(exclude_unset=True)
+    if "risk_id" in changes:
+        _risk_allowed(db, changes["risk_id"], actor)
+    if ("responsible_department_id" in changes
+            and changes["responsible_department_id"] != measure.responsible_department_id):
+        raise HTTPException(status_code=422, detail="Відповідальний підрозділ встановлюється автоматично")
     if "assigned_user_id" in changes or ("program_id" in changes and changes["program_id"] != measure.program_id):
         raise HTTPException(status_code=422, detail="Не можна змінювати виконавця або переносити захід в іншу програму")
     try:

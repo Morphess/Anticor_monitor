@@ -22,7 +22,7 @@ ALLOWED_ROLES = frozenset({"MAIN_KOORD", "KOORD", "VYK"})
 
 
 def require_execution_actor(user: User = Depends(get_current_user)) -> User:
-    """Забороняє доступ до Executions/Evidences всім іншим ролям."""
+    """Забороняє доступ до Executions всім іншим ролям."""
     if user.role_id not in ALLOWED_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

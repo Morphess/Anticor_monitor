@@ -1,80 +1,39 @@
-"""Pydantic-схеми звітності про виконання заходів."""
+"""Schemas for the order-based approval workflow."""
+from datetime import datetime
+from typing import Literal
+from pydantic import BaseModel, ConfigDict, Field
 
-from __future__ import annotations
-
-from datetime import date, datetime
-from decimal import Decimal
-from typing import Literal, Self
-
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+ExecutionStatus = Literal["pending", "approved", "rejected"]
 
 
-ExecutionStatus = Literal[
-    "completed",
-    "partial",
-    "not_completed",
-    "in_progress",
-    "not_started",
-]
-
-
-class ExecutionBase(BaseModel):
-    """Дані, які користувач може заповнити у звіті."""
-
+class ExecutionSubmit(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    status: ExecutionStatus
-    status_label: str = Field(min_length=1, max_length=60)
-    completed_on: date | None = None
-    result_description: str = ""
-    indicator_actual: Decimal | None = Field(
-        default=None, max_digits=14, decimal_places=3
-    )
+    measure_id: str = Field(min_length=1, max_length=8)
+    period: str = Field(pattern=r"^\d{4}-H[12]$")
+    order_number: str = Field(min_length=1, max_length=150)
 
 
-class ExecutionCreate(ExecutionBase):
-    """Новий звіт: один запис на захід і звітний період."""
-
-    measure_id: str = Field(min_length=1)
-    period: str = Field(min_length=1, max_length=20, examples=["2026-H1"])
-
-
-class ExecutionUpdate(BaseModel):
-    """Часткове оновлення без зміни складеного первинного ключа."""
-
+class ExecutionReject(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    status: ExecutionStatus | None = None
-    status_label: str | None = Field(default=None, min_length=1, max_length=60)
-    completed_on: date | None = None
-    result_description: str | None = None
-    indicator_actual: Decimal | None = Field(
-        default=None, max_digits=14, decimal_places=3
-    )
-
-    @model_validator(mode="after")
-    def prohibit_null_in_required_fields(self) -> Self:
-        """PATCH не може встановлювати NULL для NOT NULL-полів."""
-        for field_name in ("status", "status_label", "result_description"):
-            if (
-                field_name in self.model_fields_set
-                and getattr(self, field_name) is None
-            ):
-                raise ValueError(f"Поле '{field_name}' не може бути null")
-        return self
+    reason: str = Field(min_length=3, max_length=2000)
 
 
-class ExecutionRead(ExecutionCreate):
-    """Схема відповіді; службові поля доступні тільки на читання."""
-
+class ExecutionRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-
+    id: int
+    measure_id: str
+    period: str
+    status: ExecutionStatus
+    order_id: str | None
+    order_number: str | None = None
+    order_version_id: int | None
+    submitted_sha256: str | None
+    document_changed: bool
     submitted_by_user_id: int | None
+    submitted_department_id: str | None
     submitted_at: datetime | None
-    approved_by_coordinator: bool
-
-
-class ExecutionApprovalUpdate(BaseModel):
-    """Погодження звіту координатором."""
-
-    approved_by_coordinator: bool
+    reviewed_by_user_id: int | None
+    reviewed_at: datetime | None
+    rejection_reason: str | None
+    # Client fetches with JWT; a plain <a href> would not carry Bearer token.
+    document_api_path: str | None = None

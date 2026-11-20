@@ -95,7 +95,7 @@ def list_risk_flags(
         workflow.visible_program(program_id, user)
         visible_measures = workflow.program_measures(program_id, user)
 
-        department_scope: set[str] | None = None
+        department_scope: set[str] | None = ({user.department_id} if user.department_id else None)
         if user.role_id == "KOORD":
             if not user.department_id:
                 raise HTTPException(

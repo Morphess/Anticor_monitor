@@ -39,9 +39,18 @@ def validate_period(period: str) -> None:
         raise DashboardError("Період має формат YYYY-H1 або YYYY-H2")
 
 
+def outcome(execution) -> str:
+    if execution is None:
+        return 'not_started'
+    if execution.status == 'approved' and not execution.document_changed:
+        return execution.outcome_status or 'completed'
+    if execution.status == 'rejected':
+        return 'not_completed'
+    return 'in_progress'
+
+
 def is_approved_completed(execution) -> bool:
-    return bool(execution and execution.status == COMPLETED
-                and execution.approved_by_coordinator)
+    return outcome(execution) == 'completed' and bool(execution and execution.approved_by_coordinator)
 
 
 def is_overdue(measure, execution, as_of: date) -> bool:
@@ -81,7 +90,8 @@ class DashboardService:
         visible = self.workflow.program_measures(program_id, actor)
         ids = {row["id"] for row in visible}
         measures = self.repo.measures(program_id, ids)
-        executions = self.repo.executions({m.id for m in measures}, period)
+        executions = self.repo.executions({m.id for m in measures}, period,
+                                          user_id=actor.id if actor.role_id == "VYK" else None)
         department_ids = None
         if actor.role_id == "KOORD":
             if not actor.department_id:
@@ -103,7 +113,7 @@ class DashboardService:
         )}
         for measure in scope.measures:
             execution = scope.executions.get(measure.id)
-            state = execution.status if execution else "not_started"
+            state = outcome(execution)
             if state not in {"completed", "partial", "in_progress", "not_completed", "not_started"}:
                 state = "not_started"
             counters[state] += 1
@@ -141,7 +151,7 @@ class DashboardService:
         for department_id, measures in groups.items():
             count = len(measures)
             complete = sum(scope.executions.get(m.id) is not None and
-                           scope.executions[m.id].status == COMPLETED for m in measures)
+                           outcome(scope.executions[m.id]) == COMPLETED for m in measures)
             approved = sum(is_approved_completed(scope.executions.get(m.id)) for m in measures)
             overdue = sum(is_overdue(m, scope.executions.get(m.id), as_of) for m in measures)
             rows.append(DepartmentProgress(
@@ -220,7 +230,7 @@ class DashboardService:
                 measure_id=m.id, description=m.description,
                 deadline_on=m.deadline_on, days_until=(m.deadline_on - as_of).days,
                 responsible_department_id=m.responsible_department_id,
-                execution_status=execution.status if execution else "not_started",
+                execution_status=outcome(execution),
                 approved_by_coordinator=bool(execution and execution.approved_by_coordinator),
             )
             if item.days_until < 0:

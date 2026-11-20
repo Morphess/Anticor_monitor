@@ -1,4 +1,4 @@
-"""Структури відповіді API версій наказів та повідомлень."""
+"""Order version and execution alert API models."""
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
@@ -19,7 +19,10 @@ class OrderVersionRead(BaseModel):
 
 class OrderChangeAlertReadSchema(BaseModel):
     id: int
-    evidence_id: str
+    execution_id: int
+    execution_measure_id: str
+    execution_period: str
+    submitted_by_user_id: int | None = None
     measure_id: str
     order_id: str
     order_number: str

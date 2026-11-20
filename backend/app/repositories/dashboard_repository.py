@@ -11,6 +11,7 @@ from app.models.execution import Execution
 from app.models.measure import Measure
 from app.models.risk import Risk
 from app.models.risk_measurement import RiskMeasurement
+from app.services.execution_summary import summaries, summary_for
 
 
 class DashboardRepository:
@@ -25,13 +26,20 @@ class DashboardRepository:
                 .order_by(Measure.section_id, Measure.sequence_number, Measure.id))
         return list(self.db.scalars(stmt))
 
-    def executions(self, measure_ids: set[str], period: str) -> dict[str, Execution]:
+    def executions(self, measure_ids: set[str], period: str, user_id: int | None = None) -> dict:
         if not measure_ids:
             return {}
         stmt = select(Execution).where(
             Execution.measure_id.in_(measure_ids), Execution.period == period
         )
-        return {row.measure_id: row for row in self.db.scalars(stmt)}
+        if user_id is not None:
+            stmt = stmt.where(Execution.submitted_by_user_id == user_id)
+        rows = list(self.db.scalars(stmt))
+        if user_id is None:
+            return summaries(self.db, measure_ids, period, rows)
+        # My dashboard is personal: another executor's pending row must not mask mine.
+        return {m: value for m in measure_ids
+                if (value := summary_for(m, period, rows, {user_id})) is not None}
 
     def departments(self, department_ids: set[str]) -> dict[str, str]:
         if not department_ids:
@@ -46,7 +54,10 @@ class DashboardRepository:
         allowed_risk_ids: set[str] | None,
         owned_department_ids: set[str] | None,
     ) -> list[Risk]:
-        stmt = select(Risk).where(Risk.program_id == program_id)
+        # Include only risks actually selected by measures in this program.
+        linked = select(Measure.risk_id).where(
+            Measure.program_id == program_id, Measure.risk_id.is_not(None))
+        stmt = select(Risk).where(Risk.id.in_(linked))
         # MAIN_KOORD: обидва None => всі ризики власної програми.
         # KOORD: ризики видимих заходів + ризики підрозділів своєї гілки.
         # VYK: лише ризики персонально призначених заходів.

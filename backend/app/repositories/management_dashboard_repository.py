@@ -2,18 +2,21 @@
 from __future__ import annotations
 
 from datetime import date
+from types import SimpleNamespace
 
-from sqlalchemy import MetaData, Table, inspect, or_, select
+from sqlalchemy import MetaData, Table, and_, inspect, or_, select
 from sqlalchemy.orm import Session
 
 from app.models.deadline_change import DeadlineChange
 from app.models.department import Department
-from app.models.evidence import Evidence
 from app.models.execution import Execution
 from app.models.measure import Measure, MeasureCollaborator
+from app.models.order import Order
+from app.models.order_version import OrderVersion
 from app.models.program import Program
 from app.models.program_workflow import MeasureAssignment, ProgramDepartment
 from app.models.section import Section
+from app.services.execution_summary import summaries, assignments_for
 from app.models.risk import Risk
 from app.models.risk_measurement import RiskMeasurement
 
@@ -113,16 +116,51 @@ class ManagementDashboardRepository:
             result.setdefault(measure_id, set()).add(dept_id)
         return result
 
-    def executions(self, ids: set[str], period: str) -> dict[str, Execution]:
+    def executions(self, ids: set[str], period: str) -> dict:
         if not ids:
             return {}
-        stmt = select(Execution).where(Execution.measure_id.in_(ids), Execution.period == period)
-        return {r.measure_id: r for r in self.db.scalars(stmt)}
+        rows = list(self.db.scalars(select(Execution).where(
+            Execution.measure_id.in_(ids), Execution.period == period
+        )))
+        return summaries(self.db, ids, period, rows)
 
-    def evidences(self, ids: set[str], as_of: date) -> list[Evidence]:
+    def confirmed_orders(self, ids: set[str], period: str, as_of: date) -> list:
+        """Proof rows for the existing RF engine, built from approved submissions.
+
+        This matches RiskFlagRepository.confirmed_orders.  `document_date` is
+        the order's official issued_on date, not the file upload time.
+        """
         if not ids:
             return []
-        return list(self.db.scalars(select(Evidence).where(Evidence.measure_id.in_(ids))))
+        active = assignments_for(self.db, ids)
+        stmt = (
+            select(Execution.measure_id, Execution.submitted_by_user_id, Execution.submitted_at, Order.issued_on)
+            .join(Order, Execution.order_id == Order.id)
+            .join(
+                OrderVersion,
+                and_(
+                    Execution.order_version_id == OrderVersion.id,
+                    OrderVersion.order_id == Order.id,
+                    Execution.submitted_sha256 == OrderVersion.sha256,
+                ),
+            )
+            .where(
+                Execution.measure_id.in_(ids),
+                Execution.period == period,
+                Execution.status == "approved",
+                Execution.document_changed.is_(False),
+                Execution.submitted_at.is_not(None),
+            )
+        )
+        result = []
+        for measure_id, uid, submitted_at, issued_on in self.db.execute(stmt):
+            if uid in active.get(measure_id, set()) and submitted_at.date() <= as_of:
+                result.append(SimpleNamespace(
+                    measure_id=measure_id,
+                    submitted_at=submitted_at,
+                    document_date=issued_on,
+                ))
+        return result
 
     def deadline_changes(self, ids: set[str], as_of: date) -> list[DeadlineChange]:
         if not ids:
@@ -134,10 +172,8 @@ class ManagementDashboardRepository:
     def risks(self, program_ids: set[str], branch: set[str], linked: set[str]) -> list[Risk]:
         if not program_ids:
             return []
-        stmt = select(Risk).where(
-            Risk.program_id.in_(program_ids),
-            or_(Risk.owner_department_id.in_(branch), Risk.id.in_(linked)),
-        ).order_by(Risk.program_id, Risk.id)
+        # A risk can belong to measures in several programs. Limit it to visible links.
+        stmt = select(Risk).where(Risk.id.in_(linked)).order_by(Risk.id)
         return list(self.db.scalars(stmt))
 
     def all_covered_risks(self, program_ids: set[str]) -> set[str]:

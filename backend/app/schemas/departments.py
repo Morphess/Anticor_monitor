@@ -1,4 +1,7 @@
 """Вхідні/вихідні схеми підрозділів із підтримкою ієрархії parent_id."""
+
+from __future__ import annotations
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -9,26 +12,33 @@ class DepartmentCreate(BaseModel):
     name: str = Field(min_length=1)
     department_type: str = Field(min_length=1, max_length=50)
     notes: str = ""
-<<<<<<< HEAD
+
     # None означає кореневий підрозділ.
-=======
-    # Підпорядкованість: код вищого підрозділу; None — верхній рівень.
->>>>>>> f5ebfe2abbde2cbf98b13f619b74ebb1fa49b2c7
-    parent_id: str | None = Field(default=None, min_length=1, max_length=10)
+    parent_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=10,
+    )
 
 
 class DepartmentUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str | None = Field(default=None, min_length=1)
-    department_type: str | None = Field(default=None, min_length=1, max_length=50)
+    department_type: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=50,
+    )
     notes: str | None = None
-<<<<<<< HEAD
-    # Поле можна не передавати (не змінювати) або передати null (зробити кореневим).
-=======
-    # null — зробити підрозділ верхнього рівня.
->>>>>>> f5ebfe2abbde2cbf98b13f619b74ebb1fa49b2c7
-    parent_id: str | None = Field(default=None, min_length=1, max_length=10)
+
+    # Поле можна не передавати (залишити без змін)
+    # або передати null (зробити підрозділ кореневим).
+    parent_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=10,
+    )
 
 
 class DepartmentRead(BaseModel):
@@ -38,8 +48,7 @@ class DepartmentRead(BaseModel):
     name: str
     department_type: str
     notes: str
-<<<<<<< HEAD
-    parent_id: str | None
+    parent_id: str | None = None
 
 
 class DepartmentTreeRead(DepartmentRead):
@@ -47,6 +56,3 @@ class DepartmentTreeRead(DepartmentRead):
 
 
 DepartmentTreeRead.model_rebuild()
-=======
-    parent_id: str | None = None
->>>>>>> f5ebfe2abbde2cbf98b13f619b74ebb1fa49b2c7

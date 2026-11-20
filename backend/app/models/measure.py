@@ -145,11 +145,6 @@ class Measure(Base):
         "Execution", back_populates="measure"
     )
 
-    # Підтвердні документи.
-    evidences: Mapped[list["Evidence"]] = relationship(
-        "Evidence", back_populates="measure"
-    )
-
     # Рішення про перенесення строків.
     deadline_changes: Mapped[list["DeadlineChange"]] = relationship(
         "DeadlineChange", back_populates="measure"

@@ -1,4 +1,4 @@
-"""Аудит відхилених номерів наказів, які VYK вводив у Evidence."""
+"""Аудит неіснуючих номерів наказів, які VYK ввів у заявці на виконання."""
 from __future__ import annotations
 from datetime import datetime
 from sqlalchemy import DateTime, ForeignKey, Integer, String, func

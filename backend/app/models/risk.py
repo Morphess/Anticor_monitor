@@ -73,11 +73,6 @@ class Risk(Base):
     # Дата, до якої потрібно досягнути цілі.
     target_date: Mapped[date] = mapped_column(Date, nullable=False)
 
-    program_id: Mapped[str] = mapped_column(
-        ForeignKey("programs.id"),
-        nullable=False,
-        index=True,
-    )
 
     # ORM-доступ до підрозділу-власника ризику.
     owner_department: Mapped["Department"] = relationship("Department")

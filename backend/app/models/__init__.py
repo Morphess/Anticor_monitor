@@ -10,7 +10,6 @@ from .risk import Risk
 from .risk_measurement import RiskMeasurement
 from .measure import Measure, MeasureCollaborator
 from .execution import Execution
-from .evidence import Evidence
 from .deadline_change import DeadlineChange
 from .action_log import ActionLog
 from .report import Report
@@ -33,7 +32,6 @@ __all__ = [
     "Measure",
     "MeasureCollaborator",
     "Execution",
-    "Evidence",
     "DeadlineChange",
     "ActionLog",
     "Report",

@@ -15,8 +15,6 @@ from app.database.db_connection import get_db, engine
 
 from app.core.audit import enable_audit
 
-from app.web.pages import router as pages_router
-
 from app.api.auth import router as auth_router
 from app.api.users import router as users_router
 from app.api.coordinator_users import router as coordinator_users_router
@@ -26,7 +24,6 @@ from app.api.sections import router as sections_router
 from app.api.measures import router as measures_router
 from app.api.risks import router as risks_router
 from app.api.execution import router as execution_router
-from app.api.evidences import router as evidences_router
 from app.api.deadline_changes import router as deadline_changes_router
 from app.api.reports import router as reports_router
 from app.api.action_logs import router as action_logs_router
@@ -38,7 +35,7 @@ from app.api.dashboard import router as dashboard_router
 from app.api.deadline_reminders import router as deadline_reminders_router
 from app.api.order_change_alerts import router as order_change_alerts_router
 from app.api.management_dashboard import router as management_dashboard_router
-from app.api.departments import router as departments_router
+from app.web.frontend_pages import FRONTEND_DIR, router as frontend_router
 
 # Налаштування логування
 logger = logging.getLogger(__name__)
@@ -99,7 +96,6 @@ app.include_router(sections_router, prefix="/api")
 app.include_router(measures_router, prefix="/api")
 app.include_router(risks_router, prefix="/api")
 app.include_router(execution_router, prefix="/api")
-app.include_router(evidences_router, prefix="/api")
 app.include_router(deadline_changes_router, prefix="/api")
 app.include_router(reports_router, prefix="/api")
 app.include_router(action_logs_router, prefix="/api")
@@ -112,12 +108,7 @@ app.include_router(dashboard_router, prefix="/api")
 app.include_router(deadline_reminders_router, prefix="/api")
 app.include_router(order_change_alerts_router, prefix="/api")
 app.include_router(management_dashboard_router, prefix="/api")
-<<<<<<< HEAD
-app.include_router(departments_router, prefix="/api")
-=======
-# HTML-сторінки кабінетів (фронтенд цієї гілки).
-app.include_router(pages_router)
->>>>>>> f5ebfe2abbde2cbf98b13f619b74ebb1fa49b2c7
+app.include_router(frontend_router)
 
 
 # HTML-шаблони

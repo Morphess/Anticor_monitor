@@ -21,6 +21,20 @@ _HIGH_RISK = {"high", "critical", "високий", "критичний"}
 _WORDS = re.compile(r"[^\W\d_]{4,}", re.UNICODE)
 _URL = re.compile(r"(?:https?://|www\.)", re.IGNORECASE)
 
+
+def _effective_state(execution):
+    """Legacy RF rules evaluate reported completion, not approval workflow codes."""
+    if execution is None:
+        return None
+    status = execution.status
+    if status == "approved" and not getattr(execution, "document_changed", False):
+        return getattr(execution, "outcome_status", None) or "completed"
+    if status == "rejected":
+        return "not_completed"
+    if status == "pending":
+        return "in_progress"
+    return status  # old pre-migration instances, if used by legacy tests
+
 _MESSAGES = {
     "RF1": "Прострочений захід: строк за програмою минув, захід не виконано",
     "RF2": "Немає підтвердних матеріалів для виконаного або частково виконаного заходу",
@@ -65,7 +79,7 @@ def _is_not_due(measure: Any, execution: Any, end: date) -> bool:
         measure.deadline_type == "date"
         and measure.deadline_on is not None
         and measure.deadline_on > end
-        and (execution is None or execution.status not in _FINISHED)
+        and (execution is None or _effective_state(execution) not in _FINISHED)
     )
 
 
@@ -74,14 +88,14 @@ def _is_overdue(measure: Any, execution: Any, end: date) -> bool:
         measure.deadline_type == "date"
         and measure.deadline_on is not None
         and measure.deadline_on <= end
-        and (execution is None or execution.status not in _COMPLETED)
+        and (execution is None or _effective_state(execution) not in _COMPLETED)
     )
 
 
 def _report_not_completed(measure: Any, execution: Any, end: date) -> bool:
     return (
         not _is_not_due(measure, execution, end)
-        and (execution is None or execution.status not in _FINISHED)
+        and (execution is None or _effective_state(execution) not in _FINISHED)
     )
 
 
@@ -130,7 +144,7 @@ def detect_risk_flags(
     as_of: date,
     measures: Iterable[Any],
     executions: Iterable[Any],
-    evidences: Iterable[Any],
+    confirmed_orders: Iterable[Any],
     deadline_changes: Iterable[Any],
     risks: Iterable[Any],
     measurements: Iterable[Any],
@@ -149,10 +163,10 @@ def detect_risk_flags(
     executions_by_id = {
         row.measure_id: row for row in executions if row.period == period
     }
-    ev_by_measure = defaultdict(list)
-    for ev in evidences:
-        if ev.uploaded_at is None or ev.uploaded_at.date() <= as_of:
-            ev_by_measure[ev.measure_id].append(ev)
+    orders_by_measure = defaultdict(list)
+    for order in confirmed_orders:
+        if order.submitted_at is None or order.submitted_at.date() <= as_of:
+            orders_by_measure[order.measure_id].append(order)
 
     deadline_by_measure = Counter()
     for change in deadline_changes:
@@ -185,10 +199,10 @@ def detect_risk_flags(
 
     for measure in measures:
         execution = executions_by_id.get(measure.id)
-        state = execution.status if execution else None
+        state = _effective_state(execution)
         finished = state in _FINISHED
         description = (execution.result_description or "").strip() if execution else ""
-        ev = ev_by_measure.get(measure.id, [])
+        proof_orders = orders_by_measure.get(measure.id, [])
         not_due = _is_not_due(measure, execution, period_end)
 
         # RF1 — використовуємо первинний строк програми, а не перенесений.
@@ -198,7 +212,7 @@ def detect_risk_flags(
                 overdue_by_department[measure.responsible_department_id].append(measure.id)
 
         # RF2 — виконання без наданих підтвердних матеріалів.
-        if finished and not ev:
+        if finished and not proof_orders:
             add("RF2", "zakhid", measure.id, "підтвердних матеріалів: 0")
 
         # RF3 — другий розділ, захід виконано, а індикатор ризику майже стоїть.
@@ -241,10 +255,10 @@ def detect_risk_flags(
         # RF7b — кожен доказ має дату після фактичного виконання.
         if (
             measure.deadline_type == "date" and execution is not None
-            and execution.completed_on is not None and ev
-            and all(e.document_date is not None and e.document_date > execution.completed_on for e in ev)
+            and execution.completed_on is not None and proof_orders
+            and all(o.document_date is not None and o.document_date > execution.completed_on for o in proof_orders)
         ):
-            first_date = min(e.document_date for e in ev)
+            first_date = min(o.document_date for o in proof_orders)
             add("RF7b", "zakhid", measure.id,
                 f"найраніший документ {first_date}, виконання {execution.completed_on}")
 

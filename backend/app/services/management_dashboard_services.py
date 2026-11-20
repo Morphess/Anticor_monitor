@@ -34,9 +34,30 @@ def default_period(day: date) -> str:
     return f"{day.year}-H{1 if day.month <= 6 else 2}"
 
 
+def _execution_outcome(execution) -> str:
+    """Map new review status to legacy KPI categories without false completion."""
+    if execution is None:
+        return "not_started"
+    if execution.status == "approved" and not execution.document_changed:
+        reported = (execution.outcome_status or "completed").lower()
+        if reported in {"completed", "vykonano"}:
+            return "completed"
+        if reported in {"partial", "chastkovo"}:
+            return "partial"
+        if reported in {"not_completed", "in_progress", "not_started"}:
+            return reported
+        return "completed"
+    if execution.status == "pending":
+        return "in_progress"
+    if execution.status == "rejected":
+        return "not_completed"
+    return "not_started"
+
+
 def _approved_completed(execution) -> bool:
-    return bool(execution and execution.status == "completed"
-                and execution.approved_by_coordinator)
+    return bool(execution and execution.status == "approved"
+                and not execution.document_changed
+                and _execution_outcome(execution) == "completed")
 
 
 def _due(measure, execution, day: date) -> bool:
@@ -45,7 +66,7 @@ def _due(measure, execution, day: date) -> bool:
 
 
 def _pending(execution) -> bool:
-    return bool(execution and not execution.approved_by_coordinator
+    return bool(execution and execution.status == "pending"
                 and execution.submitted_at is not None)
 
 
@@ -59,7 +80,7 @@ class Context:
     as_of: date
     measures: list
     executions: dict
-    evidences: list
+    confirmed_orders: list
     deadline_changes: list
     risks: list
     measurements: list
@@ -145,13 +166,8 @@ class ManagementDashboardService:
         ids = {measure.id for measure in visible}
         linked = {measure.risk_id for measure in visible if measure.risk_id}
         risk_candidates = self.repo.risks(set(programs), branch, linked)
-        risks = []
-        for risk in risk_candidates:
-            if risk.id in linked or (
-                risk.owner_department_id in branch
-                and bool(dispatch.get(risk.program_id, set()) & tree.ancestors(risk.owner_department_id))
-            ):
-                risks.append(risk)
+        # Independent risks have no program_id; visible measures determine scope.
+        risks = [risk for risk in risk_candidates if risk.id in linked]
         risk_ids = {r.id for r in risks}
         names = self.repo.departments(branch)
         return Context(
@@ -159,7 +175,7 @@ class ManagementDashboardService:
             department_name=names.get(actor.department_id, actor.department_id),
             branch=branch, programs=programs, period=period, as_of=as_of,
             measures=visible, executions=self.repo.executions(ids, period),
-            evidences=self.repo.evidences(ids, as_of),
+            confirmed_orders=self.repo.confirmed_orders(ids, period, as_of),
             deadline_changes=self.repo.deadline_changes(ids, as_of),
             risks=risks, measurements=self.repo.measurements(risk_ids, as_of),
             covered_risks=self.repo.all_covered_risks(set(programs)),
@@ -170,8 +186,14 @@ class ManagementDashboardService:
     @staticmethod
     def _risk_items(ctx: Context) -> list[ManagementRisk]:
         latest = {}
-        for item in ctx.measurements:  # Repository sorts descending by measured_on
+        for item in ctx.measurements:
             latest.setdefault(item.risk_id, item)
+        # Risk can appear in several programs. Duplicate output per program,
+        # not the SQL risk record, so ManagementRisk still has program_id.
+        risk_programs: dict[str, set[str]] = defaultdict(set)
+        for measure in ctx.measures:
+            if measure.risk_id is not None:
+                risk_programs[measure.risk_id].add(measure.program_id)
         result = []
         for risk in ctx.risks:
             measurement = latest.get(risk.id)
@@ -189,17 +211,18 @@ class ManagementDashboardService:
                     trend = "worsened"
                 reached = (value <= target if risk.indicator_direction == "decrease"
                            else value >= target)
-            result.append(ManagementRisk(
-                program_id=risk.program_id, risk_id=risk.id, title=risk.title,
-                level=risk.level, owner_department_id=(risk.owner_department_id
-                    if risk.owner_department_id in ctx.branch else None),
-                indicator_name=risk.indicator_name,
-                indicator_direction=risk.indicator_direction,
-                baseline=baseline, target=target,
-                actual=value, measured_on=measurement.measured_on if measurement else None,
-                trend=trend, target_reached=reached,
-                has_measures_in_program=risk.id in ctx.covered_risks,
-            ))
+            for pid in sorted(risk_programs.get(risk.id, ())):
+                result.append(ManagementRisk(
+                    program_id=pid, risk_id=risk.id, title=risk.title,
+                    level=risk.level, owner_department_id=(risk.owner_department_id
+                        if risk.owner_department_id in ctx.branch else None),
+                    indicator_name=risk.indicator_name,
+                    indicator_direction=risk.indicator_direction,
+                    baseline=baseline, target=target,
+                    actual=value, measured_on=measurement.measured_on if measurement else None,
+                    trend=trend, target_reached=reached,
+                    has_measures_in_program=True,
+                ))
         return result
 
     @staticmethod
@@ -219,7 +242,7 @@ class ManagementDashboardService:
                 responsible_department_id=(measure.responsible_department_id
                     if measure.responsible_department_id in ctx.branch else None),
                 deadline_on=measure.deadline_on, days_left=days,
-                status=execution.status if execution else "not_started",
+                status=_execution_outcome(execution),
                 approved=bool(execution and execution.approved_by_coordinator),
                 category="overdue" if days < 0 else "upcoming",
             ))
@@ -233,7 +256,7 @@ class ManagementDashboardService:
         assigned = self.repo.assigned_units({m.id for m in ctx.measures})
         for measure in ctx.measures:
             ex = ctx.executions.get(measure.id)
-            state = ex.status if ex else "not_started"
+            state = _execution_outcome(ex)
             states[state] += 1
             dept = measure.responsible_department_id
             # Захід вищого рівня, доручений відділу гілки, рахуємо за цим відділом.
@@ -252,7 +275,7 @@ class ManagementDashboardService:
                 total=len(measures),
                 approved_completed=sum(_approved_completed(ctx.executions.get(m.id)) for m in measures),
                 overdue=sum(_due(m, ctx.executions.get(m.id), as_of) for m in measures),
-                awaiting_approval=sum(_pending(ctx.executions.get(m.id)) for m in measures),
+                awaiting_approval=sum((ctx.executions[m.id].pending_count if m.id in ctx.executions else 0) for m in measures),
             ))
         approved_count = sum(_approved_completed(ctx.executions.get(m.id)) for m in ctx.measures)
         risk_items = self._risk_items(ctx)
@@ -264,12 +287,12 @@ class ManagementDashboardService:
             completed=states["completed"], approved_completed=approved_count,
             partial=states["partial"], in_progress=states["in_progress"],
             not_completed=states["not_completed"], not_started=states["not_started"],
-            awaiting_approval=sum(_pending(ex) for ex in ctx.executions.values()),
+            awaiting_approval=sum((ex.pending_count if ex is not None else 0) for ex in ctx.executions.values()),
             overdue=sum(item.category == "overdue" for item in deadlines),
             due_soon=sum(item.category == "upcoming" for item in deadlines),
             approved_completion_percent=round(100 * approved_count / count, 1) if count else 0.0,
-            high_risks=sum(r.level == "high" for r in risk_items),
-            critical_risks=sum(r.level == "critical" for r in risk_items),
+            high_risks=len({r.risk_id for r in risk_items if r.level == "high"}),
+            critical_risks=len({r.risk_id for r in risk_items if r.level == "critical"}),
             departments=rows,
             scope="agency" if ctx.agency else "department",
         )
@@ -330,7 +353,7 @@ class ManagementDashboardService:
                                 for u in unit_ids],
                 deadline_type=measure.deadline_type, deadline_on=measure.deadline_on,
                 deadline_description=measure.deadline_description,
-                status=ex.status if ex else "not_started",
+                status=_execution_outcome(ex),
                 approved=bool(ex and ex.approved_by_coordinator),
                 submitted_at=ex.submitted_at if ex else None,
                 completed_on=ex.completed_on if ex else None,
@@ -364,8 +387,7 @@ class ManagementDashboardService:
                 as_of=ctx.as_of,
             )
 
-        ev_ids = {ev.measure_id for ev in ctx.evidences
-                  if ev.uploaded_at is None or ev.uploaded_at.date() <= as_of}
+        confirmed_order_ids = {order.measure_id for order in ctx.confirmed_orders}
         for measure in ctx.measures:
             ex = ctx.executions.get(measure.id)
             if _due(measure, ex, as_of):
@@ -387,12 +409,13 @@ class ManagementDashboardService:
                     "medium", "Виконання очікує погодження",
                     f"Стан {ex.status}; подано {ex.submitted_at}; погодження KOORD відсутнє.",
                     "Перевірити, чи координатор розглянув поданий результат.")
-            if ex and ex.status in {"completed", "partial"} and measure.id not in ev_ids:
+            if (_execution_outcome(ex) in {"completed", "partial"}
+                    and measure.id not in confirmed_order_ids):
                 add("EV_MISSING", measure.program_id, "zakhid", measure.id,
                     "high", "Немає підтвердних матеріалів",
                     f"Стан заходу {ex.status}, але підтвердження відсутнє на дату зрізу.",
                     "Перевірити достатність доказів та обґрунтованість статусу.")
-            if (ex and ex.status in {"completed", "partial"}
+            if (ex and _execution_outcome(ex) in {"completed", "partial"}
                     and ex.indicator_actual is not None and measure.indicator_target is not None
                     and Decimal(str(ex.indicator_actual)) < Decimal(str(measure.indicator_target))):
                 add("INDICATOR_BELOW", measure.program_id, "zakhid", measure.id,
@@ -445,7 +468,8 @@ class ManagementDashboardService:
             add("DOC_CHANGED", measure_program[mid], "order_change_alert", str(alert["id"]),
                 "high" if approved else "medium",
                 "Змінено наказ, використаний як підтвердження",
-                f"Захід {mid}; повідомлення #{alert['id']}; Evidence {alert['evidence_id']}; "
+                f"Захід {mid}; повідомлення #{alert['id']}; "
+                f"окреме подання #{alert['execution_id']}; "
                 f"стара версія #{alert['previous_version_id']}, "
                 f"нова #{alert['new_version_id']}; "
                 f"погодження на момент зміни: {'так' if approved else 'ні'}.",
@@ -458,15 +482,12 @@ class ManagementDashboardService:
                 program_measures = [m for m in ctx.measures if m.program_id == pid]
                 measures_ids = {m.id for m in program_measures}
                 linked_ids = {m.risk_id for m in program_measures if m.risk_id}
-                relevant_risks = [r for r in ctx.risks if r.program_id == pid and (
-                    r.id in linked_ids or
-                    (r.id not in ctx.covered_risks and r.owner_department_id in ctx.branch)
-                )]
+                relevant_risks = [r for r in ctx.risks if r.id in linked_ids]
                 visible_risk_ids = {r.id for r in relevant_risks}
                 snapshot = {
                     "measures": program_measures,
                     "executions": [e for mid, e in ctx.executions.items() if mid in measures_ids],
-                    "evidences": [e for e in ctx.evidences if e.measure_id in measures_ids],
+                    "confirmed_orders": [o for o in ctx.confirmed_orders if o.measure_id in measures_ids],
                     "deadline_changes": [d for d in ctx.deadline_changes if d.measure_id in measures_ids],
                     "risks": relevant_risks,
                     "measurements": [r for r in ctx.measurements if

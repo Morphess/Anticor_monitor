@@ -1,50 +1,79 @@
 from __future__ import annotations
+
 from sqlalchemy import ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from app.database.base import Base
 
 
-# Справжній обліковий запис для входу в FastAPI.
+# Обліковий запис користувача для входу в FastAPI.
 class User(Base):
-    # Ім’я таблиці в PostgreSQL, з якою працює ця модель.
     __tablename__ = "users"
 
-    # Автоматично згенерований числовий ID облікового запису.
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    # Унікальний логін користувача, індексований для швидкого пошуку.
-    login: Mapped[str] = mapped_column(
-        String(100), unique=True, index=True, nullable=False
+    # Унікальний числовий ID користувача.
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        autoincrement=True,
     )
-    # Безпечно обчислений хеш пароля; ніколи не зберігай відкритий пароль.
-    password_hash: Mapped[str] = mapped_column(
-        String(255), nullable=False
-    )  # Argon2/bcrypt, NOT plaintext
-    # Код системної ролі (FK → roles.id).
-    role_id: Mapped[str] = mapped_column(ForeignKey("roles.id"), nullable=False)
-    # Програма користувача; може бути NULL для загальносистемного адміністратора.
-    program_id: Mapped[str | None] = mapped_column(
-        ForeignKey("programs.id"), nullable=True
-    )
-    # Підрозділ користувача; необов’язково.
-    department_id: Mapped[str | None] = mapped_column(
-        ForeignKey("departments.id"), nullable=True
-    )
-    # Посада користувача; необов’язково.
-    position: Mapped[str | None] = mapped_column(Text)
 
-    # ORM-доступ до ролі користувача (об’єкт Role).
-    role: Mapped["Role"] = relationship("Role", back_populates="users")
-    # ORM-доступ до програми користувача (об’єкт Program).
+    # Логін користувача.
+    login: Mapped[str] = mapped_column(
+        String(100),
+        unique=True,
+        index=True,
+        nullable=False,
+    )
+
+    # Хеш пароля (Argon2 або bcrypt).
+    password_hash: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    # Роль користувача: ADMIN, MAIN_KOORD, KOORD,
+    # VYK, KER або ANAL.
+    role_id: Mapped[str] = mapped_column(
+        ForeignKey("roles.id"),
+        nullable=False,
+    )
+
+    # Програма користувача (необов'язковий зв'язок).
+    program_id: Mapped[str | None] = mapped_column(
+        ForeignKey("programs.id"),
+        nullable=True,
+    )
+
+    # Підрозділ користувача.
+    department_id: Mapped[str | None] = mapped_column(
+        ForeignKey("departments.id"),
+        nullable=True,
+    )
+
+    # Посада користувача.
+    position: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    # Зв'язок із роллю.
+    role: Mapped["Role"] = relationship(
+        "Role",
+        back_populates="users",
+    )
+
+    # Зв'язок із програмою.
+    # Явно вказуємо зовнішній ключ, щоб SQLAlchemy
+    # не плутав users.program_id із
+    # programs.created_by_user_id.
     program: Mapped["Program | None"] = relationship(
         "Program",
         back_populates="users",
         foreign_keys=[program_id],
     )
-<<<<<<< HEAD
 
-=======
->>>>>>> f5ebfe2abbde2cbf98b13f619b74ebb1fa49b2c7
-    # ORM-доступ до підрозділу користувача (об’єкт Department).
+    # Зв'язок із підрозділом.
     department: Mapped["Department | None"] = relationship(
-        "Department", back_populates="users"
+        "Department",
+        back_populates="users",
     )

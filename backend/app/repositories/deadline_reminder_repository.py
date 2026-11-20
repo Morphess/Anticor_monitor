@@ -40,20 +40,17 @@ class DeadlineReminderRepository:
         return list(self.db.scalars(stmt))
 
     def approved_completed_ids(self, measure_ids: set[str]) -> set[str]:
-        """Разові заходи з погодженим 'completed' не потребують нагадувань.
-
-        Перевіряємо всі періоди: для заходу deadline_type='date' встановлено
-        один термін, і вже погоджене завершення не треба нагадувати повторно.
-        """
+        """Suppress reminders only when *every current assignee* has approved."""
         if not measure_ids:
             return set()
-        stmt = (
-            select(Execution.measure_id)
-            .where(
-                Execution.measure_id.in_(measure_ids),
-                Execution.status == "completed",
-                Execution.approved_by_coordinator.is_(True),
-            )
-            .distinct()
-        )
-        return set(self.db.scalars(stmt))
+        from app.services.execution_summary import summaries
+        rows = list(self.db.scalars(select(Execution).where(
+            Execution.measure_id.in_(measure_ids)
+        )))
+        approved = set()
+        for period in {row.period for row in rows}:
+            grouped = summaries(self.db, measure_ids, period,
+                                [row for row in rows if row.period == period])
+            approved.update(mid for mid, record in grouped.items()
+                            if record.status == 'approved' and record.outcome_status == 'completed')
+        return approved

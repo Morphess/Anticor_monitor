@@ -1,12 +1,17 @@
 """HTTP-шар: програми до підрозділів -> підрозділи -> конкретні виконавці."""
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user
 from app.database.db_connection import get_db
 from app.models.user import User
+from app.models.program_workflow import ProgramDepartment, MeasureAssignment
+from app.models.department import Department
+from app.models.measure import Measure
+from app.models.execution import Execution
 from app.schemas.programs import ProgramRead
 from app.schemas.program_workflow import (
     AssignMeasureIn,
@@ -53,6 +58,28 @@ def handle(action):
         return action()
     except WorkflowError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+
+@router.get("/programs/{program_id}/dispatches", summary="MAIN_KOORD: поточні направлення програми")
+def list_program_dispatches(
+    program_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Read-only; never disclose another owner's program dispatches."""
+    if user.role_id != "MAIN_KOORD":
+        raise HTTPException(status_code=403, detail="Доступно лише власнику програми")
+    program = handle(lambda: ProgramWorkflowService(db).visible_program(program_id, user))
+    if program.created_by_user_id != user.id:
+        raise HTTPException(status_code=403, detail="Це не твоя програма")
+    rows = db.execute(
+        select(ProgramDepartment.department_id, Department.name, ProgramDepartment.sent_at)
+        .join(Department, Department.id == ProgramDepartment.department_id)
+        .where(ProgramDepartment.program_id == program_id)
+        .order_by(ProgramDepartment.sent_at)
+    ).all()
+    return [{"department_id": dept_id, "department_name": name, "sent_at": sent_at}
+            for dept_id, name, sent_at in rows]
 
 
 @router.get(
@@ -306,3 +333,130 @@ def unassign_measure(
 ):
     """Відкликати особисте призначення виконавця; успіх — 204."""
     handle(lambda: ProgramWorkflowService(db).revoke(measure_id, user_id, user))
+
+
+@router.get("/measures/{measure_id}/assignment-people",
+            summary="Призначені виконавці з логінами; only visible KOORD/MAIN_KOORD")
+def assignment_people(
+    measure_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if user.role_id not in {"KOORD", "MAIN_KOORD"}:
+        raise HTTPException(status_code=403, detail="Недостатньо прав")
+    assignments = handle(lambda: ProgramWorkflowService(db).list_assignments(measure_id, user))
+    output = []
+    for assignment in assignments:
+        executor = db.get(User, assignment.user_id)
+        output.append({
+            "user_id": assignment.user_id,
+            "login": executor.login if executor else f"#{assignment.user_id}",
+            "department_id": assignment.department_id,
+        })
+    return output
+
+
+@router.get('/programs/{program_id}/progress', summary='MAIN_KOORD: прогрес подань за направленими підрозділами')
+def program_progress(
+    program_id: str,
+    period: str = Query(..., pattern=r'^\d{4}-H[12]$'),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Read-only. One executor is counted in the nearest dispatched department.
+
+    An assignment counts only while the user is an executor of that department.
+    No assignments => no fictitious approved progress.
+    """
+    if user.role_id != 'MAIN_KOORD':
+        raise HTTPException(status_code=403, detail='Тільки головний координатор')
+    workflow = ProgramWorkflowService(db)
+    program = handle(lambda: workflow.visible_program(program_id, user))
+    if program.created_by_user_id != user.id:
+        raise HTTPException(status_code=403, detail='Не ваша програма')
+
+    sent_rows = db.execute(
+        select(ProgramDepartment.department_id, Department.name)
+        .join(Department, Department.id == ProgramDepartment.department_id)
+        .where(ProgramDepartment.program_id == program_id)
+        .order_by(Department.name, ProgramDepartment.department_id)
+    ).all()
+    measure_ids = set(db.scalars(select(Measure.id).where(Measure.program_id == program_id)))
+    result = {
+        'program_id': program_id,
+        'period': period,
+        'measures_total': len(measure_ids),
+        'unassigned_measures': len(measure_ids),
+        'departments': [],
+    }
+    if not sent_rows or not measure_ids:
+        result['departments'] = [
+            {'department_id': dep_id, 'department_name': name,
+             'assigned': 0, 'approved': 0, 'pending': 0,
+             'rejected': 0, 'not_submitted': 0,
+             'measures_total': 0, 'measures_approved': 0, 'measures': []}
+            for dep_id, name in sent_rows
+        ]
+        return result
+
+    # The router already verifies ownership; the tree is used ONLY to group
+    # assignments within explicitly dispatched departments, including descendants.
+    tree = workflow.tree
+    recipients = {dep_id: name for dep_id, name in sent_rows}
+    grouped = {dep_id: {} for dep_id in recipients}
+    assigned_measures = set()
+    assignments = db.execute(
+        select(MeasureAssignment.measure_id, MeasureAssignment.user_id, MeasureAssignment.department_id)
+        .join(User, User.id == MeasureAssignment.user_id)
+        .where(
+            MeasureAssignment.measure_id.in_(measure_ids),
+            User.role_id == 'VYK',
+            User.department_id == MeasureAssignment.department_id,
+        )
+    ).all()
+    submissions = {
+        (entry.measure_id, entry.submitted_by_user_id): entry
+        for entry in db.scalars(select(Execution).where(
+            Execution.measure_id.in_(measure_ids), Execution.period == period
+        ))
+    }
+    for measure_id, executor_id, assigned_dept in assignments:
+        ancestors = tree.ancestors(assigned_dept)
+        candidates = [d for d in recipients if d in ancestors]
+        if not candidates:
+            continue
+        # A nested dispatch must not double-count the same executor.
+        recipient = max(candidates, key=lambda d: len(tree.ancestors(d)))
+        stats = grouped[recipient].setdefault(measure_id, {
+            'measure_id': measure_id, 'assigned': 0, 'approved': 0,
+            'pending': 0, 'rejected': 0, 'not_submitted': 0,
+        })
+        assigned_measures.add(measure_id)
+        stats['assigned'] += 1
+        entry = submissions.get((measure_id, executor_id))
+        if entry is None:
+            stats['not_submitted'] += 1
+        elif (entry.status == 'approved' and not entry.document_changed
+              and entry.order_version_id is not None and entry.submitted_sha256):
+            stats['approved'] += 1
+        elif entry.status == 'rejected' and not entry.document_changed:
+            stats['rejected'] += 1
+        else:
+            # Pending, stale documents and inconsistent approved submissions.
+            stats['pending'] += 1
+
+    result['unassigned_measures'] = len(measure_ids - assigned_measures)
+    for dep_id, name in sent_rows:
+        per_measure = sorted(grouped[dep_id].values(), key=lambda row: row['measure_id'])
+        result['departments'].append({
+            'department_id': dep_id, 'department_name': name,
+            'assigned': sum(row['assigned'] for row in per_measure),
+            'approved': sum(row['approved'] for row in per_measure),
+            'pending': sum(row['pending'] for row in per_measure),
+            'rejected': sum(row['rejected'] for row in per_measure),
+            'not_submitted': sum(row['not_submitted'] for row in per_measure),
+            'measures_total': len(per_measure),
+            'measures_approved': sum(row['assigned'] > 0 and row['approved'] == row['assigned'] for row in per_measure),
+            'measures': per_measure,
+        })
+    return result

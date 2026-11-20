@@ -25,6 +25,7 @@ from app.models.report import Report
 from app.models.user import User
 from app.schemas.reports import ReportCreate, ReportRead, ReportUpdate
 from app.services.report_services import ReportError, ReportService
+from app.services.report_pdf import PDFExportError, pdf_export
 from app.schemas.report_portal import PortalHalfYearReport
 from app.services.report_generation_service import (
     ReportGenerationService, csv_export, print_html,
@@ -257,6 +258,34 @@ def download_report_csv(
         content=csv_export(snapshot),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/{report_id}/download.pdf", summary="Завантажити PDF збереженої версії звіту")
+def download_report_pdf(
+    report_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_report_role),
+):
+    """PDF exactly from the immutable JSON snapshot; JWT + existing report permissions."""
+    try:
+        report = ReportService(db).get_report(report_id)
+        _ensure_report_access(db, user, report)
+        snapshot = ReportGenerationService(db).read_snapshot(report)
+        data = pdf_export(snapshot, report_id=report.id, version=report.version)
+    except ReportError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    except PDFExportError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    filename = f"report_{report.id}_{report.period}.pdf"
+    return Response(
+        content=data,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 

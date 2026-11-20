@@ -1,4 +1,4 @@
-"""CRUD наказів для розробника + перевірка номера для EvidenceService."""
+"""Order registry CRUD and exact-number lookup."""
 from __future__ import annotations
 
 from sqlalchemy.exc import IntegrityError
@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.models.order import Order
 from app.models.order_version import OrderVersion
-from app.models.evidence import Evidence
+from app.models.execution import Execution
 from sqlalchemy import select
 from app.repositories.order_repository import OrderRepository
 from app.schemas.orders import OrderCheckStatus, OrderCreate, OrderUpdate
@@ -58,8 +58,8 @@ class OrderService:
                 "завантаж нову версію документа", 409,
             )
         if "number" in changes and changes["number"] != order.number:
-            used = self.db.scalar(select(Evidence.id).where(
-                Evidence.order_number == order.number).limit(1))
+            used = self.db.scalar(select(Execution.measure_id).where(
+                Execution.order_id == order.id).limit(1))
             if used is not None:
                 raise OrderError("Номер наказу вже використано в підтвердженнях", 409)
         for name in ("number", "title"):
@@ -80,9 +80,9 @@ class OrderService:
         order = self.get_order(order_id)
         has_version = self.db.scalar(select(OrderVersion.id).where(
             OrderVersion.order_id == order_id).limit(1)) is not None
-        has_evidence = self.db.scalar(select(Evidence.id).where(
-            Evidence.order_number == order.number).limit(1)) is not None
-        if has_version or has_evidence:
+        has_execution = self.db.scalar(select(Execution.measure_id).where(
+            Execution.order_id == order.id).limit(1)) is not None
+        if has_version or has_execution:
             raise OrderError("Не можна видалити наказ із версіями або підтвердженнями", 409)
         try:
             self.repo.delete(order)
@@ -93,7 +93,7 @@ class OrderService:
     def verify_number(self, number: str | None) -> OrderCheckStatus:
         """Пошук за точним номером (після обрізання крайніх пробілів).
 
-        Не створює наказ та не забороняє збереження Evidence.
+        Не створює наказ та не підтверджує виконання.
         """
         cleaned = number.strip() if number is not None else ""
         if not cleaned:

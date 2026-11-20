@@ -40,7 +40,7 @@ class ProgramImportService:
                 raise ProgramImportForbidden("Імпортувати програму може тільки MAIN_KOORD")
 
             owner_user_id, coordinator_department_id = self._resolve_owner(payload, actor)
-            self._validate_database_references(payload, coordinator_department_id)
+            self._validate_database_references(payload, coordinator_department_id, actor.department_id)
 
             program_fields = payload.program.model_dump(
                 exclude={"owner_coordinator_user_id", "coordinator_department_id"}
@@ -112,7 +112,7 @@ class ProgramImportService:
         return actor.id, department_id
 
     def _validate_database_references(
-        self, payload: ProgramImportPayload, coordinator_department_id: str | None
+        self, payload: ProgramImportPayload, coordinator_department_id: str | None, actor_department_id: str | None
     ) -> None:
         repo = self.repository
         if repo.program(payload.program.id) is not None:
@@ -154,10 +154,14 @@ class ProgramImportService:
 
         missing_departments = sorted(d for d in departments if repo.department(d) is None)
         missing_risks = sorted(r for r in risks if repo.risk(r) is None)
+        foreign_risks = sorted(r for r in risks if (risk := repo.risk(r)) is not None
+                               and (not actor_department_id or risk.owner_department_id != actor_department_id))
         errors: list[str] = []
         if missing_departments:
             errors.append("підрозділи: " + ", ".join(missing_departments))
         if missing_risks:
             errors.append("ризики: " + ", ".join(missing_risks))
+        if foreign_risks:
+            errors.append("ризики іншого підрозділу: " + ", ".join(foreign_risks))
         if errors:
             raise ProgramImportInvalidReference("Відсутні записи в БД — " + "; ".join(errors))

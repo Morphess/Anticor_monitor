@@ -15,9 +15,12 @@ from typing import Any
 
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
+from types import SimpleNamespace
+from app.models.order import Order
+from app.models.order_version import OrderVersion
+from app.services.execution_summary import summaries, assignments_for
 
 from app.models.deadline_change import DeadlineChange
-from app.models.evidence import Evidence
 from app.models.invalid_order_reference import InvalidOrderReference
 from app.models.execution import Execution
 from app.models.measure import Measure
@@ -65,8 +68,18 @@ class RiskFlagRepository:
             )
         ))
 
-        risk_query = select(Risk).where(Risk.program_id == program_id)
-        if allowed_risk_department_ids is not None:
+        # Program-level risks come only from measures of this program.
+        # RF7d also sees truly orphaned global risks in the permitted department
+        # (never risks merely assigned to another program).
+        global_covered = select(Measure.risk_id).where(Measure.risk_id.is_not(None))
+        if allowed_risk_department_ids is None:
+            risk_query = select(Risk).where(Risk.id.in_(covered_risk_ids))
+        else:
+            owned_uncovered = (
+                Risk.owner_department_id.in_(allowed_risk_department_ids)
+                & ~Risk.id.in_(global_covered)
+            )
+            risk_query = select(Risk).where(or_(Risk.id.in_(covered_risk_ids), owned_uncovered))
             risk_query = risk_query.where(or_(
                 Risk.owner_department_id.in_(allowed_risk_department_ids),
                 Risk.id.in_(linked_risk_ids),
@@ -90,10 +103,26 @@ class RiskFlagRepository:
                 Execution.period == period,
             )
         ))
-        # Дата завантаження доказу додатково перевіряється детектором.
-        evidences = list(self.db.scalars(
-            select(Evidence).where(Evidence.measure_id.in_(measure_ids))
-        ))
+        # Risk Flags work on one aggregated measure status, never an arbitrary executor.
+        aggregate = summaries(self.db, measure_ids, period, executions)
+        active = assignments_for(self.db, measure_ids)
+        # Доказ для Risk Flags утворюється з погодженого виконання та версії наказу.
+        confirmed_orders = []
+        for submission in executions:
+            if (submission.status != "approved" or submission.document_changed
+                    or submission.submitted_by_user_id not in active.get(submission.measure_id, set())):
+                continue
+            if submission.order_version_id is None or submission.order_id is None:
+                continue
+            version = self.db.get(OrderVersion, submission.order_version_id)
+            order = self.db.get(Order, submission.order_id)
+            if version is None or order is None or version.sha256 != submission.submitted_sha256:
+                continue
+            confirmed_orders.append(SimpleNamespace(
+                measure_id=submission.measure_id,
+                submitted_at=submission.submitted_at,
+                document_date=order.issued_on,
+            ))
         deadline_changes = list(self.db.scalars(
             select(DeadlineChange).where(
                 DeadlineChange.measure_id.in_(measure_ids),
@@ -123,8 +152,8 @@ class RiskFlagRepository:
         return {
             "invalid_order_attempts": invalid_order_attempts,
             "measures": measures,
-            "executions": executions,
-            "evidences": evidences,
+            "executions": list(aggregate.values()),
+            "confirmed_orders": confirmed_orders,
             "deadline_changes": deadline_changes,
             "risks": risks,
             "measurements": measurements,

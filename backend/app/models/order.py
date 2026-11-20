@@ -1,6 +1,6 @@
 """Незалежний реєстр наказів; наповнюється через CRUD API розробником.
 
-Не прив'язаний до Measure: Evidence посилається на наказ тільки номером.
+Не прив'язаний до Measure: Execution посилається на наказ за order_id.
 """
 from __future__ import annotations
 
