@@ -241,7 +241,7 @@
     // Загальний довідник підрозділів належить ADMIN. Не робимо зайвий
     // заборонений HTTP-запит від MAIN_KOORD, KOORD чи VYK.
     if (!Api.me || Api.me.role_id !== "ADMIN") return;
-    const rows = await Api.get("/api/departments/");
+    const rows = await Api.get("/api/departments");
     (rows || []).forEach(function (r) { Api.DEPARTMENTS[r.id] = r.name; });
   };
   Api.deptName = function (id) {

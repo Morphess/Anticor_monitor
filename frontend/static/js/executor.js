@@ -14,14 +14,11 @@
   const formMessage = $("execution-message");
   const openIds = new Set();
   const state = {
-    programs: [], byProgram: {}, measures: [], sections: {}, executions: {}, evidences: {},
-    evidenceListAvailable: true, deadlineReminders: {}, notices: {}, edit: null, loading: false,
+    programs: [], byProgram: {}, measures: [], sections: {}, executions: {},
+    deadlineReminders: {}, notices: {}, edit: null, loading: false,
   };
-  const STATUS_LABELS = {
-    not_started: "Не розпочато", in_progress: "У процесі", partial: "Частково виконано",
-    completed: "Виконано", not_completed: "Не виконано",
-  };
-  const isApproved = (x) => !!(x && x.approved_by_coordinator && x.status === "completed");
+  const isApproved = (x) => !!(x && x.status === "approved" && !x.document_changed);
+  const canSubmit = (x) => !x || !!x.document_changed || x.status === "rejected";
   const status = (m) => Api.statusOf(state.executions[m.id]);
   const safeList = (x) => Array.isArray(x) ? x : [];
   const getDays = (m) => {
@@ -110,9 +107,8 @@
     if (state.measures.length === 1) openIds.add("s:" + state.measures[0].program_id + ":" + state.measures[0].section_id);
   }
   async function fetchReportData() {
-    const [execs, evidenceResult, deadlineResult] = await Promise.all([
+    const [execs, deadlineResult] = await Promise.all([
       Api.executions(period.value),
-      Api.optional(Api.evidences()),
       // Нагадування з сервера — додатковий, необов'язковий модуль.
       // За відсутності API працює локальна індикація за датою з картки заходу.
       Api.optional(Api.get("/api/deadline-reminders/?limit=100&offset=0", { noRedirect: true })),
@@ -120,7 +116,7 @@
     const mineIds = new Set(state.measures.map((m) => m.id));
     state.executions = {};
     safeList(execs).forEach((x) => {
-      if (mineIds.has(x.measure_id)) state.executions[x.measure_id] = x;
+      if (mineIds.has(x.measure_id) && String(x.submitted_by_user_id) === String(Api.me.id)) state.executions[x.measure_id] = x;
     });
     state.deadlineReminders = {};
     if (deadlineResult.ok && deadlineResult.data && Array.isArray(deadlineResult.data.reminders)) {
@@ -128,11 +124,7 @@
         if (mineIds.has(reminder.measure_id)) state.deadlineReminders[reminder.measure_id] = reminder;
       });
     }
-    state.evidences = {};
-    state.evidenceListAvailable = evidenceResult.ok;
-    safeList(evidenceResult.data).forEach((e) => {
-      if (mineIds.has(e.measure_id) && e.order_number) state.evidences[e.measure_id] = e;
-    });
+
   }
   function contextInfo() {
     const me = Api.me || {};
@@ -164,7 +156,7 @@
   }
   function matches(m, p, q) {
     const sec = state.sections[m.section_id];
-    const ev = state.evidences[m.id];
+    const ev = state.executions[m.id];
     return [p.id, p.title, m.id, m.description, m.sequence_number,
       sec && sec.title, ev && ev.order_number].some((v) => String(v || "").toLocaleLowerCase("uk").includes(q));
   }
@@ -282,7 +274,7 @@
   }
   function measureRow(m) {
     const ex = state.executions[m.id];
-    const ev = state.evidences[m.id];
+    const ev = state.executions[m.id];
     const st = status(m);
     const done = isApproved(ex);
     const statusText = done ? "Погоджено координатором. Редагування заблоковане." :
@@ -301,12 +293,12 @@
     const deadline = el("div", {}, [textCell("Строк", deadlineText(m), "executor-deadline-label"), deadlineChip(m)]);
     const evidence = el("div", {}, [
       el("span", { class: "m-label", text: "Наказ: " }),
-      el("span", { class: "executor-evidence-label", text: ev ? "№ " + ev.order_number : state.evidenceListAvailable ? "Ще не додано" : "Дані недоступні" }),
-      ev && ev.order_version_is_current === false ? el("div", { class: "chip soon", text: "Наказ оновлено — перевірте" }) : null,
+      el("span", { class: "executor-evidence-label", text: ev ? "№ " + ev.order_number : "Ще не подано" }),
+      ex && ex.document_changed ? el("div", { class: "chip soon", text: "Наказ оновлено — перевірте" }) : null,
     ]);
     const action = el("div", {}, [
       Api.statusBadge(st), el("span", { class: "executor-status-hint", text: statusText }),
-      !done ? el("button", { type: "button", class: "btn", text: ex ? "Уточнити виконання" : "Внести виконання", onclick: () => openForm(m) }) : null,
+      canSubmit(ex) ? el("button", { type: "button", class: "btn", text: ex ? "Уточнити виконання" : "Внести виконання", onclick: () => openForm(m) }) : null,
       state.notices[m.id] ? el("div", { class: "msg", text: state.notices[m.id] }) : null,
     ]);
     return el("div", { class: "mrow", id: "executor-measure-" + m.id }, [info, deadline, evidence, action]);
@@ -339,8 +331,9 @@
     formMessage.className = "msg err";
   }
   function openForm(m) {
-    if (isApproved(state.executions[m.id])) return;
+    if (!canSubmit(state.executions[m.id])) return;
     state.edit = m;
+    state.editPeriod = period.value;
     const ex = state.executions[m.id];
     const p = state.programs.find((x) => x.id === m.program_id);
     form.reset();
@@ -353,78 +346,38 @@
     const required = String(m.required_evidence || "").trim();
     $("execution-evidence-req").hidden = !required;
     $("execution-evidence-text").textContent = required;
-    form.elements.status.value = ex ? ex.status : "in_progress";
-    form.elements.completed_on.value = ex && ex.completed_on ? ex.completed_on.slice(0, 10) : "";
-    form.elements.indicator_actual.value = ex && ex.indicator_actual != null ? ex.indicator_actual : "";
-    form.elements.result_description.value = ex ? Api.noteOf(ex) : "";
-    form.elements.order_number.value = (state.evidences[m.id] || {}).order_number || "";
+    form.elements.order_number.value = ex && ex.order_number || "";
     formMessage.textContent = "";
     formMessage.className = "msg";
-    saveButton.textContent = ex ? "Оновити виконання" : "Зберегти виконання";
+    saveButton.textContent = ex ? "Надіслати повторно" : "Надіслати на перевірку";
     dialog.showModal();
-  }
-  async function saveEvidence(m, number) {
-    const existing = state.evidences[m.id];
-    if (!number || (existing && Api.normNumber(existing.order_number) === Api.normNumber(number))) return;
-    const evidenceData = { document_type: "Наказ", title: "Наказ № " + number, order_number: number };
-    try {
-      state.evidences[m.id] = existing
-        ? await Api.patch("/api/evidences/" + encodeURIComponent(existing.id), evidenceData)
-        : await Api.post("/api/evidences/", Object.assign({
-            id: ("E" + Date.now().toString(36) + Math.random().toString(36).slice(2)).slice(0, 12),
-            measure_id: m.id,
-          }, evidenceData));
-    } catch (err) {
-      // Якщо наказ відсутній у orders або у нього немає версії — не повідомляємо про успішне підтвердження.
-      throw new Error("Наказ не збережено: " + errorText(err) + ". Перевірте номер і наявність файла наказу в реєстрі.");
-    }
   }
   async function submit(event) {
     event.preventDefault();
     const m = state.edit;
-    if (!m) return;
+    if (!m || saveButton.disabled) return;
     const prev = state.executions[m.id];
-    if (prev && prev.approved_by_coordinator) { formError("Погоджене виконання заблоковане."); return; }
-    if (!form.reportValidity()) return;
-    const s = form.elements.status.value;
-    const desc = form.elements.result_description.value.trim();
-    const completed = form.elements.completed_on.value || null;
-    const number = form.elements.order_number.value.trim();
-    if (s === "completed" && !completed) { formError("Укажіть фактичну дату виконання."); return; }
-    if (!desc) { formError("Додайте опис результату або причину невиконання."); return; }
-    if (number && !state.evidenceListAvailable) {
-      formError("Список підтверджень недоступний. Щоб не створити дублікат, перевірте доступ до /api/evidences/ і повторіть спробу.");
+    if (!canSubmit(prev)) {
+      formError("Подання вже очікує рішення або погоджене. Оновіть дані.");
       return;
     }
-    const body = {
-      status: s, status_label: STATUS_LABELS[s],
-      completed_on: completed, result_description: desc,
-      indicator_actual: form.elements.indicator_actual.value.trim() === "" ? null : Number(form.elements.indicator_actual.value),
-    };
+    if (!form.reportValidity()) return;
+    const number = form.elements.order_number.value.trim();
+    if (!number) { formError("Укажіть номер зареєстрованого наказу."); return; }
+    const body = { measure_id: m.id, period: state.editPeriod, order_number: number };
     saveButton.disabled = true;
-    saveButton.textContent = "Збереження…";
+    saveButton.textContent = "Надсилання…";
     formMessage.textContent = "";
-    let evidenceSaved = false;
     try {
-      const oldEvidence = state.evidences[m.id];
-      if (number && (!oldEvidence || Api.normNumber(oldEvidence.order_number) !== Api.normNumber(number))) {
-        await saveEvidence(m, number);
-        evidenceSaved = true;
-      }
-      state.executions[m.id] = prev
-        ? await Api.patch(Api.executionUrl(m.id, period.value), body)
-        : await Api.post("/api/executions/", Object.assign({ measure_id: m.id, period: period.value }, body));
+      state.executions[m.id] = await Api.post("/api/executions/submit", body);
       dialog.close();
-      toast("Виконання збережено. Погодження координатором — окремий крок.");
-      render();
-      // Перечитати стан із сервера, не покладаючись лише на локальну відповідь PATCH/POST.
+      toast("Виконання подано. Очікуйте рішення координатора.");
       await refresh(false);
     } catch (err) {
-      formError("Не вдалося завершити збереження: " + errorText(err) +
-        (evidenceSaved ? " Підтвердження вже додано, але запис виконання не збережено. Виправте помилку й повторіть спробу." : ""));
+      formError("Не вдалося подати виконання: " + errorText(err));
     } finally {
       saveButton.disabled = false;
-      saveButton.textContent = prev ? "Оновити виконання" : "Зберегти виконання";
+      saveButton.textContent = prev ? "Надіслати повторно" : "Надіслати на перевірку";
     }
   }
   async function init() {
