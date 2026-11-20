@@ -13,7 +13,7 @@ from app.repositories.order_repository import OrderRepository
     "Не задано URL окремої тестової PostgreSQL",
 )
 class OrderScopePostgresTests(unittest.TestCase):
-    def test_filters_orders_before_pagination(self):
+    def test_independent_registry_pagination_and_number_lookup(self):
         engine = create_engine(os.environ["ORDER_TEST_DATABASE_URL"])
 
         try:
@@ -26,36 +26,25 @@ class OrderScopePostgresTests(unittest.TestCase):
                         title text NOT NULL,
                         issued_on date,
                         document_url text,
-                        measure_id varchar(8) NOT NULL,
+
                         created_at timestamptz NOT NULL
                     ) ON COMMIT DROP
                 """))
 
                 connection.execute(text("""
                     INSERT INTO orders
-                        (id, number, title, measure_id, created_at)
+                        (id, number, title, created_at)
                     VALUES
-                        ('OT1', '1', 'Дозволений', 'M01', '2026-01-01'),
-                        ('OT2', '2', 'Чужий', 'M02', '2026-01-02')
+                        ('OT1', '1', 'Перший', '2026-01-01'),
+                        ('OT2', '2', 'Другий', '2026-01-02')
                 """))
 
                 with Session(bind=connection) as db:
                     repo = OrderRepository(db)
 
-                    # Чужий наказ новіший: фільтр має спрацювати до limit.
-                    visible = repo.list_orders(
-                        measure_ids=["M01"],
-                        limit=1,
-                    )
-                    self.assertEqual([order.id for order in visible], ["OT1"])
-
-                    none = repo.list_orders(measure_ids=[])
-                    self.assertEqual(none, [])
-
-                    combined = repo.list_orders(
-                        measure_id="M02",
-                        measure_ids=["M01"],
-                    )
-                    self.assertEqual(combined, [])
+                    self.assertEqual([row.id for row in repo.list_orders(limit=1)], ["OT2"])
+                    self.assertEqual([row.id for row in repo.list_orders(skip=1, limit=1)], ["OT1"])
+                    self.assertEqual(repo.get_by_number("1").id, "OT1")
+                    self.assertIsNone(repo.get_by_number("missing"))
         finally:
             engine.dispose()

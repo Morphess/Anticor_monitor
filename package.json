@@ -1,0 +1,11 @@
+{
+  "name": "bordergroup-e2e",
+  "private": true,
+  "scripts": {
+    "test:e2e": "bash scripts/test-e2e.sh",
+    "test:e2e:runner": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.1"
+  }
+}

@@ -14,6 +14,10 @@ os.environ.setdefault(
 )
 
 from app.api.measures import router as measures_router
+from app.models.user import User
+from app.models.measure import Measure
+from app.models.program import Program
+from app.services.program_workflow_services import ProgramWorkflowService
 from app.core.security import create_access_token
 from app.database.db_connection import get_db
 from app.services.measure_services import MeasureError, MeasureService
@@ -42,16 +46,24 @@ class MeasuresAccessHttpTests(unittest.TestCase):
         self.addCleanup(self.client.close)
 
     def headers_for(self, role_id):
-        self.db.get.return_value = SimpleNamespace(id=7, role_id=role_id)
+        self.db.get.side_effect = lambda model, key: (
+            SimpleNamespace(id=7, role_id=role_id, department_id="D01") if model is User
+            else SimpleNamespace(id="M-1", program_id="TEST-2026") if model is Measure
+            else SimpleNamespace(id="TEST-2026", created_by_user_id=7)
+        )
         token = create_access_token(7)
         return {"Authorization": f"Bearer {token}"}
+
+    def test_admin_cannot_create_measure(self):
+        response = self.client.post("/api/measures/", json=MEASURE, headers=self.headers_for("ADMIN"))
+        self.assertEqual(response.status_code, 403)
 
     def test_list_without_token_returns_401(self):
         response = self.client.get("/api/measures/")
         self.assertEqual(response.status_code, 401)
 
-    def test_member_can_list_measures(self):
-        with patch.object(MeasureService, "list_measures", return_value=[]):
+    def test_member_without_dispatch_sees_empty_measures(self):
+        with patch.object(ProgramWorkflowService, "my_programs", return_value=[]):
             response = self.client.get(
                 "/api/measures/", headers=self.headers_for("VYKON")
             )
@@ -65,21 +77,21 @@ class MeasuresAccessHttpTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 403)
 
-    def test_coordinator_can_delete_measure(self):
+    def test_main_coordinator_can_delete_measure(self):
         with patch.object(MeasureService, "delete_measure") as delete_measure:
             response = self.client.delete(
-                "/api/measures/M-1", headers=self.headers_for("KOORD")
+                "/api/measures/M-1", headers=self.headers_for("MAIN_KOORD")
             )
 
         self.assertEqual(response.status_code, 204)
         delete_measure.assert_called_once_with("M-1")
 
-    def test_admin_can_create_measure(self):
+    def test_main_coordinator_can_create_measure(self):
         with patch.object(MeasureService, "create_measure", return_value=MEASURE):
             response = self.client.post(
                 "/api/measures/",
                 json=MEASURE,
-                headers=self.headers_for("ADMIN"),
+                headers=self.headers_for("MAIN_KOORD"),
             )
 
         self.assertEqual(response.status_code, 201)
@@ -91,18 +103,18 @@ class MeasuresAccessHttpTests(unittest.TestCase):
         response = self.client.post(
             "/api/measures/",
             json=invalid,
-            headers=self.headers_for("ADMIN"),
+            headers=self.headers_for("MAIN_KOORD"),
         )
 
         self.assertEqual(response.status_code, 422)
 
-    def test_coordinator_can_update_measure(self):
+    def test_main_coordinator_can_update_measure(self):
         updated = {**MEASURE, "description": "Оновлений захід"}
         with patch.object(MeasureService, "update_measure", return_value=updated):
             response = self.client.patch(
                 "/api/measures/M-1",
                 json={"description": "Оновлений захід"},
-                headers=self.headers_for("KOORD"),
+                headers=self.headers_for("MAIN_KOORD"),
             )
 
         self.assertEqual(response.status_code, 200)
@@ -117,7 +129,7 @@ class MeasuresAccessHttpTests(unittest.TestCase):
             response = self.client.patch(
                 "/api/measures/ABSENT",
                 json={"description": "Оновлений захід"},
-                headers=self.headers_for("ADMIN"),
+                headers=self.headers_for("MAIN_KOORD"),
             )
 
         self.assertEqual(response.status_code, 404)

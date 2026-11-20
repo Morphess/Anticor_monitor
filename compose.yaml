@@ -40,7 +40,12 @@ services:
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
       DEBUG: ${DEBUG:-false}
       SQL_ECHO: ${SQL_ECHO:-false}
+      ORDER_DOCUMENTS_DIR: /app/storage/orders
+      REPORT_EXPORT_DIR: /app/storage/reports
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in .env}
+    volumes:
+      - order_documents:/app/storage/orders
+      - report_exports:/app/storage/reports
     depends_on:
       db:
         condition: service_healthy
@@ -48,3 +53,5 @@ services:
 volumes:
   postgres_data:
   ollama_data:
+  order_documents:
+  report_exports:

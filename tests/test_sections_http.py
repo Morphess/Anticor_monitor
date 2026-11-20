@@ -33,6 +33,10 @@ class SectionsHttpTests(unittest.TestCase):
         token = create_access_token(7)
         return {"Authorization": f"Bearer {token}"}
 
+    def test_admin_cannot_manage_sections(self):
+        response = self.client.post("/api/sections/", json={"id": "R1", "number": 1, "title": "Test"}, headers=self.headers_for("ADMIN"))
+        self.assertEqual(response.status_code, 403)
+
     def test_list_without_token_returns_401(self):
         response = self.client.get("/api/sections/")
         self.assertEqual(response.status_code, 401)
@@ -41,22 +45,22 @@ class SectionsHttpTests(unittest.TestCase):
         response = self.client.get("/api/sections/", headers=self.headers_for("VYKON"))
         self.assertEqual(response.status_code, 403)
 
-    def test_admin_can_list_sections(self):
+    def test_main_coordinator_can_list_sections(self):
         with patch.object(SectionService, "list_sections", return_value=[]):
             response = self.client.get(
-                "/api/sections/", headers=self.headers_for("ADMIN")
+                "/api/sections/", headers=self.headers_for("MAIN_KOORD")
             )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), [])
 
-    def test_admin_can_create_section(self):
+    def test_main_coordinator_can_create_section(self):
         section = SimpleNamespace(id="R1", number=1, title="Тестовий розділ")
         with patch.object(SectionService, "create_section", return_value=section):
             response = self.client.post(
                 "/api/sections/",
                 json={"id": "R1", "number": 1, "title": "Тестовий розділ"},
-                headers=self.headers_for("ADMIN"),
+                headers=self.headers_for("MAIN_KOORD"),
             )
 
         self.assertEqual(response.status_code, 201)
@@ -66,7 +70,7 @@ class SectionsHttpTests(unittest.TestCase):
         response = self.client.post(
             "/api/sections/",
             json={"id": "R1", "number": 2, "title": "Тестовий розділ"},
-            headers=self.headers_for("ADMIN"),
+            headers=self.headers_for("MAIN_KOORD"),
         )
         self.assertEqual(response.status_code, 422)
 
@@ -77,18 +81,18 @@ class SectionsHttpTests(unittest.TestCase):
             side_effect=SectionNotFoundError("Розділ не знайдено"),
         ):
             response = self.client.get(
-                "/api/sections/R1", headers=self.headers_for("ADMIN")
+                "/api/sections/R1", headers=self.headers_for("MAIN_KOORD")
             )
 
         self.assertEqual(response.status_code, 404)
 
-    def test_admin_can_update_section(self):
+    def test_main_coordinator_can_update_section(self):
         updated = SimpleNamespace(id="R1", number=1, title="Оновлений розділ")
         with patch.object(SectionService, "update_section", return_value=updated):
             response = self.client.patch(
                 "/api/sections/R1",
                 json={"title": "Оновлений розділ"},
-                headers=self.headers_for("ADMIN"),
+                headers=self.headers_for("MAIN_KOORD"),
             )
 
         self.assertEqual(response.status_code, 200)
@@ -103,7 +107,7 @@ class SectionsHttpTests(unittest.TestCase):
             response = self.client.patch(
                 "/api/sections/ABSENT",
                 json={"title": "Оновлений розділ"},
-                headers=self.headers_for("ADMIN"),
+                headers=self.headers_for("MAIN_KOORD"),
             )
 
         self.assertEqual(response.status_code, 404)

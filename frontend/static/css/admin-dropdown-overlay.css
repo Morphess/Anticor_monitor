@@ -1,0 +1,42 @@
+/* Anticor Monitor ADMIN: меню вибору поверх модальних вікон.
+ * Цей файл підключається ПІСЛЯ monitor.css.
+ * Базові стилі Bootstrap / monitor.css не змінюються.
+ */
+.admin-search-menu.dropdown-menu {
+  display: none;
+  position: fixed !important;
+  inset: auto;
+  z-index: 20000;
+  box-sizing: border-box;
+  max-width: calc(100vw - 20px);
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .30);
+  background: var(--surface);
+  color: var(--ink);
+  overflow: hidden;
+  flex-direction: column;
+  min-height: 0;
+}
+.admin-search-menu.dropdown-menu.show,
+.admin-search-menu.dropdown-menu:popover-open { display: flex; }
+.admin-search-menu .admin-search-options {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 216px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.admin-search-menu .admin-search-input {
+  flex: none;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+@media (max-width: 640px) {
+  .admin-search-menu.dropdown-menu { max-width: calc(100vw - 20px); }
+}

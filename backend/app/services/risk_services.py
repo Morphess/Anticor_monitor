@@ -34,10 +34,13 @@ class RiskService:
 
     # READ - список ризиків
     def list_risks(
-        self, skip: int = 0, limit: int = 20, owner_department_id: str | None = None
+        self, skip: int = 0, limit: int = 20,
+        owner_department_id: str | None = None,
     ) -> list[Risk]:
-
-        return self.repo.list_risks(skip, limit, owner_department_id)
+        return self.repo.list_risks(
+            skip=skip, limit=limit,
+            owner_department_id=owner_department_id,
+        )
 
     # Перевірка підрозділу
     def check_department(self, department_id: str | None) -> None:
@@ -51,14 +54,14 @@ class RiskService:
             raise RiskError("Підрозділ не існує")
 
     # CREATE
-    def create_risk(self, data: RiskCreate) -> Risk:
+    def create_risk(self, data: RiskCreate, *, owner_department_id: str) -> Risk:
 
         if self.repo.get_by_id(data.id):
             raise RiskError("Ризик із таким ID вже існує", 409)
 
-        self.check_department(data.owner_department_id)
+        self.check_department(owner_department_id)
 
-        risk = Risk(**data.model_dump())
+        risk = Risk(**data.model_dump(), owner_department_id=owner_department_id)
 
         try:
             return self.repo.save(risk)
@@ -74,7 +77,7 @@ class RiskService:
 
         changes = data.model_dump(exclude_unset=True)
 
-        required_fields = set(RiskBase.model_fields) - {"owner_department_id"}
+        required_fields = set(RiskBase.model_fields)
 
         # Не дозволяємо очищати обов'язкові поля
         for field, value in changes.items():
@@ -93,8 +96,6 @@ class RiskService:
 
         except ValidationError as error:
             raise RiskError("Некоректні дані або оцінка ризику", 422) from error
-
-        self.check_department(validated.owner_department_id)
 
         # Оновлюємо змінені поля
         for field, value in changes.items():

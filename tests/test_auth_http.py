@@ -25,6 +25,7 @@ class AuthHttpTests(unittest.TestCase):
     def setUpClass(cls):
         cls.user = SimpleNamespace(
             id=7,
+            role_id="VYK",
             password_hash=hash_password("demo-password"),
         )
 

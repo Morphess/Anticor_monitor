@@ -21,8 +21,6 @@ class RiskBase(BaseModel):
 
     level: Literal["low", "medium", "high", "critical"]
 
-    owner_department_id: str | None = Field(default=None, max_length=8)
-
     indicator_name: str = Field(min_length=1)
     indicator_unit: str = Field(min_length=1, max_length=20)
 
@@ -51,11 +49,15 @@ class RiskBase(BaseModel):
 # Створення нового ризику
 class RiskCreate(RiskBase):
 
+    model_config = ConfigDict(extra="forbid")
+
     id: str = Field(min_length=1, max_length=8)
 
 
 # Часткове редагування ризику
 class RiskUpdate(BaseModel):
+
+    model_config = ConfigDict(extra="forbid")
 
     process_name: str | None = Field(default=None, min_length=1)
 
@@ -73,8 +75,6 @@ class RiskUpdate(BaseModel):
     score: int | None = Field(default=None, ge=1, le=16)
 
     level: Literal["low", "medium", "high", "critical"] | None = None
-
-    owner_department_id: str | None = Field(default=None, max_length=8)
 
     indicator_name: str | None = Field(default=None, min_length=1)
 
@@ -99,3 +99,4 @@ class RiskRead(RiskBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    owner_department_id: str | None

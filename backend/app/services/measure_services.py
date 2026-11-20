@@ -55,19 +55,19 @@ class MeasureService:
         if self.db.get(Program, data.program_id) is None:
             raise MeasureError("Програма не існує")
 
-        # Перевіряємо розділ та його програму
+        # Розділи R1/R2/R3 спільні для програм.
         section = self.db.get(Section, data.section_id)
 
-        if section is None or section.program_id != data.program_id:
-            raise MeasureError("Розділ не існує або належить іншій програмі")
+        if section is None:
+            raise MeasureError("Розділ не існує")
 
         # Перевіряємо корупційний ризик
         if data.risk_id is not None:
 
             risk = self.db.get(Risk, data.risk_id)
 
-            if risk is None or risk.program_id != data.program_id:
-                raise MeasureError("Ризик не існує або належить іншій програмі")
+            if risk is None:
+                raise MeasureError("Ризик не існує")
 
         # Перевіряємо відповідальний підрозділ
         if data.responsible_department_id is not None:
@@ -93,7 +93,7 @@ class MeasureService:
             exclude_id=exclude_id,
         ):
             raise MeasureError(
-                "Номер заходу вже зайнятий у цьому розділі програми", 409
+                f"Номер {data.sequence_number} уже існує в розділі {section.number} цієї програми", 409
             )
 
     # CREATE

@@ -1,22 +1,30 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 # Дані для створення користувача
 class UserCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
     login: str = Field(min_length=3, max_length=100, pattern=r"^[A-Za-z0-9_.-]+$")
 
     password: str = Field(min_length=12, max_length=128)
 
+    @field_validator("role_id")
+    @classmethod
+    def active_role(cls, value):
+        if value == "ANAL":
+            raise ValueError("Роль аналітика більше не використовується")
+        return value
+
     role_id: str = Field(min_length=1, max_length=10)
 
-    program_id: str | None = None
     department_id: str | None = None
     position: str | None = None
 
 
 # Дані для редагування користувача
 class UserUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
     login: str | None = Field(
         default=None, min_length=3, max_length=100, pattern=r"^[A-Za-z0-9_.-]+$"
@@ -24,8 +32,14 @@ class UserUpdate(BaseModel):
 
     password: str | None = Field(default=None, min_length=12, max_length=128)
 
+    @field_validator("role_id")
+    @classmethod
+    def active_role(cls, value):
+        if value == "ANAL":
+            raise ValueError("Роль аналітика більше не використовується")
+        return value
+
     role_id: str | None = None
-    program_id: str | None = None
     department_id: str | None = None
     position: str | None = None
 
@@ -41,14 +55,3 @@ class UserRead(BaseModel):
     program_id: str | None
     department_id: str | None
     position: str | None
-
-
-# Дані для прив'язки користувача до програми
-class UserProgramAssign(BaseModel):
-
-    program_id: str | None = Field(
-        ...,
-        min_length=1,
-        max_length=50,
-        description=("Код антикорупційної програми " "або null для відв'язування"),
-    )

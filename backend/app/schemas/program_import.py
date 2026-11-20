@@ -1,7 +1,6 @@
-"""Контракт JSON для пакетного імпорту: програма -> розділи -> заходи.
+"""Контракт імпорту: одна програма -> спільні розділи -> заходи.
 
-Section — спільний довідник; program_id та section_id для Measure
-визначаються з вкладеності, а не передаються у кожному заході.
+Не імпортує розсилки чи персональні призначення: для цього є program-routing.
 """
 from __future__ import annotations
 
@@ -17,8 +16,8 @@ class ImportBase(BaseModel):
 
 
 class ProgramImportData(ImportBase):
-    id: str = Field(min_length=1, max_length=50)
-    title: str = Field(min_length=1)
+    id: str = Field(min_length=1, max_length=50, description="Унікальний ID програми")
+    title: str = Field(min_length=1, description="Назва програми")
     organization_name: str = Field(min_length=1)
     start_date: date
     end_date: date
@@ -28,6 +27,11 @@ class ProgramImportData(ImportBase):
     coordinator_department_id: str | None = Field(default=None, max_length=10)
     goals: str = Field(min_length=1)
     notes: str = ""
+    owner_coordinator_user_id: int | None = Field(
+        default=None, ge=1,
+        description=("Не є полем ORM Program. Лише ADMIN може вказати KOORD-власника. "
+                     "Для KOORD власником автоматично стає користувач із JWT."),
+    )
 
     @model_validator(mode="after")
     def check_period(self) -> "ProgramImportData":
@@ -41,8 +45,13 @@ class MeasureImportData(ImportBase):
     sequence_number: int = Field(ge=1)
     description: str = Field(min_length=1)
     risk_id: str | None = Field(default=None, max_length=8)
-    responsible_department_id: str | None = Field(default=None, max_length=10)
-    assigned_user_id: int | None = Field(default=None, ge=1)
+    responsible_department_id: str = Field(
+        min_length=1, max_length=10,
+        description="Існуючий підрозділ-відповідальний: потрібен для маршрутизації заходу",
+    )
+    # Сумісність зі старим JSON, де це поле завжди було null.
+    # Призначення ID тут заборонено: виконавців призначає координатор через workflow.
+    assigned_user_id: None = Field(default=None, description="Лише null; персональне призначення через /measures/{id}/assign")
     deadline_description: str = Field(min_length=1)
     deadline_type: Literal["date", "ongoing", "recurring"]
     deadline_on: date | None = None
@@ -63,8 +72,8 @@ class MeasureImportData(ImportBase):
             raise ValueError("для ongoing/recurring deadline_on має бути null")
         if len(self.collaborator_department_ids) != len(set(self.collaborator_department_ids)):
             raise ValueError("співвиконавці одного заходу не повинні дублюватися")
-        if any(not value or len(value) > 10 for value in self.collaborator_department_ids):
-            raise ValueError("невірний id підрозділу-співвиконавця")
+        if any(not x or len(x) > 10 or x != x.strip() for x in self.collaborator_department_ids):
+            raise ValueError("некоректний ID підрозділу-співвиконавця")
         return self
 
 
@@ -91,16 +100,16 @@ class ProgramImportPayload(ImportBase):
                 raise ValueError(f"номер розділу {section.number} повторюється")
             section_ids.add(section.id)
             section_numbers.add(section.number)
-            sequence_numbers: set[int] = set()
+            seqs: set[int] = set()
             for measure in section.measures:
                 if measure.id in measure_ids:
                     raise ValueError(f"ID заходу {measure.id} повторюється")
-                if measure.sequence_number in sequence_numbers:
+                if measure.sequence_number in seqs:
                     raise ValueError(
                         f"у розділі {section.id} номер заходу {measure.sequence_number} повторюється"
                     )
                 measure_ids.add(measure.id)
-                sequence_numbers.add(measure.sequence_number)
+                seqs.add(measure.sequence_number)
         if not measure_ids:
             raise ValueError("JSON повинен містити щонайменше один захід")
         return self
@@ -108,7 +117,11 @@ class ProgramImportPayload(ImportBase):
 
 class ProgramImportResult(BaseModel):
     program_id: str
+    created_by_user_id: int | None
+    coordinator_department_id: str | None
     sections_created: int
     sections_reused: int
     measures_created: int
     collaborators_created: int
+    dispatches_created: int = 0
+    assignments_created: int = 0

@@ -73,6 +73,7 @@ class Risk(Base):
     # Дата, до якої потрібно досягнути цілі.
     target_date: Mapped[date] = mapped_column(Date, nullable=False)
 
+
     # ORM-доступ до підрозділу-власника ризику.
     owner_department: Mapped["Department"] = relationship("Department")
     # Усі значення індикатора за різні дати.

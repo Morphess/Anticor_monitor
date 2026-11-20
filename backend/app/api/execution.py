@@ -1,123 +1,196 @@
-"""HTTP API звітності: /api/executions/."""
-
-from __future__ import annotations
-
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+"""One independent submission, document and review decision per executor."""
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
+from fastapi.concurrency import run_in_threadpool
+from sqlalchemy import select
+from app.models.action_log import ActionLog
+from app.models.execution import Execution
 from sqlalchemy.orm import Session
-
 from app.database.db_connection import get_db
-from app.schemas.execution import (
-    ExecutionCreate,
-    ExecutionRead,
-    ExecutionStatus,
-    ExecutionUpdate,
+from app.models.user import User
+from app.schemas.execution import (ExecutionSubmit, ExecutionChangeOrder, ExecutionReviewGuard,
+                                   ExecutionReject, ExecutionRead, ExecutionStatus)
+from app.services.execution_services import ExecutionService, ExecutionError
+from app.services.measure_access import (
+    require_execution_actor, require_executor, require_department_coordinator,
+    require_visible_measure, visible_measure_ids,
 )
-from app.services.execution_services import (
-    ExecutionAlreadyExistsError,
-    ExecutionNotFoundError,
-    ExecutionService,
-    MeasureNotFoundError,
-)
+from app.services.program_workflow_services import ProgramWorkflowService, WorkflowError
 
-from app.schemas.execution import ExecutionApprovalUpdate
+from app.schemas.execution import ExecutionAnalysisRead
+from app.services.execution_analysis_services import analysis_input
+from app.services.order_analysis_services import OrderAnalysisError, analyze_order_document
 
-router = APIRouter(prefix="/executions", tags=["Executions"])
+router = APIRouter(prefix='/executions', tags=['Executions'])
 
 
-def get_service(db: Session = Depends(get_db)) -> ExecutionService:
-    return ExecutionService(db)
+def _http(exc):
+    return HTTPException(status_code=exc.status_code, detail=str(exc))
 
 
-@router.post("/", response_model=ExecutionRead, status_code=status.HTTP_201_CREATED)
-def create_execution(
-    data: ExecutionCreate,
-    service: ExecutionService = Depends(get_service),
-):
+@router.post('/submit', response_model=ExecutionRead, status_code=201,
+             summary='VYK: submit own order number')
+def submit_execution(data: ExecutionSubmit, db: Session = Depends(get_db),
+                     actor: User = Depends(require_executor)):
     try:
-        return service.create(data)
-    except MeasureNotFoundError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
-    except ExecutionAlreadyExistsError as error:
-        raise HTTPException(status_code=409, detail=str(error)) from error
+        svc = ExecutionService(db)
+        return svc.as_read(svc.submit(data, actor))
+    except ExecutionError as exc:
+        raise _http(exc) from exc
 
 
-@router.get("/", response_model=list[ExecutionRead])
-def list_executions(
-    measure_id: str | None = None,
-    period: str | None = None,
-    status_filter: ExecutionStatus | None = Query(default=None, alias="status"),
-    offset: int = Query(default=0, ge=0),
-    limit: int = Query(default=100, ge=1, le=500),
-    service: ExecutionService = Depends(get_service),
-):
-    return service.list(
-        measure_id=measure_id,
-        period=period,
-        status=status_filter,
-        offset=offset,
-        limit=limit,
-    )
+@router.get('/', response_model=list[ExecutionRead], summary='All accessible submissions, per executor')
+def list_executions(measure_id: str | None = None, period: str | None = None,
+                    status: ExecutionStatus | None = None,
+                    offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500),
+                    db: Session = Depends(get_db), actor: User = Depends(require_execution_actor)):
+    if measure_id is not None:
+        require_visible_measure(db, actor, measure_id)
+        ids = {measure_id}
+    else:
+        ids = visible_measure_ids(db, actor)
+    dept_ids = None
+    by_user = None
+    if actor.role_id == 'VYK':
+        by_user = actor.id
+    elif actor.role_id == 'KOORD':
+        if not actor.department_id:
+            return []
+        try:
+            dept_ids = ProgramWorkflowService(db).tree.descendants(actor.department_id)
+        except WorkflowError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    svc = ExecutionService(db)
+    return [svc.as_read(row) for row in svc.repo.list(
+        measure_ids=ids, period=period, status=status, department_ids=dept_ids,
+        submitted_by=by_user, offset=offset, limit=limit,
+    )]
 
 
-@router.get("/{measure_id}/{period}", response_model=ExecutionRead)
-def get_execution(
-    measure_id: str,
-    period: str,
-    service: ExecutionService = Depends(get_service),
-):
+@router.get('/order-number-changes', summary='KOORD: order number replacement history in own department')
+def order_number_changes(limit: int = Query(50, ge=1, le=100),
+                         db: Session = Depends(get_db),
+                         actor: User = Depends(require_department_coordinator)):
+    """Read from immutable ActionLog entries; separate from file SHA-256 alerts."""
+    measure_ids = visible_measure_ids(db, actor)
+    if not measure_ids or not actor.department_id:
+        return []
     try:
-        return service.get(measure_id, period)
-    except ExecutionNotFoundError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
+        departments = ProgramWorkflowService(db).tree.descendants(actor.department_id)
+    except WorkflowError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    execution_rows = db.scalars(select(Execution).where(
+        Execution.measure_id.in_(measure_ids),
+        Execution.submitted_department_id.in_(departments),
+    )).all()
+    by_id = {str(row.id): row for row in execution_rows}
+    if not by_id:
+        return []
+    events = db.scalars(select(ActionLog).where(
+        ActionLog.entity_type == 'execution',
+        ActionLog.action == 'change_order_number',
+        ActionLog.field_name == 'order_number',
+        ActionLog.entity_id.in_(list(by_id)),
+    ).order_by(ActionLog.occurred_at.desc()).limit(limit)).all()
+    return [{
+        'id': log.id, 'execution_id': row.id, 'measure_id': row.measure_id,
+        'period': row.period, 'submitted_by_user_id': row.submitted_by_user_id,
+        'old_order_number': log.old_value, 'new_order_number': log.new_value,
+        'occurred_at': log.occurred_at.isoformat(),
+        'status_after_change': 'pending', 'current_status': row.status,
+    } for log in events if (row := by_id.get(log.entity_id)) is not None]
 
 
-@router.patch("/{measure_id}/{period}", response_model=ExecutionRead)
-def update_execution(
-    measure_id: str,
-    period: str,
-    data: ExecutionUpdate,
-    service: ExecutionService = Depends(get_service),
-):
+@router.get('/{execution_id}', response_model=ExecutionRead, summary='Individual submission')
+def get_execution(execution_id: int, db: Session = Depends(get_db),
+                  actor: User = Depends(require_execution_actor)):
+    svc = ExecutionService(db)
     try:
-        return service.update(measure_id, period, data)
-    except ExecutionNotFoundError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
+        row = svc.get(execution_id)
+        require_visible_measure(db, actor, row.measure_id)
+        svc.require_read_access(row, actor)
+        return svc.as_read(row)
+    except ExecutionError as exc:
+        raise _http(exc) from exc
 
 
-@router.patch(
-    "/{measure_id}/{period}/approval",
-    response_model=ExecutionRead,
-    summary="Погодження звіту координатором",
-)
-def update_execution_approval(
-    measure_id: str,
-    period: str,
-    data: ExecutionApprovalUpdate,
-    service: ExecutionService = Depends(get_service),
-):
-    """Змінює стан погодження звіту."""
-
+@router.get('/{execution_id}/document', summary='Verified order document, access checked')
+def get_document(execution_id: int, which: str = Query('submitted', pattern='^(submitted|current)$'),
+                 db: Session = Depends(get_db), actor: User = Depends(require_execution_actor)):
+    svc = ExecutionService(db)
     try:
-        return service.update_approval(
-            measure_id=measure_id,
-            period=period,
-            approved=data.approved_by_coordinator,
+        row = svc.get(execution_id)
+        require_visible_measure(db, actor, row.measure_id)
+        path, version = svc.get_document(row, actor, which=which)
+        return FileResponse(path, media_type=version.content_type,
+                            filename=version.original_filename,
+                            content_disposition_type='inline' if version.content_type == 'application/pdf' else 'attachment')
+    except ExecutionError as exc:
+        raise _http(exc) from exc
+
+
+@router.post('/{execution_id}/change-order', response_model=ExecutionRead,
+             summary='VYK: replace own pending order, notify coordinator')
+def change_order(execution_id: int, data: ExecutionChangeOrder,
+                 db: Session = Depends(get_db), actor: User = Depends(require_executor)):
+    svc = ExecutionService(db)
+    try:
+        row = svc.get(execution_id)
+        require_visible_measure(db, actor, row.measure_id)
+        return svc.as_read(svc.change_order(execution_id, data.order_number, actor))
+    except ExecutionError as exc:
+        raise _http(exc) from exc
+
+
+@router.post('/{execution_id}/approve', response_model=ExecutionRead,
+             summary='KOORD: approve exactly this executor submission')
+def approve(execution_id: int, data: ExecutionReviewGuard | None = None,
+            db: Session = Depends(get_db),
+            actor: User = Depends(require_department_coordinator)):
+    svc = ExecutionService(db)
+    try:
+        row = svc.get(execution_id)
+        require_visible_measure(db, actor, row.measure_id)
+        return svc.as_read(svc.review(
+            execution_id, actor, approve=True,
+            expected_order_version_id=data.expected_order_version_id if data else None,
+            expected_submitted_at=data.expected_submitted_at if data else None,
+        ))
+    except ExecutionError as exc:
+        raise _http(exc) from exc
+
+
+@router.post('/{execution_id}/reject', response_model=ExecutionRead,
+             summary='KOORD: reject this submission with required reason')
+def reject(execution_id: int, data: ExecutionReject,
+           db: Session = Depends(get_db), actor: User = Depends(require_department_coordinator)):
+    svc = ExecutionService(db)
+    try:
+        row = svc.get(execution_id)
+        require_visible_measure(db, actor, row.measure_id)
+        return svc.as_read(svc.review(
+            execution_id, actor, approve=False, reason=data.reason,
+            expected_order_version_id=data.expected_order_version_id,
+            expected_submitted_at=data.expected_submitted_at,
+        ))
+    except ExecutionError as exc:
+        raise _http(exc) from exc
+
+
+@router.post('/{execution_id}/analyze', response_model=ExecutionAnalysisRead,
+             summary='Координатор: порівняти наказ подання зі змістом заходу')
+async def analyze_execution(execution_id: int, db: Session = Depends(get_db),
+                            actor: User = Depends(require_execution_actor)):
+    if actor.role_id not in {'MAIN_KOORD', 'KOORD'}:
+        raise HTTPException(status_code=403, detail='Аналіз доступний лише координатору')
+    try:
+        order, measure, name, content, version_id, digest = await run_in_threadpool(
+            analysis_input, db, actor, execution_id
         )
-
-    except ExecutionNotFoundError as error:
-        raise HTTPException(
-            status_code=404,
-            detail=str(error),
-        ) from error
-
-
-@router.delete("/{measure_id}/{period}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_execution(
-    measure_id: str,
-    period: str,
-    service: ExecutionService = Depends(get_service),
-) -> None:
-    try:
-        service.delete(measure_id, period)
-    except ExecutionNotFoundError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
+        result = await analyze_order_document(order, measure, name, content)
+        return ExecutionAnalysisRead(**result.model_dump(), execution_id=execution_id,
+                                     order_version_id=version_id, submitted_sha256=digest)
+    except (ExecutionError, OrderAnalysisError) as exc:
+        raise _http(exc) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=503, detail='Сховище документів недоступне') from exc

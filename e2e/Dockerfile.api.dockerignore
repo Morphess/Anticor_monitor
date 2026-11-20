@@ -1,0 +1,16 @@
+**
+!requirements.txt
+!backend/
+!backend/app/
+!backend/app/**
+!alembic.ini
+!alembic/
+!alembic/**
+!frontend/
+!frontend/**
+!e2e/
+!e2e/support/
+!e2e/support/**
+**/__pycache__/
+**/*.pyc
+**/.env*

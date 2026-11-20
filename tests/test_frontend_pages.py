@@ -1,4 +1,5 @@
 import os
+import re
 import unittest
 from pathlib import Path
 
@@ -13,7 +14,9 @@ os.environ.setdefault(
     "JWT_SECRET_KEY", "synthetic-test-key-for-hs256-at-least-32-bytes"
 )
 
-from app.web.pages import PAGES, router as pages_router
+from app.web.frontend_pages import router as pages_router
+
+PAGES = [route.path for route in pages_router.routes if route.path != "/"]
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,9 +38,12 @@ class FrontendPagesTests(unittest.TestCase):
                 self.assertIn("text/html", response.headers["content-type"])
                 self.assertIn("/static/js/api.js", response.text)
 
+    def test_retired_analyst_page_returns_404(self):
+        self.assertEqual(self.client.get("/analyst").status_code, 404)
+
     def test_app_entry_redirects_to_login(self):
-        response = self.client.get("/app", follow_redirects=False)
-        self.assertEqual(response.status_code, 303)
+        response = self.client.get("/", follow_redirects=False)
+        self.assertEqual(response.status_code, 302)
         self.assertEqual(response.headers["location"], "/login")
 
     def test_referenced_static_files_exist(self):
@@ -52,13 +58,21 @@ class FrontendPagesTests(unittest.TestCase):
             "js/executor.js",
             "js/coordinator.js",
             "js/summary.js",
+            "js/insights.js",
+            "js/notify.js",
             "js/manager.js",
-            "js/analyst.js",
             "js/admin.js",
         ):
             with self.subTest(file=name):
                 self.assertTrue((STATIC / name).is_file())
                 self.assertEqual(self.client.get("/static/" + name).status_code, 200)
+
+    def test_all_referenced_static_assets_exist(self):
+        for path in PAGES:
+            html = self.client.get(path).text
+            for ref in re.findall(r'(?:src|href)="(/static/[^"]+)"', html):
+                with self.subTest(page=path, asset=ref):
+                    self.assertEqual(self.client.get(ref).status_code, 200)
 
     def test_no_external_resources(self):
         # Закритий контур: сторінки не тягнуть CDN чи зовнішні шрифти.

@@ -1,61 +1,43 @@
-"""Виконання одного заходу за конкретний звітний період."""
-
+"""Each assigned executor owns an independent submission for each measure/period."""
 from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
-from sqlalchemy import (
-    Boolean,
-    CheckConstraint,
-    Date,
-    DateTime,
-    ForeignKey,
-    Numeric,
-    String,
-    Text,
-)
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import Base
 
 
-# Фактичний стан одного заходу в конкретному звітному періоді.
 class Execution(Base):
-    # Ім’я таблиці в PostgreSQL, з якою працює ця модель.
-    __tablename__ = "executions"
-    # Правила цілісності БД: унікальність і перевірки значень.
+    __tablename__ = 'executions'
     __table_args__ = (
-        CheckConstraint(
-            # Не даємо зберегти невідомі статуси виконання.
-            "status IN ('completed', 'partial', 'not_completed', 'in_progress', 'not_started')",
-            name="ck_execution_status",
-        ),
+        CheckConstraint("status IN ('pending', 'approved', 'rejected')", name='ck_execution_status'),
+        UniqueConstraint('measure_id', 'period', 'submitted_by_user_id', name='uq_executions_measure_period_user'),
     )
 
-    # ID заходу; разом із period утворює складений первинний ключ.
-    measure_id: Mapped[str] = mapped_column(ForeignKey("measures.id"), primary_key=True)
-    # Звітний період, наприклад 2026-H1; разом із measure_id є PK.
-    period: Mapped[str] = mapped_column(String(20), primary_key=True)  # 2026-H1
-    # Внутрішній технічний код стану: completed, partial тощо.
-    status: Mapped[str] = mapped_column(String(20), nullable=False)
-    # Людинозрозумілий український підпис статусу з джерела.
-    status_label: Mapped[str] = mapped_column(
-        String(60), nullable=False
-    )  # original UA wording
-    # Фактична дата завершення заходу, якщо застосовна.
-    completed_on: Mapped[date | None] = mapped_column(Date)
-    # Що реально зроблено або чому захід не виконаний.
-    result_description: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    # Фактичне числове значення показника виконання; може бути NULL.
-    indicator_actual: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
-    # Реальний користувач, який вніс звіт у застосунку.
-    submitted_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
-    # Дата й час подання інформації.
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    measure_id: Mapped[str] = mapped_column(ForeignKey('measures.id'), nullable=False, index=True)
+    period: Mapped[str] = mapped_column(String(20), nullable=False)
+    # A record belongs to exactly one executor, never reassigned on resubmission.
+    submitted_by_user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=False)
+    submitted_department_id: Mapped[str | None] = mapped_column(ForeignKey('departments.id'))
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default='pending')
+    order_id: Mapped[str | None] = mapped_column(ForeignKey('orders.id', ondelete='RESTRICT'), index=True)
+    order_version_id: Mapped[int | None] = mapped_column(ForeignKey('order_versions.id', ondelete='RESTRICT'))
+    submitted_sha256: Mapped[str | None] = mapped_column(String(64))
+    document_changed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
-    # Чи погодив звіт координатор: True або False.
-    approved_by_coordinator: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
+    reviewed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+    rejection_reason: Mapped[str | None] = mapped_column(Text)
+    outcome_status: Mapped[str | None] = mapped_column(String(20))
+    status_label: Mapped[str] = mapped_column(String(60), nullable=False, default='')
+    completed_on: Mapped[date | None] = mapped_column(Date)
+    result_description: Mapped[str] = mapped_column(Text, nullable=False, default='')
+    indicator_actual: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
+    approved_by_coordinator: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
-    # ORM-доступ до заходу, якого стосується результат.
-    measure: Mapped["Measure"] = relationship("Measure", back_populates="executions")
-    # ORM-доступ до реального подавача.
-    submitted_by_user: Mapped["User | None"] = relationship("User")
+    measure: Mapped['Measure'] = relationship('Measure', back_populates='executions')
+    order: Mapped['Order | None'] = relationship('Order')
+    order_version: Mapped['OrderVersion | None'] = relationship('OrderVersion')
+    submitted_by_user: Mapped['User'] = relationship('User', foreign_keys=[submitted_by_user_id])
+    reviewed_by_user: Mapped['User | None'] = relationship('User', foreign_keys=[reviewed_by_user_id])

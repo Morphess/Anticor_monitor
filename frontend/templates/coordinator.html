@@ -1,46 +1,151 @@
 {% extends "base.html" %}
-{% block title %}Програми — координатор{% endblock %}
-{% block role_name %}Координатор програми{% endblock %}
+{% block title %}Антикорупційні програми — координатор{% endblock %}
+{% block role_name %}Координатор{% endblock %}
+{% block topbar_tools %}{% include "_bell.html" %}{% endblock %}
 {% block content %}
-<section class="unit">
-  <div>
-    <p class="label">Назва підрозділу</p>
-    <h1 id="unit-name">—</h1>
-  </div>
-  <button class="btn btn-dark" type="button" id="create-program">Створити програму</button>
-</section>
-<div class="toolbar">
-  <label class="field" style="flex:1">Пошук
-    <input id="search" type="search" placeholder="Програма, розділ, захід або підрозділ">
-  </label>
-  <label class="field">Звітний період
-    <select id="period"></select>
-  </label>
-</div>
-<div id="flags-note"></div>
-<div id="programs"><p class="muted">Завантаження…</p></div>
+<link rel="stylesheet" href="/static/css/coordinator-ux.css?v=order-edit1">
+<div class="coord-page">
+  <section class="unit coord-hero" aria-labelledby="unit-name">
+    <div class="coord-heading">
+      <h1 id="unit-name">Завантаження…</h1>
+    </div>
+  </section>
 
-<dialog id="program-dialog">
-  <form method="dialog" id="program-form">
-    <h2 style="margin-top:0">Нова програма</h2>
-    <div class="form-grid">
-      <label class="field">Код програми<input name="id" required maxlength="50" placeholder="AKP-2026-2027"></label>
-      <label class="field">Організація<input name="organization_name" required></label>
-      <label class="field">Дата початку<input name="start_date" type="date" required></label>
-      <label class="field">Дата завершення<input name="end_date" type="date" required></label>
-      <label class="field">Реквізити затвердження<input name="approval_reference" required></label>
-      <label class="field">Стан затвердження
-        <select name="approval_status"><option value="draft">Проєкт</option><option value="approved">Затверджено</option></select>
+  <div class="coord-nav-row">
+  <nav class="coord-view-navigation" role="tablist" aria-label="Розділи координатора">
+    <button type="button" class="coord-view-tab active" data-coord-view="programs" id="coord-tab-programs" role="tab" aria-controls="coord-view-programs" aria-selected="true" tabindex="0">Програми та прогрес</button>
+    <button type="button" class="coord-view-tab" data-coord-view="risks" id="coord-tab-risks" role="tab" aria-controls="coord-view-risks" aria-selected="false" tabindex="-1">Risk Flags</button>
+    <button type="button" class="coord-view-tab" data-coord-view="reports" id="coord-tab-reports" role="tab" aria-controls="coord-view-reports" aria-selected="false" tabindex="-1">Піврічні звіти</button>
+    <button type="button" class="coord-view-tab" data-coord-view="documents" id="coord-tab-documents" role="tab" aria-controls="coord-view-documents" aria-selected="false" tabindex="-1">Зміни наказів <span id="coord-unread-badge" class="coord-unread-badge" hidden></span></button>
+  </nav>
+  <div class="unit-actions coord-main-actions">
+    <button class="btn btn-dark hidden" type="button" id="create-program">Створити програму</button>
+    <button class="btn btn-dark hidden" type="button" id="assign-open">Призначити виконавців</button>
+    <button class="btn" type="button" id="coord-refresh" title="Оновити стан виконання">Оновити дані</button>
+  </div>
+  </div>
+  <section id="coord-view-programs" class="coord-view-panel" role="tabpanel" aria-labelledby="coord-tab-programs">
+  <section class="coord-overview" aria-label="Статистика заходів за звітний період">
+    <div class="coord-kpi">
+      <span class="coord-kpi-label">Усього заходів</span>
+      <strong id="coord-total">—</strong>
+    </div>
+    <div class="coord-kpi">
+      <span class="coord-kpi-label">Виконано</span>
+      <strong id="coord-approved">—</strong>
+    </div>
+    <div class="coord-kpi">
+      <span class="coord-kpi-label">Очікують погодження</span>
+      <strong id="coord-review-count">—</strong>
+    </div>
+    <div class="coord-kpi">
+      <span class="coord-kpi-label">Прострочені</span>
+      <strong id="coord-overdue">—</strong>
+    </div>
+  </section>
+
+  <section class="coord-workspace" aria-label="Пошук та огляд програм">
+    <div class="toolbar coord-toolbar">
+      <label class="field grow">Пошук
+        <input id="search" type="search" autocomplete="off" placeholder="Назва програми, код, захід або підрозділ">
+      </label>
+      <label class="field">Звітний період
+        <select id="period" aria-label="Звітний період"></select>
+      </label>
+      <button class="btn coord-clear-search" id="coord-clear-search" type="button" hidden>Очистити</button>
+    </div>
+
+    <div class="coord-filter-row">
+      <div class="coord-filters" role="group" aria-label="Фільтр заходів за станом">
+        <button type="button" class="coord-filter active" data-coord-filter="all" aria-pressed="true">Усі заходи <span id="coord-filter-all">—</span></button>
+        <button type="button" class="coord-filter" data-coord-filter="approved" aria-pressed="false">Погоджено <span id="coord-filter-approved">—</span></button>
+        <button type="button" class="coord-filter" data-coord-filter="review" aria-pressed="false">Чекають погодження <span id="coord-filter-review">—</span></button>
+        <button type="button" class="coord-filter" data-coord-filter="overdue" aria-pressed="false">Прострочені <span id="coord-filter-overdue">—</span></button>
+        <button type="button" class="coord-filter hidden" id="coord-unassigned-filter" data-coord-filter="unassigned" aria-pressed="false">Без виконавця <span id="coord-filter-unassigned">—</span></button>
+      </div>
+    </div>
+    <div id="flags-note" class="coord-flags-note" aria-live="polite"></div>
+    <div id="programs" aria-live="polite"><p class="muted">Завантаження…</p></div>
+  </section>
+
+  </section>
+
+  <div id="coord-toast" class="coord-toast hidden" role="status" aria-live="polite" aria-atomic="true">
+    <span class="coord-toast-message" id="coord-toast-message"></span>
+    <button type="button" id="coord-toast-close" class="coord-toast-close" aria-label="Закрити повідомлення">×</button>
+  </div>
+
+  <dialog id="assign-dialog" class="wide coord-dialog coord-assign-dialog" aria-labelledby="assign-title">
+    <div class="coord-dialog-header">
+      <h2 id="assign-title">Призначення виконавців</h2>
+      <button type="button" id="assign-close" class="coord-dialog-close" aria-label="Закрити вікно призначень">×</button>
+    </div>
+    <div id="assign-body" class="assign-body"></div>
+    <div id="assign-msg" class="msg" role="status" aria-live="polite"></div>
+    <div class="dialog-actions coord-dialog-actions">
+      <button class="btn btn-dark" type="button" id="assign-save">Зберегти призначення</button>
+      <button class="btn" type="button" id="assign-cancel">Скасувати</button>
+    </div>
+  </dialog>
+
+  <section id="coord-view-risks" class="unit coord-support-panel coord-view-panel" role="tabpanel" aria-labelledby="coord-tab-risks" hidden>
+    <div class="coord-panel-heading">
+      <h2>Risk Flags</h2>
+      <label class="field coord-period-field">Звітний період
+        <select id="coord-risk-period" aria-label="Період Risk Flags"></select>
       </label>
     </div>
-    <label class="field" style="margin-bottom:12px">Назва<input name="title" required></label>
-    <label class="field" style="margin-bottom:12px">Мета<textarea name="goals" rows="3" required></textarea></label>
-    <div id="program-error" class="alert hidden" role="alert"></div>
-    <div class="toolbar" style="margin:0">
-      <button class="btn btn-dark" type="submit" value="save">Створити програму</button>
-      <button class="btn" type="button" id="program-cancel">Скасувати</button>
+    <div id="coord-risk-panel"></div>
+  </section>
+  <section id="coord-view-reports" class="unit coord-support-panel coord-view-panel" role="tabpanel" aria-labelledby="coord-tab-reports" hidden>
+    <div class="coord-panel-heading">
+      <h2>Піврічні звіти підрозділу</h2>
+      <label class="field coord-period-field">Звітний період
+        <select id="coord-report-period" aria-label="Період звітності підрозділу"></select>
+      </label>
     </div>
-  </form>
-</dialog>
+    <div class="coord-report-scope small muted" id="coord-report-scope">Звіт охоплює ваш підрозділ і підпорядковані підрозділи.</div>
+    <div id="coord-report-panel"></div>
+  </section>
+  <section id="coord-view-documents" class="unit coord-support-panel coord-view-panel" role="tabpanel" aria-labelledby="coord-tab-documents" hidden>
+    <div class="coord-panel-heading">
+      <h2>Історія змін наказів і SHA-256</h2>
+      <div class="coord-document-tools">
+        <label class="field">Показати
+          <select id="coord-alert-filter" aria-label="Фільтр повідомлень">
+            <option value="all">Усі зміни</option>
+            <option value="unread">Непрочитані</option>
+          </select>
+        </label>
+        <button type="button" id="coord-alert-refresh" class="btn">Оновити історію</button>
+      </div>
+    </div>
+    <h3 class="coord-change-heading">Зміни номера наказу виконавцями</h3>
+    <div id="coord-number-changes" aria-live="polite"></div>
+    <h3 class="coord-change-heading">Історія версій документів (SHA-256)</h3>
+    <p class="small muted" id="coord-alert-count" role="status"></p>
+    <div id="coord-alert-panel" aria-live="polite"></div>
+    <div class="coord-alert-pagination" id="coord-alert-pagination"></div>
+  </section>
+  <dialog id="coord-review-dialog" class="role-dialog" aria-labelledby="coord-review-title">
+    <form id="coord-review-form">
+      <h2 id="coord-review-title">Перевірка подання</h2>
+      <p id="coord-review-details" class="muted"></p>
+      <label id="coord-review-reason-label" class="role-form-label">Причина повернення
+        <textarea id="coord-review-reason" class="role-field" rows="4" minlength="3" maxlength="2000" placeholder="Поясніть, що потрібно виправити" aria-describedby="coord-review-message"></textarea>
+      </label>
+      <div class="role-message error" id="coord-review-message" role="alert"></div>
+      <div class="role-dialog-actions">
+        <button type="button" id="coord-review-cancel" class="btn btn-outline-secondary">Скасувати</button>
+        <button type="submit" id="coord-review-submit" class="btn btn-dark">Зберегти рішення</button>
+      </div>
+    </form>
+  </dialog>
+</div>
 {% endblock %}
-{% block scripts %}<script src="/static/js/coordinator.js"></script>{% endblock %}
+{% block scripts %}
+<script src="/static/js/notify.js"></script>
+<script src="/static/js/risk-flags.js?v=1"></script>
+<script src="/static/js/reports-ui.js?v=pdf1"></script>
+<script src="/static/js/coordinator.js?v=order-edit1"></script>
+{% endblock %}

@@ -1,10 +1,22 @@
-"""Ієрархія підрозділів. Жодних прав за префіксами ID — тільки parent_id з БД.
+"""Ієрархія підрозділів за parent_id, без висновків із префіксів ID.
 
-Цикл, відсутній батько або зламані зв'язки => 409 (fail closed).
+Структура повинна бути деревом: відсутній батько або цикл спричиняють
+DepartmentHierarchyError (викликаючий сервіс має відмовити в доступі).
+
+Підтримує і ProgramWorkflowRepository, і DepartmentRepository через
+мінімальний метод all_departments().
 """
-from collections import defaultdict
+from __future__ import annotations
 
-from app.repositories.program_workflow_repository import ProgramWorkflowRepository
+from collections import defaultdict
+from typing import TYPE_CHECKING, Protocol, Sequence
+
+if TYPE_CHECKING:
+    from app.models.department import Department
+
+
+class DepartmentSource(Protocol):
+    def all_departments(self) -> Sequence[Department]: ...
 
 
 class DepartmentHierarchyError(Exception):
@@ -12,11 +24,12 @@ class DepartmentHierarchyError(Exception):
 
 
 class DepartmentHierarchy:
-    def __init__(self, repository: ProgramWorkflowRepository):
+    def __init__(self, repository: DepartmentSource):
         departments = repository.all_departments()
         self.by_id = {dept.id: dept for dept in departments}
         self.parents = {dept.id: dept.parent_id for dept in departments}
-        self.children = defaultdict(set)
+        self.children: dict[str, set[str]] = defaultdict(set)
+
         for department_id, parent_id in self.parents.items():
             if parent_id is not None:
                 if parent_id not in self.parents:
@@ -25,10 +38,9 @@ class DepartmentHierarchy:
                     )
                 self.children[parent_id].add(department_id)
 
-        # Ніколи не трактуємо цикли як законне підпорядкування.
         for department_id in self.parents:
-            visited = set()
-            current = department_id
+            visited: set[str] = set()
+            current: str | None = department_id
             while current is not None:
                 if current in visited:
                     raise DepartmentHierarchyError("В ієрархії підрозділів знайдено цикл")
@@ -39,21 +51,22 @@ class DepartmentHierarchy:
         return department_id in self.by_id
 
     def ancestors(self, department_id: str) -> set[str]:
-        """Підрозділ + усі його предки."""
+        """Підрозділ та його батьківські підрозділи."""
         if not self.exists(department_id):
             return set()
-        result = set()
-        current = department_id
+        result: set[str] = set()
+        current: str | None = department_id
         while current is not None:
             result.add(current)
             current = self.parents[current]
         return result
 
     def descendants(self, department_id: str) -> set[str]:
-        """Підрозділ + усі рівні нащадків."""
+        """Підрозділ і всі його підпорядковані підрозділи."""
         if not self.exists(department_id):
             return set()
-        result, queue = set(), [department_id]
+        result: set[str] = set()
+        queue = [department_id]
         while queue:
             current = queue.pop()
             if current in result:
@@ -63,5 +76,4 @@ class DepartmentHierarchy:
         return result
 
     def is_within(self, department_id: str, root_department_id: str) -> bool:
-        """target department_id належить піддереву root (включно з root)."""
         return department_id in self.descendants(root_department_id)

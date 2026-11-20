@@ -1,33 +1,94 @@
 {% extends "base.html" %}
-{% block title %}Зведення — керівник{% endblock %}
+{% block title %}Кабінет керівника — моніторинг виконання{% endblock %}
 {% block role_name %}Керівник{% endblock %}
 {% block content %}
-<section class="unit">
-  <div>
-    <p class="label">Стан виконання</p>
-    <h1 id="program-title">—</h1>
-  </div>
-  <label class="field">Звітний період <select id="period"></select></label>
-</section>
-<div class="cards" id="cards"></div>
-<h2>Потребують уваги</h2>
-<p class="muted small">Строк минув і виконання не погоджено, або система виявила сигнали Risk Flags.</p>
-<div class="table-wrap">
-  <table class="grid">
-    <thead><tr><th>№</th><th>Захід</th><th>Підрозділ</th><th>Строк</th><th>Статус</th><th>Сигнали</th></tr></thead>
-    <tbody id="attention"></tbody>
-  </table>
+<link rel="stylesheet" href="/static/css/manager-ux.css?v=ker-depts2">
+<div id="manager-dashboard" class="mgr-page">
+  <header class="mgr-heading-row">
+    <div>
+      <h1 id="mgr-position">Кабінет керівника</h1>
+      <p id="mgr-department" class="mgr-muted"></p>
+    </div>
+  </header>
+
+  <nav class="mgr-nav" aria-label="Розділи кабінету керівника" role="tablist">
+    <button type="button" role="tab" data-mgr-tab="programs" aria-selected="true">Програми та прогрес</button>
+    <button type="button" role="tab" data-mgr-tab="recommendations" aria-selected="false">Рекомендації <span id="mgr-rec-count"></span></button>
+    <button type="button" role="tab" data-mgr-tab="flags" aria-selected="false">Risk Flags <span id="mgr-flags-count"></span></button>
+    <button type="button" role="tab" data-mgr-tab="risks" aria-selected="false">Корупційні ризики</button>
+    <div class="mgr-nav-tools">
+      <label class="mgr-field" for="mgr-period">Звітний період
+        <select id="mgr-period" aria-label="Звітний період"></select>
+      </label>
+      <button id="mgr-refresh" type="button" class="mgr-button">Оновити дані</button>
+    </div>
+  </nav>
+
+  <div id="mgr-message" class="mgr-message" role="status" aria-live="polite" hidden></div>
+
+  <section data-mgr-panel="programs" role="tabpanel" class="mgr-panel">
+    <div class="mgr-stats" aria-label="Статистика виконання заходів">
+      <div class="mgr-stat"><span>Усього заходів</span><strong id="mgr-kpi-total">—</strong></div>
+      <div class="mgr-stat"><span>Виконано</span><strong id="mgr-kpi-completed">—</strong></div>
+      <div class="mgr-stat"><span>Очікують погодження</span><strong id="mgr-kpi-pending">—</strong></div>
+      <div class="mgr-stat"><span>Прострочені</span><strong id="mgr-kpi-overdue">—</strong></div>
+    </div>
+
+    <div class="mgr-scope-toolbar">
+      <label class="mgr-field mgr-search" for="mgr-program-search">Пошук програм і заходів
+        <input type="search" id="mgr-program-search" autocomplete="off" placeholder="Код, програма, розділ або захід">
+      </label>
+      <label class="mgr-field mgr-program-select" for="mgr-program">Показати
+        <select id="mgr-program"><option value="">Усі програми</option></select>
+      </label>
+    </div>
+
+    <section class="mgr-section" aria-label="Прогрес за підрозділами">
+      <div class="mgr-section-head"><h2>Прогрес за підрозділами</h2><span id="mgr-progress-period" class="mgr-muted"></span></div>
+      <p id="mgr-progress-caption" class="mgr-muted mgr-progress-caption"></p>
+      <label class="mgr-field mgr-department-search" for="mgr-department-search">Пошук підрозділу
+        <input type="search" id="mgr-department-search" autocomplete="off" placeholder="Назва або код підрозділу">
+      </label>
+      <div id="mgr-department-progress" class="mgr-department-grid"><p class="mgr-muted">Завантаження…</p></div>
+    </section>
+
+    <section class="mgr-section" aria-label="Доступні програми й заходи">
+      <div class="mgr-section-head"><h2>Програми та заходи</h2><span id="mgr-program-count" class="mgr-muted"></span></div>
+      <div id="mgr-program-tree" class="mgr-tree"><p class="mgr-muted">Завантаження…</p></div>
+    </section>
+  </section>
+
+  <section data-mgr-panel="recommendations" role="tabpanel" class="mgr-panel" hidden>
+    <div class="mgr-section-head"><h2>Рекомендації системи</h2><span class="mgr-muted">Інформація для управлінського контролю</span></div>
+    <div class="mgr-scope-toolbar">
+      <label class="mgr-field mgr-search" for="mgr-rec-search">Пошук
+        <input id="mgr-rec-search" type="search" autocomplete="off" placeholder="Захід, причина або рекомендація">
+      </label>
+      <label class="mgr-field mgr-program-select" for="mgr-rec-priority">Пріоритет
+        <select id="mgr-rec-priority">
+          <option value="">Усі пріоритети</option>
+          <option value="critical">Критичний</option>
+          <option value="high">Високий</option>
+          <option value="medium">Середній</option>
+          <option value="low">Низький</option>
+        </select>
+      </label>
+    </div>
+    <div id="mgr-recommendations" class="mgr-cards"></div>
+  </section>
+
+  <section data-mgr-panel="flags" role="tabpanel" class="mgr-panel" hidden>
+    <div class="mgr-section-head"><h2>Risk Flags</h2><span class="mgr-muted">Сигнали в межах доступних підрозділів</span></div>
+    <div id="mgr-flags" class="mgr-cards"></div>
+  </section>
+
+  <section data-mgr-panel="risks" role="tabpanel" class="mgr-panel" hidden>
+    <div class="mgr-section-head"><h2>Корупційні ризики</h2><span class="mgr-muted">Показники та динаміка</span></div>
+    <label class="mgr-field mgr-risk-search" for="mgr-risk-search">Пошук
+      <input type="search" id="mgr-risk-search" autocomplete="off" placeholder="Код або назва ризику">
+    </label>
+    <div id="mgr-risks" class="mgr-cards"></div>
+  </section>
 </div>
-<h2>Сигнали Risk Flags</h2>
-<div id="flags-summary"></div>
-<h2>За розділами</h2>
-<div class="table-wrap">
-  <table class="grid">
-    <thead><tr><th>Розділ</th><th>Виконано</th><th style="width:40%">Прогрес</th></tr></thead>
-    <tbody id="by-section"></tbody>
-  </table>
-</div>
-<h2>Рішення керівника</h2>
-<p class="stub">Тимчасово недоступно: на сервері поки немає API для доручень і рішень керівника.</p>
 {% endblock %}
-{% block scripts %}<script src="/static/js/summary.js"></script><script src="/static/js/manager.js"></script>{% endblock %}
+{% block scripts %}<script src="/static/js/manager.js?v=ker-depts2"></script>{% endblock %}

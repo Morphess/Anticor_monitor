@@ -18,15 +18,10 @@ class RiskRepository:
         self,
         skip: int = 0,
         limit: int = 20,
-        program_id: str | None = None,
         owner_department_id: str | None = None,
     ) -> list[Risk]:
 
         stmt = select(Risk)
-
-        # Фільтрація за програмою
-        if program_id is not None:
-            stmt = stmt.where(Risk.program_id == program_id)
 
         # Фільтрація за підрозділом
         if owner_department_id is not None:
