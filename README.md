@@ -1,4 +1,4 @@
-# BorderGroup — моніторинг виконання антикорупційної програми
+# BorderGroup - моніторинг виконання антикорупційної програми
 
 Команда **BorderGroup** · [Завдання 2: цифрова система моніторингу виконання антикорупційної програми](https://hack.bitec.com.ua/zavdannia-2/)
 Cклад команди:
@@ -25,12 +25,9 @@ Cклад команди:
 
 ## Демонстрація
 
-Відео основного сценарію до 3 хвилин команда додасть перед поданням.
-Сценарій: MAIN_KOORD створює програму → KOORD призначає виконавця →
-VYK подає наказ → KOORD перевіряє документ і висновок ШІ та погоджує
-виконання → формування піврічного звіту. Використовуйте лише вигадані дані.
+------
 
-## Розгортання для журі — 5 кроків
+## Розгортання
 
 Потрібні Git, Python 3 і Docker із Compose v2. Запуск на Linux/macOS
 або Docker Desktop; порт 8001 має бути вільним. Це окремий локальний
@@ -41,7 +38,7 @@ VYK подає наказ → KOORD перевіряє документ і ви�
    git clone https://github.com/Morphess/Anticor_monitor.git
    cd Anticor_monitor
    ```
-2. Згенеруйте випадкові локальні секрети (файл не перезаписується):
+2. Згенеруйте випадкові локальні секрети:
    ```sh
    python3 scripts/demo-init.py
    ```
@@ -71,16 +68,14 @@ VYK подає наказ → KOORD перевіряє документ і ви�
 docker compose -p bordergroup-demo --env-file .env.demo --profile ai up -d ollama
 docker compose -p bordergroup-demo --env-file .env.demo exec ollama ollama pull qwen2.5:3b
 ```
-На CPU аналіз може тривати кілька хвилин. Журі не потрібен доступ до
-серверного Tailscale. Інструкція production — [docs/release.md](docs/release.md).
+На CPU аналіз може тривати кілька хвилин. Інструкція production — [docs/release.md](docs/release.md).
 
 ## Побудова
 
 **Стек:** Python 3.13, FastAPI, Jinja2, HTML/CSS/JavaScript, PostgreSQL 17, SQLAlchemy, Alembic, Docker Compose, GitHub Actions.
 
 ```text
-Клієнт → FastAPI (backend/app/api) → бізнес-логіка (services)
-                                 → доступ до даних (repositories) → PostgreSQL
+Клієнт → FastAPI (backend/app/api) → бізнес-логіка (services)  → доступ до даних (repositories) → PostgreSQL
          HTML-шаблони й статичні файли (frontend/)
          Міграції схеми (alembic/)
 ```
@@ -98,7 +93,7 @@ docker compose -p bordergroup-demo --env-file .env.demo exec ollama ollama pull 
 
 ## Що використали
 
-- Бібліотеки й інструменти: FastAPI, Starlette, Pydantic, SQLAlchemy, Alembic, psycopg, Jinja2, Uvicorn, PyJWT, pwdlib/Argon2, Docker Compose і GitHub Actions. Точні версії Python-залежностей наведено в [`requirements.txt`](requirements.txt).
+- Бібліотеки: FastAPI, Starlette, Pydantic, SQLAlchemy, Alembic, psycopg, Jinja2, Uvicorn, PyJWT, pwdlib/Argon2, Docker Compose і GitHub Actions. Точні версії Python-залежностей наведено в [`requirements.txt`](requirements.txt).
 - [Синтетичний набір даних BITEC](https://hack.bitec.com.ua/wp-content/uploads/2026/11/zavdannia-2-syntetychnyi-nabir-1811daff.zip) — демонстраційні відомості; реальні персональні дані та службова інформація не використовуються.
 - Інструменти ШІ та спосіб їх застосування описано в [`docs/ai.md`](docs/ai.md).
 
