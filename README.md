@@ -1,7 +1,7 @@
 # BorderGroup - моніторинг виконання антикорупційної програми
 
 Команда **BorderGroup** · [Завдання 2: цифрова система моніторингу виконання антикорупційної програми](https://hack.bitec.com.ua/zavdannia-2/)
-Cклад команди:
+Склад команди:
 - `@demid21cher - капітан`;
 - `@Morphess`;
 - `@kaschenko179`;
@@ -75,7 +75,7 @@ docker compose -p bordergroup-demo --env-file .env.demo exec ollama ollama pull 
 ```
 На CPU аналіз може тривати кілька хвилин. Інструкція production — [docs/release.md](docs/release.md).
 
-## Як побудовано
+## Як влаштовано
 
 **Стек:** Python 3.13, FastAPI, Jinja2, HTML/CSS/JavaScript, PostgreSQL 17, SQLAlchemy, Alembic, Docker Compose, GitHub Actions.
 
